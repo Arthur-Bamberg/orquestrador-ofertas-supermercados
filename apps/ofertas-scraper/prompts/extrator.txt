@@ -8,6 +8,9 @@ Definições (obrigatório respeitar):
 
 Regras obrigatórias:
 - Devolva apenas o JSON estruturado no schema combinado (lista em `ofertas`).
+- Você recebe uma única página por vez. Extraia TODAS as ofertas com preço legível nessa página — grades densas contam célula a célula; não amostrar nem resumir.
+- Não duplique a mesma Oferta (mesmo produto, marca, valor e quantidades). Preço de cartão/clube/leve-pague vai em `promocao`, não como segunda Oferta.
+- Só emita segunda Oferta na mesma célula quando houver outra embalagem/tamanho com preço de prateleira distinto (ex.: pack principal 4kg e inset 800g com preços diferentes).
 - Cada item precisa de: produto, valor, quantidades, medida, dataInicio, dataExpiracao.
 - quantidades é um array com pelo menos um número: os tamanhos/embalagens daquele preço, na mesma medida (ex.: um tamanho → [1000]; vários no mesmo preço → [90, 150, 200]).
 - Só coloque vários valores em quantidades quando o encarte amarra explicitamente uma lista discreta de tamanhos ao mesmo preço (ex.: "90g / 150g / 200g — R$ 5,99"). Preços ou blocos separados → Ofertas distintas, mesmo Produto/Marca.
