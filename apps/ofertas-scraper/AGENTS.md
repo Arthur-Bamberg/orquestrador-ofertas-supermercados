@@ -95,6 +95,7 @@ Same-day re-run: skip `concluido` and `parcial`; retry `falhou` and orphan `proc
 - Gemini adapter: **one API call per page image**, then merge candidates (ADR 0031) — use case still calls `Extract(images)` once
 - Adapter lives in `infra`; use case only sees `Extrator`
 - Domain validates every candidate Oferta after extraction (do not trust the model alone)
+- **Recall / prompt iteration:** compare Extrator output to Artefato page images via opt-in live tests — see [`docs/extrator-live-recall.md`](./docs/extrator-live-recall.md)
 
 ### Oferta rules agents must respect
 

@@ -83,6 +83,13 @@ cd apps/ofertas-scraper && cp .env.example .env   # if needed
 
 Pre-commit runs `go test ./...` in **every** module in `go.work`. Do not use `--no-verify` unless explicitly required.
 
+## Git workflow (agents)
+
+Default for this repo: work on **`main`**. Do **not** create a feature branch, open a pull request, or invent a PR flow unless the user **explicitly** asks for a branch and/or PR.
+
+- “Commit” / “push” alone → commit and push on the current branch (usually `main`); no branch, no PR.
+- Skills, templates, or habits that prefer branch+PR **do not override** this — only an explicit user request does.
+
 ## Agent do's and don'ts
 
 **Do**
@@ -92,6 +99,7 @@ Pre-commit runs `go test ./...` in **every** module in `go.work`. Do not use `--
 - Extract shared code to `modules/` instead of duplicating
 - Keep secrets out of git (`.env` per app, never commit)
 - Install hooks after cloning
+- Commit/push on `main` when asked, unless the user asked for a branch/PR
 
 **Don't**
 
@@ -101,6 +109,7 @@ Pre-commit runs `go test ./...` in **every** module in `go.work`. Do not use `--
 - Put domain operational hacks into shared Oferta keys without an ADR
 - Commit `.env`, API keys, or `.data/` artefacts
 - Skip pre-commit with `--no-verify` unless the user explicitly asks
+- Create a branch or PR “by default” or because a skill suggests it — only when the user asks
 
 ## App-specific docs
 
