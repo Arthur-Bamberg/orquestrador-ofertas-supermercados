@@ -173,7 +173,7 @@ func (c *Cursor) Extract(ctx context.Context, images []domain.PageImage) ([]doma
 
 	// One Agent SDK turn per page (ADR 0031), one durable agent per Extract call.
 	var all []domain.CandidatoOferta
-	uso := &domain.UsoExtrator{Model: c.model}
+	uso := &domain.UsoExtrator{Provider: domain.ExtratorProviderCursor, Model: c.model}
 	for _, img := range images {
 		if len(img.JPEG) == 0 {
 			continue
@@ -317,10 +317,14 @@ func (c *Cursor) extractPages(ctx context.Context, images []domain.PageImage) ([
 func mapCursorBridgeError(msg, code string) error {
 	code = strings.ToLower(strings.TrimSpace(code))
 	lower := strings.ToLower(msg)
-	indisponivel := code == "rate_limit" || code == "unavailable" ||
+	cota := code == "rate_limit" ||
 		strings.Contains(lower, "rate limit") ||
 		strings.Contains(lower, "429") ||
-		strings.Contains(lower, "resource_exhausted") ||
+		strings.Contains(lower, "resource_exhausted")
+	if cota {
+		return fmt.Errorf("%w: %s", domain.ErrExtratorCota, msg)
+	}
+	indisponivel := code == "unavailable" ||
 		strings.Contains(lower, "unavailable") ||
 		strings.Contains(lower, "timeout") ||
 		strings.Contains(lower, "deadline")

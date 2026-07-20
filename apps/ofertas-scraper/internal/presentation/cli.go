@@ -134,10 +134,14 @@ func RunDaily(ctx context.Context, env Env) error {
 		log.Printf("using Extrator stub (EXTRATOR_STUB=1 or no Extrator API key)")
 		ext = extrator.Stub{Candidatos: nil}
 	} else {
-		// EXTRATOR_PROVIDER=cursor|gemini|auto (empty=auto). Auto prefers Cursor when CURSOR_API_KEY is set.
-		useCursor := env.ExtratorProvider == "cursor" ||
-			((env.ExtratorProvider == "" || env.ExtratorProvider == "auto") && env.CursorAPIKey != "")
-		if useCursor {
+		// EXTRATOR_PROVIDER=cursor|gemini|auto (empty=auto). Auto = Gemini first, Cursor on rate-limit (ADR 0037).
+		loc, err := time.LoadLocation("America/Sao_Paulo")
+		if err != nil {
+			return err
+		}
+		cota := upstash.NewCotaRepo(client)
+		switch env.ExtratorProvider {
+		case "cursor":
 			c, err := extrator.NewCursor(extrator.CursorConfig{
 				APIKey:             env.CursorAPIKey,
 				Model:              env.CursorModel,
@@ -156,7 +160,7 @@ func RunDaily(ctx context.Context, env Env) error {
 			}
 			log.Printf("using Cursor Extrator model=%s", model)
 			ext = c
-		} else {
+		case "gemini":
 			g, err := extrator.NewGemini(ctx, extrator.GeminiConfig{
 				APIKey:             env.GeminiAPIKey,
 				Model:              env.GeminiModel,
@@ -174,6 +178,64 @@ func RunDaily(ctx context.Context, env Env) error {
 			}
 			log.Printf("using Gemini Extrator model=%s", model)
 			ext = g
+		default: // auto
+			var primary, secondary domain.Extrator
+			if env.GeminiAPIKey != "" {
+				g, err := extrator.NewGemini(ctx, extrator.GeminiConfig{
+					APIKey:             env.GeminiAPIKey,
+					Model:              env.GeminiModel,
+					PromptPath:         env.ExtratorPromptPath,
+					ExtracaoSchemaPath: env.ExtracaoSchemaPath,
+					OfertaSchemaPath:   env.OfertaSchemaPath,
+					Logger:             log.Default(),
+				})
+				if err != nil {
+					return fmt.Errorf("gemini extrator: %w", err)
+				}
+				primary = g
+				model := env.GeminiModel
+				if model == "" {
+					model = "gemini-3-flash-preview"
+				}
+				log.Printf("using Gemini Extrator (primary) model=%s", model)
+			}
+			if env.CursorAPIKey != "" {
+				c, err := extrator.NewCursor(extrator.CursorConfig{
+					APIKey:             env.CursorAPIKey,
+					Model:              env.CursorModel,
+					PythonPath:         env.CursorPython,
+					PromptPath:         env.ExtratorPromptPath,
+					ExtracaoSchemaPath: env.ExtracaoSchemaPath,
+					OfertaSchemaPath:   env.OfertaSchemaPath,
+					Logger:             log.Default(),
+				})
+				if err != nil {
+					return fmt.Errorf("cursor extrator: %w", err)
+				}
+				secondary = c
+				model := env.CursorModel
+				if model == "" {
+					model = "composer-2.5"
+				}
+				log.Printf("using Cursor Extrator (failover) model=%s", model)
+			}
+			if primary != nil && secondary != nil {
+				ext = &extrator.Failover{
+					Primary:           primary,
+					Secondary:         secondary,
+					PrimaryProvider:   domain.ExtratorProviderGemini,
+					SecondaryProvider: domain.ExtratorProviderCursor,
+					Cota:              cota,
+					Location:          loc,
+					Log:               log.Default(),
+				}
+			} else if primary != nil {
+				ext = primary
+			} else if secondary != nil {
+				ext = secondary
+			} else {
+				return fmt.Errorf("no Extrator API key configured")
+			}
 		}
 	}
 

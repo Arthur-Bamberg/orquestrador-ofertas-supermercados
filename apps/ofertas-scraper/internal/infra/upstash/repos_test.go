@@ -207,6 +207,49 @@ func TestOfertaRepo_SaveAllUpdatesIndexOnResave(t *testing.T) {
 	assertDocIDs(t, repo, "p3", []domain.DocumentoID{docID})
 }
 
+func TestOfertaRepo_SaveAllUniqAcrossDocumentos(t *testing.T) {
+	repo, _ := newOfertaRepoTestEnv(t)
+	ctx := context.Background()
+	o := domain.Oferta{
+		ID: "o1", ProdutoID: "p1", MercadoID: "m1", Valor: 5,
+		Quantidades: []float64{1}, Medida: domain.MedidaUnidade,
+		DataInicio: "2026-07-01", DataExpiracao: "2026-07-02",
+	}
+	if err := repo.SaveAll(ctx, "d1", []domain.Oferta{o}); err != nil {
+		t.Fatal(err)
+	}
+	clone := o
+	clone.ID = "o2" // should reuse o1 via uniqueness
+	if err := repo.SaveAll(ctx, "d2", []domain.Oferta{clone}); err != nil {
+		t.Fatal(err)
+	}
+	list1, _ := repo.ListByDocumento(ctx, "d1")
+	list2, _ := repo.ListByDocumento(ctx, "d2")
+	if len(list1) != 1 || len(list2) != 1 {
+		t.Fatalf("list1=%d list2=%d", len(list1), len(list2))
+	}
+	if list1[0].ID != list2[0].ID {
+		t.Fatalf("want same id, got %s vs %s", list1[0].ID, list2[0].ID)
+	}
+	if err := repo.SaveAll(ctx, "d1", nil); err != nil {
+		t.Fatal(err)
+	}
+	list2, _ = repo.ListByDocumento(ctx, "d2")
+	if len(list2) != 1 {
+		t.Fatalf("d2 should keep oferta, got %d", len(list2))
+	}
+	if err := repo.SaveAll(ctx, "d2", nil); err != nil {
+		t.Fatal(err)
+	}
+	_, ok, err := repo.GetByUniq(ctx, domain.ChaveUnicaOferta(o))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("orphan oferta should be deleted")
+	}
+}
+
 func TestOfertaRepo_EmptySaveAllClearsIndex(t *testing.T) {
 	repo, _ := newOfertaRepoTestEnv(t)
 	ctx := context.Background()
@@ -247,6 +290,12 @@ func newOfertaRepoTestEnv(t *testing.T) (*upstash.OfertaRepo, *httptest.Server) 
 		case "SET":
 			store[cmd[1].(string)] = cmd[2].(string)
 			writeResult(w, "OK")
+		case "DEL":
+			for i := 1; i < len(cmd); i++ {
+				delete(store, cmd[i].(string))
+				delete(sets, cmd[i].(string))
+			}
+			writeResult(w, 1)
 		case "GET":
 			v, ok := store[cmd[1].(string)]
 			if !ok {

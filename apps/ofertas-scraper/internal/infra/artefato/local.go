@@ -87,12 +87,28 @@ func (s *LocalStore) SaveValidated(_ context.Context, doc domain.Documento, tent
 		return err
 	}
 	payload := struct {
-		Ofertas []domain.Oferta         `json:"ofertas"`
-		Falhas  []domain.FalhaExtracao  `json:"falhas"`
+		Ofertas []domain.Oferta        `json:"ofertas"`
+		Falhas  []domain.FalhaExtracao `json:"falhas"`
 	}{Ofertas: ofertas, Falhas: falhas}
 	b, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, "validated.json"), b, 0o644)
+}
+
+func (s *LocalStore) SaveConteudoIdentico(_ context.Context, doc domain.Documento, tentativa string, priorID domain.DocumentoID) error {
+	dir, err := s.ensure(doc, tentativa)
+	if err != nil {
+		return err
+	}
+	payload := struct {
+		ConteudoIdenticoA domain.DocumentoID `json:"conteudoIdenticoA"`
+		Fingerprint       string             `json:"fingerprint,omitempty"`
+	}{ConteudoIdenticoA: priorID, Fingerprint: doc.Fingerprint}
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "conteudo-identico.json"), b, 0o644)
 }

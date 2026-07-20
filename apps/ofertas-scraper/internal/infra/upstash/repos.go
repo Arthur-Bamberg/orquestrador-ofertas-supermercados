@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper/internal/domain"
 )
@@ -29,6 +30,11 @@ func documentoDiasKey(fonteID domain.FonteID, filename string) string {
 	return fmt.Sprintf("documento:dias:%s:%s", fonteID, filename)
 }
 func ofertasDocKey(id domain.DocumentoID) string { return "ofertas:documento:" + string(id) }
+func ofertaKey(id domain.OfertaID) string         { return "oferta:" + string(id) }
+func ofertaUniqKey(chave string) string           { return "oferta:uniq:" + chave }
+func ofertaDocumentosKey(id domain.OfertaID) string {
+	return "oferta:documentos:" + string(id)
+}
 func ofertasProdutoKey(id domain.ProdutoID) string {
 	return "ofertas:produto:" + string(id)
 }
@@ -195,7 +201,11 @@ func (r *DocumentoRepo) GetByIdentity(ctx context.Context, fonteID domain.FonteI
 	if err != nil || !ok {
 		return domain.Documento{}, ok, err
 	}
-	raw, ok, err := r.c.Get(ctx, documentoKey(domain.DocumentoID(id)))
+	return r.Get(ctx, domain.DocumentoID(id))
+}
+
+func (r *DocumentoRepo) Get(ctx context.Context, id domain.DocumentoID) (domain.Documento, bool, error) {
+	raw, ok, err := r.c.Get(ctx, documentoKey(id))
 	if err != nil || !ok {
 		return domain.Documento{}, ok, err
 	}
@@ -221,7 +231,7 @@ func (r *DocumentoRepo) Save(ctx context.Context, d domain.Documento) error {
 }
 
 func (r *DocumentoRepo) EarliestDia(ctx context.Context, fonteID domain.FonteID, filename string) (string, bool, error) {
-	dias, err := r.c.SMembers(ctx, documentoDiasKey(fonteID, filename))
+	dias, err := r.ListDias(ctx, fonteID, filename)
 	if err != nil {
 		return "", false, err
 	}
@@ -237,54 +247,194 @@ func (r *DocumentoRepo) EarliestDia(ctx context.Context, fonteID domain.FonteID,
 	return earliest, true, nil
 }
 
+func (r *DocumentoRepo) ListDias(ctx context.Context, fonteID domain.FonteID, filename string) ([]string, error) {
+	return r.c.SMembers(ctx, documentoDiasKey(fonteID, filename))
+}
+
 type OfertaRepo struct{ c *Client }
 
 func NewOfertaRepo(c *Client) *OfertaRepo { return &OfertaRepo{c: c} }
+
+func (r *OfertaRepo) GetByUniq(ctx context.Context, chave string) (domain.Oferta, bool, error) {
+	id, ok, err := r.c.Get(ctx, ofertaUniqKey(chave))
+	if err != nil || !ok {
+		return domain.Oferta{}, ok, err
+	}
+	return r.getOferta(ctx, domain.OfertaID(id))
+}
+
+func (r *OfertaRepo) getOferta(ctx context.Context, id domain.OfertaID) (domain.Oferta, bool, error) {
+	raw, ok, err := r.c.Get(ctx, ofertaKey(id))
+	if err != nil || !ok {
+		return domain.Oferta{}, ok, err
+	}
+	var o domain.Oferta
+	if err := json.Unmarshal([]byte(raw), &o); err != nil {
+		return domain.Oferta{}, false, err
+	}
+	return o, true, nil
+}
+
+func (r *OfertaRepo) saveOfertaEntity(ctx context.Context, o domain.Oferta) error {
+	b, err := json.Marshal(o)
+	if err != nil {
+		return err
+	}
+	if err := r.c.Set(ctx, ofertaKey(o.ID), string(b)); err != nil {
+		return err
+	}
+	return r.c.Set(ctx, ofertaUniqKey(domain.ChaveUnicaOferta(o)), string(o.ID))
+}
+
+func (r *OfertaRepo) listAssocIDs(ctx context.Context, documentoID domain.DocumentoID) ([]domain.OfertaID, error) {
+	raw, ok, err := r.c.Get(ctx, ofertasDocKey(documentoID))
+	if err != nil {
+		return nil, err
+	}
+	if !ok || raw == "" || raw == "null" {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(raw)
+	// Legacy ADR 0017 blob: JSON array of Oferta objects.
+	if strings.HasPrefix(trimmed, "[{") {
+		var legacy []domain.Oferta
+		if err := json.Unmarshal([]byte(raw), &legacy); err != nil {
+			return nil, err
+		}
+		out := make([]domain.OfertaID, 0, len(legacy))
+		for _, o := range legacy {
+			if o.ID != "" {
+				out = append(out, o.ID)
+			}
+		}
+		return out, nil
+	}
+	var ids []domain.OfertaID
+	if err := json.Unmarshal([]byte(raw), &ids); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
 
 func (r *OfertaRepo) SaveAll(ctx context.Context, documentoID domain.DocumentoID, ofertas []domain.Oferta) error {
 	if ofertas == nil {
 		ofertas = []domain.Oferta{}
 	}
-	prev, err := r.ListByDocumento(ctx, documentoID)
+	prevIDs, err := r.listAssocIDs(ctx, documentoID)
 	if err != nil {
 		return err
 	}
-	prevProdutos := produtoIDsFromOfertas(prev)
-	nextProdutos := produtoIDsFromOfertas(ofertas)
-	docMember := string(documentoID)
+	prevSet := map[domain.OfertaID]struct{}{}
+	for _, id := range prevIDs {
+		prevSet[id] = struct{}{}
+	}
+
+	nextIDs := make([]domain.OfertaID, 0, len(ofertas))
+	nextSet := map[domain.OfertaID]struct{}{}
+	nextProdutos := map[domain.ProdutoID]struct{}{}
+
+	for _, o := range ofertas {
+		chave := domain.ChaveUnicaOferta(o)
+		existing, ok, err := r.GetByUniq(ctx, chave)
+		if err != nil {
+			return err
+		}
+		if ok {
+			o = existing
+		} else {
+			if o.ID == "" {
+				return fmt.Errorf("oferta: id obrigatório para criar entidade")
+			}
+			if err := r.saveOfertaEntity(ctx, o); err != nil {
+				return err
+			}
+		}
+		nextIDs = append(nextIDs, o.ID)
+		nextSet[o.ID] = struct{}{}
+		if o.ProdutoID != "" {
+			nextProdutos[o.ProdutoID] = struct{}{}
+		}
+		if err := r.c.SAdd(ctx, ofertaDocumentosKey(o.ID), string(documentoID)); err != nil {
+			return err
+		}
+	}
+
+	b, err := json.Marshal(nextIDs)
+	if err != nil {
+		return err
+	}
+	if err := r.c.Set(ctx, ofertasDocKey(documentoID), string(b)); err != nil {
+		return err
+	}
+
+	prevOfertas, err := r.loadOfertas(ctx, prevIDs)
+	if err != nil {
+		return err
+	}
+	prevProdutos := produtoIDsFromOfertas(prevOfertas)
+
 	for pid := range prevProdutos {
 		if _, ok := nextProdutos[pid]; ok {
 			continue
 		}
-		if err := r.c.SRem(ctx, ofertasProdutoKey(pid), docMember); err != nil {
+		if err := r.c.SRem(ctx, ofertasProdutoKey(pid), string(documentoID)); err != nil {
 			return err
 		}
 	}
 	for pid := range nextProdutos {
-		if err := r.c.SAdd(ctx, ofertasProdutoKey(pid), docMember); err != nil {
+		if err := r.c.SAdd(ctx, ofertasProdutoKey(pid), string(documentoID)); err != nil {
 			return err
 		}
 	}
-	b, err := json.Marshal(ofertas)
-	if err != nil {
-		return err
+
+	for id := range prevSet {
+		if _, ok := nextSet[id]; ok {
+			continue
+		}
+		if err := r.c.SRem(ctx, ofertaDocumentosKey(id), string(documentoID)); err != nil {
+			return err
+		}
+		members, err := r.c.SMembers(ctx, ofertaDocumentosKey(id))
+		if err != nil {
+			return err
+		}
+		if len(members) > 0 {
+			continue
+		}
+		o, ok, err := r.getOferta(ctx, id)
+		if err != nil {
+			return err
+		}
+		if ok {
+			_ = r.c.Del(ctx, ofertaUniqKey(domain.ChaveUnicaOferta(o)))
+		}
+		if err := r.c.Del(ctx, ofertaKey(id), ofertaDocumentosKey(id)); err != nil {
+			return err
+		}
 	}
-	return r.c.Set(ctx, ofertasDocKey(documentoID), string(b))
+	return nil
+}
+
+func (r *OfertaRepo) loadOfertas(ctx context.Context, ids []domain.OfertaID) ([]domain.Oferta, error) {
+	out := make([]domain.Oferta, 0, len(ids))
+	for _, id := range ids {
+		o, ok, err := r.getOferta(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			out = append(out, o)
+		}
+	}
+	return out, nil
 }
 
 func (r *OfertaRepo) ListByDocumento(ctx context.Context, documentoID domain.DocumentoID) ([]domain.Oferta, error) {
-	raw, ok, err := r.c.Get(ctx, ofertasDocKey(documentoID))
+	ids, err := r.listAssocIDs(ctx, documentoID)
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
-		return nil, nil
-	}
-	var ofertas []domain.Oferta
-	if err := json.Unmarshal([]byte(raw), &ofertas); err != nil {
-		return nil, err
-	}
-	return ofertas, nil
+	return r.loadOfertas(ctx, ids)
 }
 
 func (r *OfertaRepo) ListDocumentoIDsByProduto(ctx context.Context, produtoID domain.ProdutoID) ([]domain.DocumentoID, error) {
@@ -341,4 +491,23 @@ func (r *UsoExtratorRepo) Save(ctx context.Context, uso domain.UsoExtrator) erro
 		return err
 	}
 	return r.c.SAdd(ctx, usoExtratorDocKey(uso.DocumentoID), uso.Tentativa)
+}
+
+// CotaRepo stores daily Extrator adapter exhaustion flags (ADR 0037).
+type CotaRepo struct{ c *Client }
+
+func NewCotaRepo(c *Client) *CotaRepo { return &CotaRepo{c: c} }
+
+func extratorCotaKey(provider, dia string) string {
+	return fmt.Sprintf("ofertas-scraper:extrator:%s:esgotado:%s", provider, dia)
+}
+
+func (r *CotaRepo) Esgotado(ctx context.Context, provider, dia string) (bool, error) {
+	_, ok, err := r.c.Get(ctx, extratorCotaKey(provider, dia))
+	return ok, err
+}
+
+func (r *CotaRepo) MarcarEsgotado(ctx context.Context, provider, dia string) error {
+	// 48h TTL keeps the date-scoped key from living forever.
+	return r.c.SetEX(ctx, extratorCotaKey(provider, dia), "1", 48*60*60)
 }

@@ -38,14 +38,16 @@ type Marca struct {
 }
 
 type Documento struct {
-	ID         DocumentoID     `json:"id"`
-	FonteID    FonteID         `json:"fonteId"`
-	MercadoID  MercadoID       `json:"mercadoId"`
-	Filename   string          `json:"filename"`
-	Dia        string          `json:"dia"`
-	Estado     EstadoDocumento `json:"estado"`
-	UltimoErro string          `json:"ultimoErro,omitempty"`
-	Atualizado time.Time       `json:"atualizado"`
+	ID                DocumentoID     `json:"id"`
+	FonteID           FonteID         `json:"fonteId"`
+	MercadoID         MercadoID       `json:"mercadoId"`
+	Filename          string          `json:"filename"`
+	Dia               string          `json:"dia"`
+	Estado            EstadoDocumento `json:"estado"`
+	Fingerprint       string          `json:"fingerprint,omitempty"`       // SHA-256 hex of PDF (ADR 0036)
+	ConteudoIdenticoA *DocumentoID    `json:"conteudoIdenticoA,omitempty"` // prior Documento when shortcut (ADR 0036)
+	UltimoErro        string          `json:"ultimoErro,omitempty"`
+	Atualizado        time.Time       `json:"atualizado"`
 }
 
 // OrigemData records how a vigência date was obtained (ADR 0028).
@@ -57,10 +59,11 @@ const (
 	OrigemPrimeiraDescoberta OrigemData = "primeiraDescoberta"
 )
 
-// Oferta is the persisted price observation (after match-or-create).
+// Oferta is the unique catalog price observation (ADR 0036). DocumentoID is optional
+// legacy/debug (first association); ownership is N∶1 via OfertaRepository associations.
 type Oferta struct {
 	ID                  OfertaID     `json:"id"`
-	DocumentoID         DocumentoID  `json:"documentoId"`
+	DocumentoID         DocumentoID  `json:"documentoId,omitempty"`
 	ProdutoID           ProdutoID    `json:"produtoId"`
 	MarcaID             *MarcaID     `json:"marcaId,omitempty"`
 	MercadoID           MercadoID    `json:"mercadoId"`
@@ -98,14 +101,20 @@ type MarcaRepository interface {
 
 type DocumentoRepository interface {
 	GetByIdentity(ctx context.Context, fonteID FonteID, filename, dia string) (Documento, bool, error)
+	Get(ctx context.Context, id DocumentoID) (Documento, bool, error)
 	Save(ctx context.Context, d Documento) error
 	// EarliestDia is the smallest discovery day for Fonte+filename (any Documento state).
 	EarliestDia(ctx context.Context, fonteID FonteID, filename string) (dia string, ok bool, err error)
+	// ListDias returns discovery days for Fonte+filename (any order).
+	ListDias(ctx context.Context, fonteID FonteID, filename string) ([]string, error)
 }
 
 type OfertaRepository interface {
+	// SaveAll replaces Documento↔Oferta associations, upserts catalog entities by uniqueness
+	// key, and deletes Ofertas that become unreferenced (ADR 0036).
 	SaveAll(ctx context.Context, documentoID DocumentoID, ofertas []Oferta) error
 	ListByDocumento(ctx context.Context, documentoID DocumentoID) ([]Oferta, error)
+	GetByUniq(ctx context.Context, chave string) (Oferta, bool, error)
 	// ListDocumentoIDsByProduto returns Documento ids indexed under ofertas:produto:{produtoId} (ADR 0026).
 	ListDocumentoIDsByProduto(ctx context.Context, produtoID ProdutoID) ([]DocumentoID, error)
 }
@@ -127,16 +136,23 @@ type UsoExtratorPagina struct {
 	OutputTokens int64 `json:"outputTokens"`
 }
 
-// UsoExtrator records Extrator token consumption for one processing tentativa (ADR 0033).
+// UsoExtrator records Extrator token consumption for one processing tentativa (ADR 0033/0037).
 type UsoExtrator struct {
 	DocumentoID  DocumentoID         `json:"documentoId,omitempty"`
 	Tentativa    string              `json:"tentativa,omitempty"`
 	ArtefatoPath string              `json:"artefatoPath"`
+	Provider     string              `json:"provider,omitempty"` // gemini|cursor|stub
 	Model        string              `json:"model"`
 	PromptTokens int64               `json:"promptTokens"`
 	CacheTokens  int64               `json:"cacheTokens"`
 	OutputTokens int64               `json:"outputTokens"`
 	Paginas      []UsoExtratorPagina `json:"paginas,omitempty"`
+}
+
+// ExtratorCotaStore persists daily adapter quota exhaustion (ADR 0037; operational keys).
+type ExtratorCotaStore interface {
+	Esgotado(ctx context.Context, provider, dia string) (bool, error)
+	MarcarEsgotado(ctx context.Context, provider, dia string) error
 }
 
 type Extrator interface {
@@ -162,6 +178,8 @@ type ArtefatoStore interface {
 	SaveRawExtrator(ctx context.Context, doc Documento, tentativa string, raw []byte) error
 	SaveUsoExtrator(ctx context.Context, doc Documento, tentativa string, uso UsoExtrator) error
 	SaveValidated(ctx context.Context, doc Documento, tentativa string, ofertas []Oferta, falhas []FalhaExtracao) error
+	// SaveConteudoIdentico records the pointer to the prior Documento (ADR 0036 shortcut).
+	SaveConteudoIdentico(ctx context.Context, doc Documento, tentativa string, priorID DocumentoID) error
 }
 
 type FonteClient interface {
