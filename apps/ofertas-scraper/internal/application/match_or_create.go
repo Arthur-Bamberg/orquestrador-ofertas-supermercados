@@ -50,6 +50,7 @@ func PersistirOfertasValidas(
 			OrigemDataInicio:    v.OrigemDataInicio,
 			OrigemDataExpiracao: v.OrigemDataExpiracao,
 			Promocao:            v.Promocao,
+			Comparativo:         v.Comparativo,
 		})
 	}
 	return out, nil

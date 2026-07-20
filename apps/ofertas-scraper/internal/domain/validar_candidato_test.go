@@ -266,6 +266,70 @@ func TestValidarCandidato_marcaOpcional(t *testing.T) {
 	}
 }
 
+func TestValidarCandidato_aceitaComparativo(t *testing.T) {
+	c := domain.CandidatoOferta{
+		Produto:       "Sabão em pó",
+		Marca:         "Girando Sol",
+		Valor:         24.90,
+		Quantidades:   []float64{4000},
+		Medida:        "g",
+		DataInicio:    "2026-07-18",
+		DataExpiracao: "2026-07-20",
+		Comparativo: &domain.Comparativo{
+			Quantidade: 800,
+			Valor:      4.98,
+		},
+	}
+	oferta, falha := domain.ValidarCandidato(c)
+	if falha != nil {
+		t.Fatalf("comparativo válido: %#v", falha)
+	}
+	if oferta.Comparativo == nil || oferta.Comparativo.Quantidade != 800 || oferta.Comparativo.Valor != 4.98 {
+		t.Fatalf("comparativo: %#v", oferta.Comparativo)
+	}
+}
+
+func TestValidarCandidato_rejeitaComparativoQuantidadeNaoMenorQuePack(t *testing.T) {
+	c := domain.CandidatoOferta{
+		Produto: "Sabão em pó", Valor: 24.90, Quantidades: []float64{4000}, Medida: "g",
+		DataInicio: "2026-07-18", DataExpiracao: "2026-07-20",
+		Comparativo: &domain.Comparativo{Quantidade: 4000, Valor: 24.90},
+	}
+	_, falha := domain.ValidarCandidato(c)
+	if falha == nil || falha.Codigo != domain.CodigoComparativoInvalido {
+		t.Fatalf("esperava comparativo_invalido, got %#v", falha)
+	}
+}
+
+func TestValidarCandidato_rejeitaComparativoValorNaoPositivo(t *testing.T) {
+	c := domain.CandidatoOferta{
+		Produto: "Sabão em pó", Valor: 24.90, Quantidades: []float64{4000}, Medida: "g",
+		DataInicio: "2026-07-18", DataExpiracao: "2026-07-20",
+		Comparativo: &domain.Comparativo{Quantidade: 800, Valor: 0},
+	}
+	_, falha := domain.ValidarCandidato(c)
+	if falha == nil || falha.Codigo != domain.CodigoComparativoInvalido {
+		t.Fatalf("esperava comparativo_invalido, got %#v", falha)
+	}
+}
+
+func TestValidarCandidato_aceitaComparativoComPromocao(t *testing.T) {
+	clube := true
+	c := domain.CandidatoOferta{
+		Produto: "Sabão em pó", Valor: 24.90, Quantidades: []float64{4000}, Medida: "g",
+		DataInicio: "2026-07-18", DataExpiracao: "2026-07-20",
+		Promocao:    &domain.Promocao{PromocaoClube: &clube, ValorPromocional: 22.90},
+		Comparativo: &domain.Comparativo{Quantidade: 800, Valor: 4.98},
+	}
+	oferta, falha := domain.ValidarCandidato(c)
+	if falha != nil {
+		t.Fatalf("comparativo+promocao: %#v", falha)
+	}
+	if oferta.Promocao == nil || oferta.Comparativo == nil {
+		t.Fatalf("ambos devem persistir: promo=%#v comp=%#v", oferta.Promocao, oferta.Comparativo)
+	}
+}
+
 func TestValidarCandidato_aceitaPromocaoLevePague(t *testing.T) {
 	leve, pague := 3.0, 2.0
 	c := domain.CandidatoOferta{

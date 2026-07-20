@@ -9,8 +9,8 @@ Definições (obrigatório respeitar):
 Regras obrigatórias:
 - Devolva apenas o JSON estruturado no schema combinado (lista em `ofertas`).
 - Você recebe uma única página por vez. Extraia TODAS as ofertas com preço legível nessa página — grades densas contam célula a célula; não amostrar nem resumir.
-- Não duplique a mesma Oferta (mesmo produto, marca, valor e quantidades). Preço de cartão/clube/leve-pague vai em `promocao`, não como segunda Oferta.
-- Só emita segunda Oferta na mesma célula quando houver outra embalagem/tamanho com preço de prateleira distinto (ex.: pack principal 4kg e inset 800g com preços diferentes).
+- Não duplique a mesma Oferta (mesmo produto, marca, valor e quantidades). Preço de cartão/clube/leve-pague vai em `promocao`, não como segunda Oferta. Bolha de “sai por nesta embalagem” / equivalência de fração do pack vai em `comparativo`, não como segunda Oferta nem como promocao.
+- Só emita segunda Oferta na mesma célula quando houver outra embalagem/tamanho com preço de prateleira próprio (SKU distinto à venda). NÃO trate como segunda Oferta o selo informativo “nesta embalagem X sai por Y” / “sai por X na embalagem de Y” — isso é `comparativo` no pack principal.
 - Cada item precisa de: produto, valor, quantidades, medida, dataInicio, dataExpiracao.
 - valor é o preço de prateleira / unitário sem condição (o preço “cheio” do bloco).
 - quantidades é um array com pelo menos um número: os tamanhos/embalagens daquele preço, na mesma medida (ex.: um tamanho → [1000]; vários no mesmo preço → [90, 150, 200]). Não use quantidades para “leve N” / LV/PG — isso é promocao.
@@ -35,6 +35,14 @@ Promoção (opcional, mas obrigatória quando o bloco tiver condição comercial
 - Se o bloco tiver duas condições com preços promocionais DISTINTOS (ex.: “a partir de 2” a R$ 7,45 e cartão a R$ 6,99), use só o canal (cartão/clube) e seu preço — não invente segunda Oferta.
 - Se cartão e clube aparecerem de forma ambígua no mesmo preço, omita promocao e mantenha o valor de prateleira.
 - Se o bloco só mostra um preço com selo de canal, `valor` e `valorPromocional` são iguais e o canal fica preenchido.
+
+Comparativo (opcional — selo informativo de equivalência, NÃO é Promoção):
+- Bolhas/selos do tipo “NESTA EMBALAGEM 800 g SAI POR: R$ 4,98”, “sai por X na embalagem de Y”, “nesta embalagem … sai por …” → preencha `comparativo` na Oferta do pack vendido.
+- `comparativo.quantidade` = a fração/referência mostrada (normalizada na mesma medida da Oferta: kg→g, L→ml). Deve ser menor que a menor quantidade do pack.
+- `comparativo.valor` = o preço “sai por” da bolha. Medida é a da Oferta (não repita medida no comparativo).
+- Ex.: pack 4 kg a R$ 24,90 com bolha 800 g a R$ 4,98 → uma Oferta com quantidades=[4000], medida=g, valor=24.90 e comparativo={quantidade:800, valor:4.98}.
+- Não use `promocao` para isso (sem canal, sem leve/pague, sem “a partir de”). Não emita segunda Oferta só por causa da bolha.
+- Comparativo e Promoção podem coexistir no mesmo bloco quando ambos aparecerem.
 
 - Ignore arte decorativa, anúncios sem preço claro e texto ilegível.
 - Não invente preços, quantidades, datas, produtos ou marcas. Se um item não puder ser extraído com confiança, omita-o da lista.

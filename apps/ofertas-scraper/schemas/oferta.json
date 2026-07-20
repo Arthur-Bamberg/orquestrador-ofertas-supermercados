@@ -66,6 +66,16 @@
         "promocaoClube": { "const": true },
         "valorPromocional": { "type": "number", "exclusiveMinimum": 0 }
       }
+    },
+    "comparativo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quantidade", "valor"],
+      "description": "Optional pack-fraction / unit-price badge (e.g. 'nesta embalagem 800 g sai por R$ 4,98'). Not Promoção and not a second Oferta. Medida inherited from parent Oferta; quantidade must be < min(quantidades) (ADR 0035).",
+      "properties": {
+        "quantidade": { "type": "number", "exclusiveMinimum": 0 },
+        "valor": { "type": "number", "exclusiveMinimum": 0 }
+      }
     }
   }
 }

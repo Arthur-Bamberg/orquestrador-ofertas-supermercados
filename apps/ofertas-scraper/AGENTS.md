@@ -100,12 +100,13 @@ Same-day re-run: skip `concluido` and `parcial`; retry `falhou` and orphan `proc
 
 ### Oferta rules agents must respect
 
-- Extrator candidates include `produto`, optional `marca`, `categorias[]`, plus `valor` / `quantidades[]` / `medida` / `dataInicio` / `dataExpiracao` / optional `promocao` (see ADR 0010, 0030); persisted Oferta stores `produtoId`, `mercadoId`, optional `marcaId`, vigência + `origemDataInicio` / `origemDataExpiracao` after match-or-create (ADR 0015, 0028)
+- Extrator candidates include `produto`, optional `marca`, `categorias[]`, plus `valor` / `quantidades[]` / `medida` / `dataInicio` / `dataExpiracao` / optional `promocao` / optional `comparativo` (see ADR 0010, 0030, 0035); persisted Oferta stores `produtoId`, `mercadoId`, optional `marcaId`, vigência + `origemDataInicio` / `origemDataExpiracao` after match-or-create (ADR 0015, 0028)
 - `quantidades` is a non-empty array of sizes sharing one price and one `medida`; domain dedups and sorts ascending; same-price discrete lists on the flyer → one Oferta; readers accept legacy singular `quantidade` as `[n]` (ADR 0030)
 - `medida` is only `g` | `ml` | `unidade`
 - Extrator must normalize **kg → 1000 g** and **L → 1000 ml** (adjust each value in `quantidades`) before output; domain does **not** convert — any other `medida` is a Falha de Extração (see ADR 0004; hybrid domain safety-net deferred)
 - `dataInicio` / `dataExpiracao` = vigência no encarte; both required in Extrator contract; cascades always on (ADR 0028): Extrator wins when present; missing início → distinct start in filename → primeira descoberta na Fonte; missing fim → filename end, else Falha; past/future dates OK (ADR 0016); `dataInicio` ≤ `dataExpiracao`
 - `promocao` is optional: `valorPromocional` plus channel (cartão XOR clube) and/or quantity mechanic (leve/pague XOR quantidadePromocao); channel+mechanic may compose when they share the same price (ADR 0032; clube shape in ADR 0029)
+- `comparativo` is optional: `{ quantidade, valor }` pack-fraction / “sai por nesta embalagem” badge; Medida inherited from Oferta; not Promoção and not a second Oferta (ADR 0035)
 - Each Extrator tentativa persists **Uso do Extrator** (prompt/cache/output tokens + Artefato path) to Redis and `uso-extrator.json` (ADR 0033)
 - Domain match-or-create for Produto/Marca uses normalized exact label match only (ADR 0011); no fuzzy matching in the MVP
 
@@ -171,6 +172,7 @@ Rasterizer needs `pdftoppm` (poppler-utils) on PATH.
 - Keep job orchestration in `application`
 - Keep prompt + schema in sync; only introduce versioned filenames when explicitly asked to bump the Extrator contract (ADR 0014)
 - Prefer small, sequential changes with tests around domain validation
+- After **any** prompt or Extrator schema change, run live recall and **validate manually** against page images (`docs/extrator-live-recall.md`) — automated floors alone are not enough
 
 **Don't**
 

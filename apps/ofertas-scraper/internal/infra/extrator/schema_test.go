@@ -80,6 +80,27 @@ func TestLoadGeminiResponseSchema(t *testing.T) {
 	if qtd["type"] != "array" {
 		t.Fatalf("quantidades type: %#v", qtd["type"])
 	}
+	comp, _ := ofertaProps["comparativo"].(map[string]any)
+	if comp == nil {
+		t.Fatal("comparativo property missing")
+	}
+	compRequired, _ := comp["required"].([]any)
+	hasQtd, hasValor := false, false
+	for _, r := range compRequired {
+		if r == "quantidade" {
+			hasQtd = true
+		}
+		if r == "valor" {
+			hasValor = true
+		}
+	}
+	if !hasQtd || !hasValor {
+		t.Fatalf("comparativo must require quantidade+valor: %#v", compRequired)
+	}
+	compProps, _ := comp["properties"].(map[string]any)
+	if _, hasMedida := compProps["medida"]; hasMedida {
+		t.Fatal("comparativo must not declare medida (inherited from Oferta)")
+	}
 }
 
 func repoRoot(t *testing.T) string {

@@ -59,19 +59,20 @@ const (
 
 // Oferta is the persisted price observation (after match-or-create).
 type Oferta struct {
-	ID                  OfertaID    `json:"id"`
-	DocumentoID         DocumentoID `json:"documentoId"`
-	ProdutoID           ProdutoID   `json:"produtoId"`
-	MarcaID             *MarcaID    `json:"marcaId,omitempty"`
-	MercadoID           MercadoID   `json:"mercadoId"`
-	Valor               float64     `json:"valor"`
-	Quantidades         []float64   `json:"quantidades"`
-	Medida              Medida      `json:"medida"`
-	DataInicio          string      `json:"dataInicio"`
-	DataExpiracao       string      `json:"dataExpiracao"`
-	OrigemDataInicio    OrigemData  `json:"origemDataInicio"`
-	OrigemDataExpiracao OrigemData  `json:"origemDataExpiracao"`
-	Promocao            *Promocao   `json:"promocao,omitempty"`
+	ID                  OfertaID     `json:"id"`
+	DocumentoID         DocumentoID  `json:"documentoId"`
+	ProdutoID           ProdutoID    `json:"produtoId"`
+	MarcaID             *MarcaID     `json:"marcaId,omitempty"`
+	MercadoID           MercadoID    `json:"mercadoId"`
+	Valor               float64      `json:"valor"`
+	Quantidades         []float64    `json:"quantidades"`
+	Medida              Medida       `json:"medida"`
+	DataInicio          string       `json:"dataInicio"`
+	DataExpiracao       string       `json:"dataExpiracao"`
+	OrigemDataInicio    OrigemData   `json:"origemDataInicio"`
+	OrigemDataExpiracao OrigemData   `json:"origemDataExpiracao"`
+	Promocao            *Promocao    `json:"promocao,omitempty"`
+	Comparativo         *Comparativo `json:"comparativo,omitempty"`
 }
 
 type MercadoRepository interface {
