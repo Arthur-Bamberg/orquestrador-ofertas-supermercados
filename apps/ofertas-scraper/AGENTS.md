@@ -92,6 +92,7 @@ Same-day re-run: skip `concluido` and `parcial`; retry `falhou` and orphan `proc
 - Output schema: `schemas/extracao.json` → items conform to `schemas/oferta.json`
 - Keep prompt/schema **unversioned** until an explicit version bump is requested (ADR 0014)
 - Cache the **stable prompt** (and schema binding) via Gemini context cache; **do not** cache Documento images
+- Gemini adapter: **one API call per page image**, then merge candidates (ADR 0031) — use case still calls `Extract(images)` once
 - Adapter lives in `infra`; use case only sees `Extrator`
 - Domain validates every candidate Oferta after extraction (do not trust the model alone)
 

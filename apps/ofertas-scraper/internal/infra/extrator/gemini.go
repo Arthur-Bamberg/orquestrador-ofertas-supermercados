@@ -116,24 +116,50 @@ func NewGemini(ctx context.Context, cfg GeminiConfig) (*Gemini, error) {
 }
 
 func (g *Gemini) Extract(ctx context.Context, images []domain.PageImage) ([]domain.CandidatoOferta, []byte, error) {
-	return g.extract(ctx, images, true)
-}
-
-func (g *Gemini) extract(ctx context.Context, images []domain.PageImage, retryCacheMiss bool) ([]domain.CandidatoOferta, []byte, error) {
 	if len(images) == 0 {
 		return nil, nil, fmt.Errorf("gemini extrator: no images")
 	}
-
-	parts := make([]*genai.Part, 0, len(images)+1)
-	parts = append(parts, &genai.Part{Text: "Extraia as ofertas destas páginas do encarte."})
+	// One API call per page (ADR 0031): dense encartes lose Ofertas when many pages
+	// share a single vision pass.
+	var all []domain.CandidatoOferta
 	for _, img := range images {
 		if len(img.JPEG) == 0 {
 			continue
 		}
-		parts = append(parts, genai.NewPartFromBytes(img.JPEG, "image/jpeg"))
+		cands, _, err := g.extract(ctx, img, true)
+		if err != nil {
+			return nil, nil, err
+		}
+		g.log.Printf("gemini extrator page=%d ofertas=%d", img.Page, len(cands))
+		all = append(all, cands...)
 	}
-	if len(parts) == 1 {
-		return nil, nil, fmt.Errorf("gemini extrator: all page images empty")
+	if all == nil {
+		all = []domain.CandidatoOferta{}
+	}
+	raw, err := json.Marshal(struct {
+		Ofertas []domain.CandidatoOferta `json:"ofertas"`
+	}{Ofertas: all})
+	if err != nil {
+		return nil, nil, fmt.Errorf("gemini extrator: marshal merged raw: %w", err)
+	}
+	return all, raw, nil
+}
+
+func (g *Gemini) extract(ctx context.Context, img domain.PageImage, retryCacheMiss bool) ([]domain.CandidatoOferta, []byte, error) {
+	if len(img.JPEG) == 0 {
+		return nil, nil, fmt.Errorf("gemini extrator: empty page image")
+	}
+
+	pageLabel := img.Page
+	if pageLabel <= 0 {
+		pageLabel = 1
+	}
+	parts := []*genai.Part{
+		{Text: fmt.Sprintf(
+			"Extraia TODAS as ofertas com preço legível desta única página (página %d) do encarte. Não omita itens da grade; não amostrar.",
+			pageLabel,
+		)},
+		genai.NewPartFromBytes(img.JPEG, "image/jpeg"),
 	}
 
 	g.mu.Lock()
@@ -162,7 +188,7 @@ func (g *Gemini) extract(ctx context.Context, images []domain.PageImage, retryCa
 			g.cacheName = ""
 			g.mu.Unlock()
 			_ = g.ensureCache(ctx)
-			return g.extract(ctx, images, false)
+			return g.extract(ctx, img, false)
 		}
 		return nil, nil, mapGeminiError(err)
 	}
