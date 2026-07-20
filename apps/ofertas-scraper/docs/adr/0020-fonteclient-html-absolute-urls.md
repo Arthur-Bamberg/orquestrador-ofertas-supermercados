@@ -1,0 +1,3 @@
+# FonteClient: scan HTML/JSON bodies for .pdf URLs
+
+FonteClient GETs the Fonte URL with browser-like headers (User-Agent, Accept, Accept-Encoding: identity, X-Requested-With) to reduce 403/406 from retail sites. It scans the response for `.pdf` references in two ways: (1) absolute/root-relative URLs in HTML/JS (including JSON-escaped `https:\/\/...pdf`); (2) when the body is JSON, any string value ending in `.pdf` — bare filenames from `/.../api/...` endpoints resolve to `/.../encarte/{file}` (pattern used by Via Atacadista). Do **not** rely on CodeIgniter `?debugbar_time=` — that is a PHP DebugBar session artifact, not a stable API. Optional `FiltroNomeDocumento` is a regex on the filename. DownloadPDF GETs the absolute URL from discovery.

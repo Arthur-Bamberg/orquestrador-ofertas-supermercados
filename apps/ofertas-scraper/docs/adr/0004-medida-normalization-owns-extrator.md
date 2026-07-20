@@ -1,0 +1,3 @@
+# Medida normalization owns Extrator; domain rejects the rest
+
+Domain validates `medida` strictly as `g` | `ml` | `unidade` and turns any other value (including `kg` / `L`) into a Falha de Extração, with no silent conversion. The Extrator (prompt + schema) is responsible for normalizing kg→g and L→ml before output, so invalid units stay visible as extraction quality signals instead of being repaired in the domain. If Falhas de Extração later show systematic unnormalized Medida from the model, revisit a hybrid (domain also normalizes kg/L as a safety net without counting as Falha) — rejected for the MVP to keep validation honest and testable.

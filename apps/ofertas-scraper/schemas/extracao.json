@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ofertas-scraper.local/schemas/extracao.json",
+  "title": "Extracao",
+  "description": "Root structured output from the Extrator for one Documento",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ofertas"],
+  "properties": {
+    "ofertas": {
+      "type": "array",
+      "items": {
+        "$ref": "./oferta.json"
+      }
+    }
+  }
+}

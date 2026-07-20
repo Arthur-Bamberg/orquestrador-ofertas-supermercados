@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ofertas-scraper.local/schemas/oferta.json",
+  "title": "OfertaCandidate",
+  "description": "Extrator candidate before domain match-or-create (produto/marca labels, not ids)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["produto", "valor", "quantidades", "medida", "dataInicio", "dataExpiracao"],
+  "properties": {
+    "produto": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Brand-agnostic sellable type label (e.g. Arroz integral)"
+    },
+    "marca": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional brand label; omit when the flyer has no brand"
+    },
+    "categorias": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Taxonomic labels for the Produto (not sellable-type variants)"
+    },
+    "valor": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "quantidades": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "number",
+        "minimum": 0
+      },
+      "description": "Package sizes sharing this price (same medida); discrete list from flyer, e.g. [90, 150, 200]"
+    },
+    "medida": {
+      "type": "string",
+      "enum": ["g", "ml", "unidade"],
+      "description": "Always normalized by Extrator: kg→1000g, L→1000ml; shared by all quantidades"
+    },
+    "dataInicio": {
+      "type": "string",
+      "format": "date",
+      "description": "Start of flyer validity for this Oferta (YYYY-MM-DD); may be in the future"
+    },
+    "dataExpiracao": {
+      "type": "string",
+      "format": "date",
+      "description": "End of flyer validity for this Oferta (YYYY-MM-DD); may be in the past (history)"
+    },
+    "promocao": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["leve", "pague", "valorPromocional"],
+          "properties": {
+            "leve": { "type": "number", "exclusiveMinimum": 0 },
+            "pague": { "type": "number", "exclusiveMinimum": 0 },
+            "valorPromocional": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["quantidadePromocao", "valorPromocional"],
+          "properties": {
+            "quantidadePromocao": { "type": "number", "exclusiveMinimum": 0 },
+            "valorPromocional": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["promocaoCartao", "valorPromocional"],
+          "properties": {
+            "promocaoCartao": { "const": true },
+            "valorPromocional": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["promocaoClube", "valorPromocional"],
+          "properties": {
+            "promocaoClube": { "const": true },
+            "valorPromocional": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      ]
+    }
+  }
+}

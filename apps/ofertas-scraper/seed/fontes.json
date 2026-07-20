@@ -1,0 +1,36 @@
+{
+  "mercados": [
+    {
+      "id": "mercado-fort",
+      "nome": "Fort Atacadista"
+    },
+    {
+      "id": "mercado-stok",
+      "nome": "Stok Center"
+    },
+    {
+      "id": "mercado-via",
+      "nome": "Via Atacadista"
+    }
+  ],
+  "fontes": [
+    {
+      "id": "fonte-fort",
+      "mercadoId": "mercado-fort",
+      "url": "https://www.fortatacadista.com.br/ofertas/",
+      "filtroNomeDocumento": "Canoas"
+    },
+    {
+      "id": "fonte-stok",
+      "mercadoId": "mercado-stok",
+      "url": "https://stokcenter.com.br/encarte/?id=23566&loja=Canoas&unidade_id=444",
+      "filtroNomeDocumento": ""
+    },
+    {
+      "id": "fonte-via",
+      "mercadoId": "mercado-via",
+      "url": "https://grupopassarela.com/via-atacadista/api/ofertas?loja=990e4aca-8576-4f2d-bdde-ca6916177e9b",
+      "filtroNomeDocumento": ""
+    }
+  ]
+}

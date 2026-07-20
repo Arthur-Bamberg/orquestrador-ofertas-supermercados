@@ -1,0 +1,3 @@
+# Marca is an entity; Oferta ties Produto + optional Marca + Mercado
+
+Marca is a first-class persisted identity when present. An Oferta references `produtoId` and `mercadoId` always, and `marcaId` when the Extrator provides a brand, so queries can list brands for a product, follow one brand across Mercados, and keep price history without stringly-typed brand names. Produto stays brand-agnostic; brands attach through Ofertas. The Extrator proposes brand (and product) labels from images; domain match-or-create resolves Marca ids. Ofertas without marca are valid (ADR 0015). Rejected: storing only a free-text marca on Oferta.

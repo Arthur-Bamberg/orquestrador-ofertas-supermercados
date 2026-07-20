@@ -1,0 +1,3 @@
+# Extrator stub for local job and tests; Gemini behind the same port
+
+Application and tests depend only on the Extrator port. For local `RunDailyJob` development and automated tests without `GEMINI_API_KEY` (or with `EXTRATOR_STUB=1`), DI wires a stub/fake Extrator (fixture candidatos or controlled empty/error responses). Production wiring (`GEMINI_API_KEY` set, stub off) uses the Gemini adapter: stable prompt + schema via context cache when the API allows, structured JSON output from `schemas/`, Documento images only on the per-request user turn. Choosing the implementation is a composition concern in `cmd` / presentation — never a branch inside domain or use-case logic.

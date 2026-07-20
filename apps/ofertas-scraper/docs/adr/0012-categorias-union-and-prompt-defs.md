@@ -1,0 +1,3 @@
+# Produto categorias merge by union; Extrator prompt carries definitions
+
+When match-or-create reuses a Produto, new categorias from the Extrator are merged by set-union after the same label normalization as Produto/Marca names (no duplicates). Categorias from the Extrator apply on create and enrich on later sightings; the catalog is not overwritten wholesale. The Extrator system prompt must state explicit definitions of Produto (brand-agnostic sellable type), Marca, and Categoria (taxonomy, not sellable type) so structured output stays aligned with the glossary. If model noise pollutes categorias, switch to “categorias only on create” later.

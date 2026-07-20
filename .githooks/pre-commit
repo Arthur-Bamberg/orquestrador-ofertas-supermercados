@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Runs Go tests for every module in the workspace before allowing a commit.
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+if [[ ! -f go.work ]]; then
+  echo "pre-commit: go.work missing at repo root" >&2
+  exit 1
+fi
+
+echo "pre-commit: testing workspace modules"
+while IFS= read -r dir; do
+  echo "pre-commit: go test ./... (in ${dir#"$root"/})"
+  (cd "$dir" && go test ./...)
+done < <(go list -f '{{.Dir}}' -m)

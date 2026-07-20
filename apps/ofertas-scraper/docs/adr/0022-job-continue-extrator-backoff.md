@@ -1,0 +1,5 @@
+# RunDailyJob continues on local failures; Extrator outage retries up to 1h
+
+Hard failures on a single Fonte or Documento (HTTP error discovering/downloading, raster failure, etc.) mark that Documento `falhou` when applicable, log to stdout, and the job continues with the next Documento/Fonte. Global infra failures (Redis unreachable, invalid config) still abort the process.
+
+When the Extrator is unavailable (timeouts, 5xx, or equivalent adapter signals), the job retries with exponential backoff, logging each attempt to stdout, until Extrator recovers or **one hour** of wall-clock retry budget for that job run is exhausted. The outage budget is **job-scoped** (not one hour per Documento): after exhaustion, the current and remaining Documentos that still need the Extrator end as `falhou` without another full hour each. Each such Documento is updated in Redis (`falhou`) with a persisted last-error reason so ops can query without Artefatos. Notification/alerting when Extrator or critical infra is down is deferred (see BACKLOG.md).
