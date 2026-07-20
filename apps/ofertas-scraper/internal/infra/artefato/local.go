@@ -23,6 +23,10 @@ func (s *LocalStore) dir(doc domain.Documento, tentativa string) string {
 	return filepath.Join(s.Root, string(doc.FonteID), doc.Dia, doc.Filename, tentativa)
 }
 
+func (s *LocalStore) AttemptPath(doc domain.Documento, tentativa string) string {
+	return s.dir(doc, tentativa)
+}
+
 func (s *LocalStore) ensure(doc domain.Documento, tentativa string) (string, error) {
 	dir := s.dir(doc, tentativa)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -63,6 +67,18 @@ func (s *LocalStore) SaveRawExtrator(_ context.Context, doc domain.Documento, te
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, "extrator-raw.json"), raw, 0o644)
+}
+
+func (s *LocalStore) SaveUsoExtrator(_ context.Context, doc domain.Documento, tentativa string, uso domain.UsoExtrator) error {
+	dir, err := s.ensure(doc, tentativa)
+	if err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(uso, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "uso-extrator.json"), b, 0o644)
 }
 
 func (s *LocalStore) SaveValidated(_ context.Context, doc domain.Documento, tentativa string, ofertas []domain.Oferta, falhas []domain.FalhaExtracao) error {

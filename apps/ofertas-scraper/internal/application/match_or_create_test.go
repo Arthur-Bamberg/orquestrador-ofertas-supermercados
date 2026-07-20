@@ -24,6 +24,7 @@ func TestPersistirOfertasValidas_MatchOrCreateAndCategoriasUnion(t *testing.T) {
 			Valor: 10, Quantidades: []float64{1000}, Medida: domain.MedidaG,
 			DataInicio: "2026-07-18", DataExpiracao: "2026-07-25",
 			OrigemDataInicio: domain.OrigemExtrator, OrigemDataExpiracao: domain.OrigemExtrator,
+			Comparativo: &domain.Comparativo{Quantidade: 200, Valor: 2},
 		},
 	})
 	if err != nil {
@@ -37,6 +38,9 @@ func TestPersistirOfertasValidas_MatchOrCreateAndCategoriasUnion(t *testing.T) {
 	}
 	if ofertas[0].MarcaID == nil {
 		t.Fatal("marcaId nil")
+	}
+	if ofertas[0].Comparativo == nil || ofertas[0].Comparativo.Quantidade != 200 {
+		t.Fatalf("comparativo not persisted: %#v", ofertas[0].Comparativo)
 	}
 	p := produtos.byNorm["arroz integral"]
 	if len(p.Categorias) != 2 {

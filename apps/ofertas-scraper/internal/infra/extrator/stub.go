@@ -15,9 +15,9 @@ type Stub struct {
 	Err        error
 }
 
-func (s Stub) Extract(context.Context, []domain.PageImage) ([]domain.CandidatoOferta, []byte, error) {
+func (s Stub) Extract(context.Context, []domain.PageImage) ([]domain.CandidatoOferta, []byte, *domain.UsoExtrator, error) {
 	if s.Err != nil {
-		return nil, nil, s.Err
+		return nil, nil, nil, s.Err
 	}
 	raw := s.Raw
 	if raw == nil {
@@ -25,10 +25,10 @@ func (s Stub) Extract(context.Context, []domain.PageImage) ([]domain.CandidatoOf
 		var err error
 		raw, err = json.Marshal(payload)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
-	return s.Candidatos, raw, nil
+	return s.Candidatos, raw, nil, nil
 }
 
 // Unavailable always returns ErrExtratorIndisponivel.

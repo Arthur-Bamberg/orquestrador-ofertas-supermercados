@@ -59,19 +59,20 @@ const (
 
 // Oferta is the persisted price observation (after match-or-create).
 type Oferta struct {
-	ID                  OfertaID    `json:"id"`
-	DocumentoID         DocumentoID `json:"documentoId"`
-	ProdutoID           ProdutoID   `json:"produtoId"`
-	MarcaID             *MarcaID    `json:"marcaId,omitempty"`
-	MercadoID           MercadoID   `json:"mercadoId"`
-	Valor               float64     `json:"valor"`
-	Quantidades         []float64   `json:"quantidades"`
-	Medida              Medida      `json:"medida"`
-	DataInicio          string      `json:"dataInicio"`
-	DataExpiracao       string      `json:"dataExpiracao"`
-	OrigemDataInicio    OrigemData  `json:"origemDataInicio"`
-	OrigemDataExpiracao OrigemData  `json:"origemDataExpiracao"`
-	Promocao            *Promocao   `json:"promocao,omitempty"`
+	ID                  OfertaID     `json:"id"`
+	DocumentoID         DocumentoID  `json:"documentoId"`
+	ProdutoID           ProdutoID    `json:"produtoId"`
+	MarcaID             *MarcaID     `json:"marcaId,omitempty"`
+	MercadoID           MercadoID    `json:"mercadoId"`
+	Valor               float64      `json:"valor"`
+	Quantidades         []float64    `json:"quantidades"`
+	Medida              Medida       `json:"medida"`
+	DataInicio          string       `json:"dataInicio"`
+	DataExpiracao       string       `json:"dataExpiracao"`
+	OrigemDataInicio    OrigemData   `json:"origemDataInicio"`
+	OrigemDataExpiracao OrigemData   `json:"origemDataExpiracao"`
+	Promocao            *Promocao    `json:"promocao,omitempty"`
+	Comparativo         *Comparativo `json:"comparativo,omitempty"`
 }
 
 type MercadoRepository interface {
@@ -118,8 +119,33 @@ type PageImage struct {
 	JPEG []byte
 }
 
+// UsoExtratorPagina is per-page token usage inside one Extract call (ADR 0031/0033).
+type UsoExtratorPagina struct {
+	Page         int   `json:"page"`
+	PromptTokens int64 `json:"promptTokens"`
+	CacheTokens  int64 `json:"cacheTokens"`
+	OutputTokens int64 `json:"outputTokens"`
+}
+
+// UsoExtrator records Extrator token consumption for one processing tentativa (ADR 0033).
+type UsoExtrator struct {
+	DocumentoID  DocumentoID         `json:"documentoId,omitempty"`
+	Tentativa    string              `json:"tentativa,omitempty"`
+	ArtefatoPath string              `json:"artefatoPath"`
+	Model        string              `json:"model"`
+	PromptTokens int64               `json:"promptTokens"`
+	CacheTokens  int64               `json:"cacheTokens"`
+	OutputTokens int64               `json:"outputTokens"`
+	Paginas      []UsoExtratorPagina `json:"paginas,omitempty"`
+}
+
 type Extrator interface {
-	Extract(ctx context.Context, images []PageImage) (candidatos []CandidatoOferta, raw []byte, err error)
+	// Extract returns candidatos, raw JSON, and optional Uso (nil when the adapter has no usage).
+	Extract(ctx context.Context, images []PageImage) (candidatos []CandidatoOferta, raw []byte, uso *UsoExtrator, err error)
+}
+
+type UsoExtratorRepository interface {
+	Save(ctx context.Context, uso UsoExtrator) error
 }
 
 // PDFDescoberto is a PDF link found on a Fonte page (ADR 0020).
@@ -129,9 +155,12 @@ type PDFDescoberto struct {
 }
 
 type ArtefatoStore interface {
+	// AttemptPath is the directory for a Documento tentativa (relative or absolute under the store root).
+	AttemptPath(doc Documento, tentativa string) string
 	SavePDF(ctx context.Context, doc Documento, tentativa string, pdf []byte) error
 	SaveImages(ctx context.Context, doc Documento, tentativa string, images []PageImage) error
 	SaveRawExtrator(ctx context.Context, doc Documento, tentativa string, raw []byte) error
+	SaveUsoExtrator(ctx context.Context, doc Documento, tentativa string, uso UsoExtrator) error
 	SaveValidated(ctx context.Context, doc Documento, tentativa string, ofertas []Oferta, falhas []FalhaExtracao) error
 }
 

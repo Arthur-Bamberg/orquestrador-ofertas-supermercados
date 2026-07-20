@@ -1,0 +1,3 @@
+# Comparativo: optional pack-fraction badge on Oferta
+
+Flyer “nesta embalagem X sai por Y” bubbles are marketing unit-price / pack-fraction comparisons, not a second shelf SKU and not Promoção. The Extrator candidate and persisted Oferta carry optional `comparativo: { quantidade, valor }` on the pack actually sold; Medida is inherited from the parent Oferta; domain requires `quantidade > 0`, `valor > 0`, and `quantidade < min(quantidades)`. Rejected: emitting a second Oferta for the badge (false SKU), stuffing into `promocao` (no channel/mechanic), flat root fields, and Extrator-only without persistence (consumers need the badge on the Oferta).

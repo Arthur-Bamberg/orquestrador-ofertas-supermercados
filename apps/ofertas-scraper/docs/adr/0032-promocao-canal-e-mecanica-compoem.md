@@ -1,0 +1,3 @@
+# Promoção: canal and quantity mechanic may compose
+
+Promoção is no longer exactly one of four mutually exclusive shapes. It always has `valorPromocional`, plus optional channel (`promocaoCartao` XOR `promocaoClube`) and/or optional quantity mechanic (`leve`+`pague` XOR `quantidadePromocao`), requiring at least one of channel or mechanic. Channel and mechanic compose only when they describe the same condition (same `valorPromocional`); if the flyer shows two different promotional prices, keep the channel price and drop the other mechanic. Rejected: keeping exclusive oneOf (loses Fort cases like leve/pague on Clube MAIS) and nesting or a second Oferta per condition.

@@ -190,6 +190,9 @@ func (m *memFonteHTTP) DownloadPDF(context.Context, string) ([]byte, error) {
 
 type memArtefatos struct{}
 
+func (memArtefatos) AttemptPath(doc domain.Documento, tentativa string) string {
+	return "artefatos/" + string(doc.FonteID) + "/" + doc.Dia + "/" + doc.Filename + "/" + tentativa
+}
 func (memArtefatos) SavePDF(context.Context, domain.Documento, string, []byte) error { return nil }
 func (memArtefatos) SaveImages(context.Context, domain.Documento, string, []domain.PageImage) error {
 	return nil
@@ -197,7 +200,19 @@ func (memArtefatos) SaveImages(context.Context, domain.Documento, string, []doma
 func (memArtefatos) SaveRawExtrator(context.Context, domain.Documento, string, []byte) error {
 	return nil
 }
+func (memArtefatos) SaveUsoExtrator(context.Context, domain.Documento, string, domain.UsoExtrator) error {
+	return nil
+}
 func (memArtefatos) SaveValidated(context.Context, domain.Documento, string, []domain.Oferta, []domain.FalhaExtracao) error {
+	return nil
+}
+
+type memUsos struct {
+	items []domain.UsoExtrator
+}
+
+func (m *memUsos) Save(_ context.Context, uso domain.UsoExtrator) error {
+	m.items = append(m.items, uso)
 	return nil
 }
 
@@ -320,7 +335,7 @@ type countingExtrator struct {
 	n     *int
 }
 
-func (c *countingExtrator) Extract(ctx context.Context, images []domain.PageImage) ([]domain.CandidatoOferta, []byte, error) {
+func (c *countingExtrator) Extract(ctx context.Context, images []domain.PageImage) ([]domain.CandidatoOferta, []byte, *domain.UsoExtrator, error) {
 	*c.n++
 	return c.inner.Extract(ctx, images)
 }

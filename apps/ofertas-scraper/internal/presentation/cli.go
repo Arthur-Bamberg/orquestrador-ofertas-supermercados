@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper/internal/application"
@@ -29,8 +30,12 @@ type Env struct {
 	RasterJPEGQ        int
 	SeedPath           string
 	UseStubExtrator    bool
+	ExtratorProvider   string // auto|gemini|cursor (ADR 0034)
 	GeminiAPIKey       string
 	GeminiModel        string
+	CursorAPIKey       string
+	CursorModel        string
+	CursorPython       string
 	ExtratorPromptPath string
 	ExtracaoSchemaPath string
 	OfertaSchemaPath   string
@@ -42,8 +47,10 @@ func LoadEnv() Env {
 	maxPx, _ := strconv.Atoi(os.Getenv("RASTER_MAX_EDGE_PX"))
 	jpegQ, _ := strconv.Atoi(os.Getenv("RASTER_JPEG_QUALITY"))
 	maxDocs, _ := strconv.Atoi(os.Getenv("RUN_MAX_DOCUMENTOS"))
-	apiKey := os.Getenv("GEMINI_API_KEY")
-	stub := os.Getenv("EXTRATOR_STUB") == "1" || apiKey == ""
+	geminiKey := os.Getenv("GEMINI_API_KEY")
+	cursorKey := os.Getenv("CURSOR_API_KEY")
+	provider := strings.ToLower(strings.TrimSpace(os.Getenv("EXTRATOR_PROVIDER")))
+	stub := os.Getenv("EXTRATOR_STUB") == "1" || (geminiKey == "" && cursorKey == "")
 	return Env{
 		UpstashURL:         os.Getenv("UPSTASH_REDIS_REST_URL"),
 		UpstashToken:       os.Getenv("UPSTASH_REDIS_REST_TOKEN"),
@@ -52,8 +59,12 @@ func LoadEnv() Env {
 		RasterJPEGQ:        jpegQ,
 		SeedPath:           envOr("SEED_PATH", "./seed/fontes.json"),
 		UseStubExtrator:    stub,
-		GeminiAPIKey:       apiKey,
+		ExtratorProvider:   provider,
+		GeminiAPIKey:       geminiKey,
 		GeminiModel:        os.Getenv("GEMINI_MODEL"),
+		CursorAPIKey:       cursorKey,
+		CursorModel:        os.Getenv("CURSOR_MODEL"),
+		CursorPython:       os.Getenv("CURSOR_PYTHON"),
 		ExtratorPromptPath: envOr("EXTRATOR_PROMPT_PATH", "./prompts/extrator.txt"),
 		ExtracaoSchemaPath: envOr("EXTRACAO_SCHEMA_PATH", "./schemas/extracao.json"),
 		OfertaSchemaPath:   envOr("OFERTA_SCHEMA_PATH", "./schemas/oferta.json"),
@@ -120,26 +131,50 @@ func RunDaily(ctx context.Context, env Env) error {
 
 	var ext domain.Extrator
 	if env.UseStubExtrator {
-		log.Printf("using Extrator stub (EXTRATOR_STUB=1 or GEMINI_API_KEY empty)")
+		log.Printf("using Extrator stub (EXTRATOR_STUB=1 or no Extrator API key)")
 		ext = extrator.Stub{Candidatos: nil}
 	} else {
-		g, err := extrator.NewGemini(ctx, extrator.GeminiConfig{
-			APIKey:             env.GeminiAPIKey,
-			Model:              env.GeminiModel,
-			PromptPath:         env.ExtratorPromptPath,
-			ExtracaoSchemaPath: env.ExtracaoSchemaPath,
-			OfertaSchemaPath:   env.OfertaSchemaPath,
-			Logger:             log.Default(),
-		})
-		if err != nil {
-			return fmt.Errorf("gemini extrator: %w", err)
+		// EXTRATOR_PROVIDER=cursor|gemini|auto (empty=auto). Auto prefers Cursor when CURSOR_API_KEY is set.
+		useCursor := env.ExtratorProvider == "cursor" ||
+			((env.ExtratorProvider == "" || env.ExtratorProvider == "auto") && env.CursorAPIKey != "")
+		if useCursor {
+			c, err := extrator.NewCursor(extrator.CursorConfig{
+				APIKey:             env.CursorAPIKey,
+				Model:              env.CursorModel,
+				PythonPath:         env.CursorPython,
+				PromptPath:         env.ExtratorPromptPath,
+				ExtracaoSchemaPath: env.ExtracaoSchemaPath,
+				OfertaSchemaPath:   env.OfertaSchemaPath,
+				Logger:             log.Default(),
+			})
+			if err != nil {
+				return fmt.Errorf("cursor extrator: %w", err)
+			}
+			model := env.CursorModel
+			if model == "" {
+				model = "composer-2.5"
+			}
+			log.Printf("using Cursor Extrator model=%s", model)
+			ext = c
+		} else {
+			g, err := extrator.NewGemini(ctx, extrator.GeminiConfig{
+				APIKey:             env.GeminiAPIKey,
+				Model:              env.GeminiModel,
+				PromptPath:         env.ExtratorPromptPath,
+				ExtracaoSchemaPath: env.ExtracaoSchemaPath,
+				OfertaSchemaPath:   env.OfertaSchemaPath,
+				Logger:             log.Default(),
+			})
+			if err != nil {
+				return fmt.Errorf("gemini extrator: %w", err)
+			}
+			model := env.GeminiModel
+			if model == "" {
+				model = "gemini-3-flash-preview"
+			}
+			log.Printf("using Gemini Extrator model=%s", model)
+			ext = g
 		}
-		model := env.GeminiModel
-		if model == "" {
-			model = "gemini-3-flash-preview"
-		}
-		log.Printf("using Gemini Extrator model=%s", model)
-		ext = g
 	}
 
 	if env.RunFonteID != "" {
@@ -156,6 +191,7 @@ func RunDaily(ctx context.Context, env Env) error {
 		Marcas:     upstash.NewMarcaRepo(client),
 		Ofertas:    upstash.NewOfertaRepo(client),
 		Falhas:     upstash.NewFalhaRepo(client),
+		Usos:       upstash.NewUsoExtratorRepo(client),
 		FonteHTTP:  fontehttp.New(http.DefaultClient),
 		Raster:     raster.NewPdftoppm(env.RasterMaxPx, env.RasterJPEGQ),
 		Extrator:   ext,

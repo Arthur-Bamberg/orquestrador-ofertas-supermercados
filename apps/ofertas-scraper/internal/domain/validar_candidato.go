@@ -24,34 +24,37 @@ const (
 	CodigoDataExpiracaoInvalida = "data_expiracao_invalida"
 	CodigoVigenciaInvalida      = "vigencia_invalida"
 	CodigoPromocaoInvalida      = "promocao_invalida"
+	CodigoComparativoInvalido   = "comparativo_invalido"
 )
 
 // CandidatoOferta is the Extrator candidate before match-or-create.
 type CandidatoOferta struct {
-	Produto       string    `json:"produto"`
-	Marca         string    `json:"marca,omitempty"`
-	Categorias    []string  `json:"categorias,omitempty"`
-	Valor         float64   `json:"valor"`
-	Quantidades   []float64 `json:"quantidades"`
-	Medida        string    `json:"medida"`
-	DataInicio    string    `json:"dataInicio"`
-	DataExpiracao string    `json:"dataExpiracao"`
-	Promocao      *Promocao `json:"promocao,omitempty"`
+	Produto       string       `json:"produto"`
+	Marca         string       `json:"marca,omitempty"`
+	Categorias    []string     `json:"categorias,omitempty"`
+	Valor         float64      `json:"valor"`
+	Quantidades   []float64    `json:"quantidades"`
+	Medida        string       `json:"medida"`
+	DataInicio    string       `json:"dataInicio"`
+	DataExpiracao string       `json:"dataExpiracao"`
+	Promocao      *Promocao    `json:"promocao,omitempty"`
+	Comparativo   *Comparativo `json:"comparativo,omitempty"`
 }
 
 // UnmarshalJSON accepts quantidades[] and legacy singular quantidade (ADR 0030).
 func (c *CandidatoOferta) UnmarshalJSON(data []byte) error {
 	var j struct {
-		Produto       string    `json:"produto"`
-		Marca         string    `json:"marca,omitempty"`
-		Categorias    []string  `json:"categorias,omitempty"`
-		Valor         float64   `json:"valor"`
-		Quantidades   []float64 `json:"quantidades"`
-		Quantidade    *float64  `json:"quantidade"`
-		Medida        string    `json:"medida"`
-		DataInicio    string    `json:"dataInicio"`
-		DataExpiracao string    `json:"dataExpiracao"`
-		Promocao      *Promocao `json:"promocao,omitempty"`
+		Produto       string       `json:"produto"`
+		Marca         string       `json:"marca,omitempty"`
+		Categorias    []string     `json:"categorias,omitempty"`
+		Valor         float64      `json:"valor"`
+		Quantidades   []float64    `json:"quantidades"`
+		Quantidade    *float64     `json:"quantidade"`
+		Medida        string       `json:"medida"`
+		DataInicio    string       `json:"dataInicio"`
+		DataExpiracao string       `json:"dataExpiracao"`
+		Promocao      *Promocao    `json:"promocao,omitempty"`
+		Comparativo   *Comparativo `json:"comparativo,omitempty"`
 	}
 	if err := json.Unmarshal(data, &j); err != nil {
 		return err
@@ -65,6 +68,7 @@ func (c *CandidatoOferta) UnmarshalJSON(data []byte) error {
 	c.DataInicio = j.DataInicio
 	c.DataExpiracao = j.DataExpiracao
 	c.Promocao = j.Promocao
+	c.Comparativo = j.Comparativo
 	return nil
 }
 
@@ -81,6 +85,7 @@ type OfertaValidada struct {
 	OrigemDataInicio    OrigemData
 	OrigemDataExpiracao OrigemData
 	Promocao            *Promocao
+	Comparativo         *Comparativo
 }
 
 type Promocao struct {
@@ -90,6 +95,13 @@ type Promocao struct {
 	PromocaoCartao     *bool    `json:"promocaoCartao,omitempty"`
 	PromocaoClube      *bool    `json:"promocaoClube,omitempty"`
 	ValorPromocional   float64  `json:"valorPromocional"`
+}
+
+// Comparativo is an optional unit-price / pack-fraction badge (ADR 0035).
+// Medida is inherited from the parent Oferta.
+type Comparativo struct {
+	Quantidade float64 `json:"quantidade"`
+	Valor      float64 `json:"valor"`
 }
 
 type FalhaExtracao struct {
@@ -133,6 +145,9 @@ func ValidarCandidato(c CandidatoOferta) (OfertaValidada, *FalhaExtracao) {
 	if falhaPromo := validarPromocao(c); falhaPromo != nil {
 		return OfertaValidada{}, falhaPromo
 	}
+	if falhaComp := validarComparativo(c, quantidades); falhaComp != nil {
+		return OfertaValidada{}, falhaComp
+	}
 
 	return OfertaValidada{
 		Produto:       produto,
@@ -144,6 +159,7 @@ func ValidarCandidato(c CandidatoOferta) (OfertaValidada, *FalhaExtracao) {
 		DataInicio:    c.DataInicio,
 		DataExpiracao: c.DataExpiracao,
 		Promocao:      c.Promocao,
+		Comparativo:   c.Comparativo,
 	}, nil
 }
 
@@ -207,44 +223,56 @@ func validarPromocao(c CandidatoOferta) *FalhaExtracao {
 		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "valorPromocional deve ser > 0", Candidato: c}
 	}
 
-	levePague := p.Leve != nil || p.Pague != nil
-	qtd := p.QuantidadePromocao != nil
+	// Canal: at most one of cartão/clube (ADR 0032).
 	cartao := p.PromocaoCartao != nil
 	clube := p.PromocaoClube != nil
-	n := 0
-	if levePague {
-		n++
+	if cartao && clube {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocaoCartao e promocaoClube são mutuamente exclusivos", Candidato: c}
 	}
-	if qtd {
-		n++
+	if cartao && !*p.PromocaoCartao {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocaoCartao deve ser true", Candidato: c}
 	}
-	if cartao {
-		n++
+	if clube && !*p.PromocaoClube {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocaoClube deve ser true", Candidato: c}
 	}
-	if clube {
-		n++
-	}
-	if n != 1 {
-		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocao deve ser exatamente um dos quatro formatos", Candidato: c}
-	}
+	temCanal := cartao || clube
 
-	switch {
-	case levePague:
+	// Mecânica: at most one of leve/pague or quantidadePromocao.
+	levePague := p.Leve != nil || p.Pague != nil
+	qtd := p.QuantidadePromocao != nil
+	if levePague && qtd {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "leve/pague e quantidadePromocao são mutuamente exclusivos", Candidato: c}
+	}
+	if levePague {
 		if p.Leve == nil || p.Pague == nil || *p.Leve <= 0 || *p.Pague <= 0 {
 			return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "leve/pague inválidos", Candidato: c}
 		}
-	case qtd:
-		if *p.QuantidadePromocao <= 0 {
-			return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "quantidadePromocao inválida", Candidato: c}
-		}
-	case cartao:
-		if !*p.PromocaoCartao {
-			return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocaoCartao deve ser true", Candidato: c}
-		}
-	case clube:
-		if !*p.PromocaoClube {
-			return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocaoClube deve ser true", Candidato: c}
-		}
+	}
+	if qtd && *p.QuantidadePromocao <= 0 {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "quantidadePromocao inválida", Candidato: c}
+	}
+	temMecanica := levePague || qtd
+
+	if !temCanal && !temMecanica {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocao exige canal e/ou mecânica de quantidade", Candidato: c}
+	}
+	return nil
+}
+
+func validarComparativo(c CandidatoOferta, quantidades []float64) *FalhaExtracao {
+	comp := c.Comparativo
+	if comp == nil {
+		return nil
+	}
+	if comp.Quantidade <= 0 {
+		return &FalhaExtracao{Codigo: CodigoComparativoInvalido, Detalhe: "comparativo.quantidade deve ser > 0", Candidato: c}
+	}
+	if comp.Valor <= 0 {
+		return &FalhaExtracao{Codigo: CodigoComparativoInvalido, Detalhe: "comparativo.valor deve ser > 0", Candidato: c}
+	}
+	// quantidades is normalized ascending; badge must be a strict fraction of the pack.
+	if comp.Quantidade >= quantidades[0] {
+		return &FalhaExtracao{Codigo: CodigoComparativoInvalido, Detalhe: "comparativo.quantidade deve ser < menor quantidade do pack", Candidato: c}
 	}
 	return nil
 }

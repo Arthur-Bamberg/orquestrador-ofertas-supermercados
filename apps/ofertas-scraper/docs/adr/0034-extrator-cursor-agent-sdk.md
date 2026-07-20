@@ -1,0 +1,3 @@
+# Cursor Extrator adapter (local Agent SDK)
+
+When `CURSOR_API_KEY` is set (and `EXTRATOR_PROVIDER` is empty/`auto`/`cursor`), DI wires a Cursor Extrator behind the same `domain.Extrator` port as Gemini. The Go adapter shells to an embedded Python bridge (`cursor_bridge.py`) that uses the official `cursor-sdk` local Agent runtime: one durable agent per `Extract` call, one vision turn per page image (ADR 0031), structured JSON guided by `prompts/extrator.txt` + schemas (no provider-native response schema). Token usage maps to Uso do Extrator. Rejected: Cloud Agents API (requires a GitHub repo, creates branches, too slow for page-by-page extraction) and calling undocumented chat endpoints (none exist for `crsr_` keys). Runtime deps: `python3` + `pip install cursor-sdk`.

@@ -24,7 +24,7 @@ Processing is **sequential** in the MVP (Fonte by Fonte, Documento by Documento)
 | Language | Go (workspace module) |
 | Persistence | Upstash Redis (REST) — shared instance with other monorepo apps |
 | Local Redis | Root `docker-compose.yml` (Redis + [SRH](https://upstash.com/docs/redis/sdks/ts/developing)) |
-| Extrator impl | Gemini (prompt cache + structured output) |
+| Extrator impl | Gemini and/or Cursor (same port; ADR 0023, 0034) |
 | Schedule | External cron/systemd timer; binary is a one-shot CLI |
 | Timezone | `America/Sao_Paulo` |
 
@@ -86,25 +86,28 @@ Persisted states: `processando` → `concluido` | `parcial` | `falhou` (`descobe
 
 Same-day re-run: skip `concluido` and `parcial`; retry `falhou` and orphan `processando`.
 
-## Extrator (Gemini adapter)
+## Extrator (Gemini / Cursor adapters)
 
 - System prompt: `prompts/extrator.txt` — must spell out glossary definitions for Produto (sem marca), Marca, and Categoria (taxonômia, não tipo vendável) so extraction stays assertive (ADR 0012)
 - Output schema: `schemas/extracao.json` → items conform to `schemas/oferta.json`
 - Keep prompt/schema **unversioned** until an explicit version bump is requested (ADR 0014)
-- Cache the **stable prompt** (and schema binding) via Gemini context cache; **do not** cache Documento images
-- Gemini adapter: **one API call per page image**, then merge candidates (ADR 0031) — use case still calls `Extract(images)` once
+- Gemini: cache the **stable prompt** (and schema binding) via context cache when the API allows; **do not** cache Documento images
+- Cursor: local Agent SDK via embedded Python bridge (`cursor-sdk`); prompt+schema in the user turn (no native response schema)
+- Both adapters: **one API/vision turn per page image**, then merge candidates (ADR 0031) — use case still calls `Extract(images)` once
 - Adapter lives in `infra`; use case only sees `Extrator`
 - Domain validates every candidate Oferta after extraction (do not trust the model alone)
 - **Recall / prompt iteration:** compare Extrator output to Artefato page images via opt-in live tests — see [`docs/extrator-live-recall.md`](./docs/extrator-live-recall.md)
 
 ### Oferta rules agents must respect
 
-- Extrator candidates include `produto`, optional `marca`, `categorias[]`, plus `valor` / `quantidades[]` / `medida` / `dataInicio` / `dataExpiracao` / optional `promocao` (see ADR 0010, 0030); persisted Oferta stores `produtoId`, `mercadoId`, optional `marcaId`, vigência + `origemDataInicio` / `origemDataExpiracao` after match-or-create (ADR 0015, 0028)
+- Extrator candidates include `produto`, optional `marca`, `categorias[]`, plus `valor` / `quantidades[]` / `medida` / `dataInicio` / `dataExpiracao` / optional `promocao` / optional `comparativo` (see ADR 0010, 0030, 0035); persisted Oferta stores `produtoId`, `mercadoId`, optional `marcaId`, vigência + `origemDataInicio` / `origemDataExpiracao` after match-or-create (ADR 0015, 0028)
 - `quantidades` is a non-empty array of sizes sharing one price and one `medida`; domain dedups and sorts ascending; same-price discrete lists on the flyer → one Oferta; readers accept legacy singular `quantidade` as `[n]` (ADR 0030)
 - `medida` is only `g` | `ml` | `unidade`
 - Extrator must normalize **kg → 1000 g** and **L → 1000 ml** (adjust each value in `quantidades`) before output; domain does **not** convert — any other `medida` is a Falha de Extração (see ADR 0004; hybrid domain safety-net deferred)
 - `dataInicio` / `dataExpiracao` = vigência no encarte; both required in Extrator contract; cascades always on (ADR 0028): Extrator wins when present; missing início → distinct start in filename → primeira descoberta na Fonte; missing fim → filename end, else Falha; past/future dates OK (ADR 0016); `dataInicio` ≤ `dataExpiracao`
-- `promocao` is optional and one of four shapes (leve/pague, quantidade+valor, cartão, clube — ADR 0029)
+- `promocao` is optional: `valorPromocional` plus channel (cartão XOR clube) and/or quantity mechanic (leve/pague XOR quantidadePromocao); channel+mechanic may compose when they share the same price (ADR 0032; clube shape in ADR 0029)
+- `comparativo` is optional: `{ quantidade, valor }` pack-fraction / “sai por nesta embalagem” badge; Medida inherited from Oferta; not Promoção and not a second Oferta (ADR 0035)
+- Each Extrator tentativa persists **Uso do Extrator** (prompt/cache/output tokens + Artefato path) to Redis and `uso-extrator.json` (ADR 0033)
 - Domain match-or-create for Produto/Marca uses normalized exact label match only (ADR 0011); no fuzzy matching in the MVP
 
 ## Artefatos
@@ -114,7 +117,8 @@ For each processing attempt, persist **best-effort** what the pipeline produced 
 1. Original PDF (if download succeeded)
 2. Images sent to Extrator (if raster succeeded)
 3. Raw Extrator response (if Extract returned)
-4. Validated result (Ofertas + Falhas de Extração) when validation ran
+4. Uso do Extrator (`uso-extrator.json`) when usage was reported
+5. Validated result (Ofertas + Falhas de Extração) when validation ran
 
 Do not write empty placeholders for steps that never ran. Store via `ArtefatoStore` only — never write files ad hoc from use cases.
 
@@ -131,9 +135,12 @@ Do not write empty placeholders for steps that never ran. Store via `ArtefatoSto
 ```
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
+EXTRATOR_PROVIDER=auto
+EXTRATOR_STUB=1
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3-flash-preview
-EXTRATOR_STUB=1
+CURSOR_API_KEY=
+CURSOR_MODEL=composer-2.5
 EXTRATOR_PROMPT_PATH=./prompts/extrator.txt
 EXTRACAO_SCHEMA_PATH=./schemas/extracao.json
 OFERTA_SCHEMA_PATH=./schemas/oferta.json
@@ -144,7 +151,7 @@ RASTER_JPEG_QUALITY=80
 TZ=America/Sao_Paulo
 ```
 
-Production Extrator: set `GEMINI_API_KEY` and `EXTRATOR_STUB=0` (or unset stub). Local/dev may keep the stub (ADR 0023).
+Production Extrator: set `EXTRATOR_STUB=0` and either `CURSOR_API_KEY` (Cursor Agent SDK; needs `pip install cursor-sdk`) or `GEMINI_API_KEY`. With `EXTRATOR_PROVIDER=auto` (default), Cursor wins when its key is set. Local/dev may keep the stub (ADR 0023).
 
 CLI (from this directory):
 
@@ -165,6 +172,7 @@ Rasterizer needs `pdftoppm` (poppler-utils) on PATH.
 - Keep job orchestration in `application`
 - Keep prompt + schema in sync; only introduce versioned filenames when explicitly asked to bump the Extrator contract (ADR 0014)
 - Prefer small, sequential changes with tests around domain validation
+- After **any** prompt or Extrator schema change, run live recall and **validate manually** against page images (`docs/extrator-live-recall.md`) — automated floors alone are not enough
 
 **Don't**
 
