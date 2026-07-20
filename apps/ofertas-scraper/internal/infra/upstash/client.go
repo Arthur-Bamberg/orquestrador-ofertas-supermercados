@@ -85,6 +85,12 @@ func (c *Client) Set(ctx context.Context, key, value string) error {
 	return err
 }
 
+// SetEX sets key with TTL in seconds (Upstash SET … EX).
+func (c *Client) SetEX(ctx context.Context, key, value string, ttlSeconds int) error {
+	_, err := c.Do(ctx, "SET", key, value, "EX", ttlSeconds)
+	return err
+}
+
 func (c *Client) Del(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil

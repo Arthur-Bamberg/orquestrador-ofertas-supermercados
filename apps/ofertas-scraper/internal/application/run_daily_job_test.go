@@ -50,6 +50,13 @@ func (m *memDocs) GetByIdentity(_ context.Context, fonteID domain.FonteID, filen
 	return m.byID[id], true, nil
 }
 
+func (m *memDocs) Get(_ context.Context, id domain.DocumentoID) (domain.Documento, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	d, ok := m.byID[string(id)]
+	return d, ok, nil
+}
+
 func (m *memDocs) Save(_ context.Context, d domain.Documento) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -59,22 +66,33 @@ func (m *memDocs) Save(_ context.Context, d domain.Documento) error {
 }
 
 func (m *memDocs) EarliestDia(_ context.Context, fonteID domain.FonteID, filename string) (string, bool, error) {
+	dias, err := m.ListDias(context.Background(), fonteID, filename)
+	if err != nil {
+		return "", false, err
+	}
+	if len(dias) == 0 {
+		return "", false, nil
+	}
+	earliest := dias[0]
+	for _, dia := range dias[1:] {
+		if dia < earliest {
+			earliest = dia
+		}
+	}
+	return earliest, true, nil
+}
+
+func (m *memDocs) ListDias(_ context.Context, fonteID domain.FonteID, filename string) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var earliest string
+	var dias []string
 	prefix := string(fonteID) + "|" + filename + "|"
 	for k := range m.idx {
 		if len(k) > len(prefix) && k[:len(prefix)] == prefix {
-			dia := k[len(prefix):]
-			if earliest == "" || dia < earliest {
-				earliest = dia
-			}
+			dias = append(dias, k[len(prefix):])
 		}
 	}
-	if earliest == "" {
-		return "", false, nil
-	}
-	return earliest, true, nil
+	return dias, nil
 }
 
 type memProdutos struct {
@@ -110,21 +128,79 @@ func (m *memMarcas) Save(_ context.Context, x domain.Marca) error {
 }
 
 type memOfertas struct {
-	byDoc     map[domain.DocumentoID][]domain.Oferta
+	byDoc     map[domain.DocumentoID][]domain.OfertaID
+	byID      map[domain.OfertaID]domain.Oferta
+	byUniq    map[string]domain.OfertaID
+	byDocs    map[domain.OfertaID]map[domain.DocumentoID]struct{}
 	byProduto map[domain.ProdutoID]map[domain.DocumentoID]struct{}
 }
 
-func (m *memOfertas) SaveAll(_ context.Context, id domain.DocumentoID, ofertas []domain.Oferta) error {
+func (m *memOfertas) ensure() {
 	if m.byDoc == nil {
-		m.byDoc = map[domain.DocumentoID][]domain.Oferta{}
+		m.byDoc = map[domain.DocumentoID][]domain.OfertaID{}
+	}
+	if m.byID == nil {
+		m.byID = map[domain.OfertaID]domain.Oferta{}
+	}
+	if m.byUniq == nil {
+		m.byUniq = map[string]domain.OfertaID{}
+	}
+	if m.byDocs == nil {
+		m.byDocs = map[domain.OfertaID]map[domain.DocumentoID]struct{}{}
 	}
 	if m.byProduto == nil {
 		m.byProduto = map[domain.ProdutoID]map[domain.DocumentoID]struct{}{}
 	}
-	prev := produtoIDsFromOfertas(m.byDoc[id])
-	next := produtoIDsFromOfertas(ofertas)
-	for pid := range prev {
-		if _, ok := next[pid]; ok {
+}
+
+func (m *memOfertas) GetByUniq(_ context.Context, chave string) (domain.Oferta, bool, error) {
+	m.ensure()
+	id, ok := m.byUniq[chave]
+	if !ok {
+		return domain.Oferta{}, false, nil
+	}
+	o, ok := m.byID[id]
+	return o, ok, nil
+}
+
+func (m *memOfertas) SaveAll(_ context.Context, id domain.DocumentoID, ofertas []domain.Oferta) error {
+	m.ensure()
+	prev := append([]domain.OfertaID{}, m.byDoc[id]...)
+	prevProdutos := map[domain.ProdutoID]struct{}{}
+	for _, oid := range prev {
+		if o, ok := m.byID[oid]; ok && o.ProdutoID != "" {
+			prevProdutos[o.ProdutoID] = struct{}{}
+		}
+	}
+
+	nextIDs := make([]domain.OfertaID, 0, len(ofertas))
+	nextSet := map[domain.OfertaID]struct{}{}
+	nextProdutos := map[domain.ProdutoID]struct{}{}
+	for _, o := range ofertas {
+		chave := domain.ChaveUnicaOferta(o)
+		if existingID, ok := m.byUniq[chave]; ok {
+			o = m.byID[existingID]
+		} else {
+			if o.ID == "" {
+				o.ID = domain.OfertaID(application.NewID())
+			}
+			m.byID[o.ID] = o
+			m.byUniq[chave] = o.ID
+		}
+		nextIDs = append(nextIDs, o.ID)
+		nextSet[o.ID] = struct{}{}
+		if o.ProdutoID != "" {
+			nextProdutos[o.ProdutoID] = struct{}{}
+		}
+		if m.byDocs[o.ID] == nil {
+			m.byDocs[o.ID] = map[domain.DocumentoID]struct{}{}
+		}
+		m.byDocs[o.ID][id] = struct{}{}
+	}
+	m.byDoc[id] = nextIDs
+
+	for pid := range prevProdutos {
+		if _, ok := nextProdutos[pid]; ok {
 			continue
 		}
 		delete(m.byProduto[pid], id)
@@ -132,18 +208,40 @@ func (m *memOfertas) SaveAll(_ context.Context, id domain.DocumentoID, ofertas [
 			delete(m.byProduto, pid)
 		}
 	}
-	for pid := range next {
+	for pid := range nextProdutos {
 		if m.byProduto[pid] == nil {
 			m.byProduto[pid] = map[domain.DocumentoID]struct{}{}
 		}
 		m.byProduto[pid][id] = struct{}{}
 	}
-	m.byDoc[id] = ofertas
+
+	for _, oid := range prev {
+		if _, ok := nextSet[oid]; ok {
+			continue
+		}
+		delete(m.byDocs[oid], id)
+		if len(m.byDocs[oid]) == 0 {
+			o := m.byID[oid]
+			delete(m.byUniq, domain.ChaveUnicaOferta(o))
+			delete(m.byID, oid)
+			delete(m.byDocs, oid)
+		}
+	}
 	return nil
 }
+
 func (m *memOfertas) ListByDocumento(_ context.Context, id domain.DocumentoID) ([]domain.Oferta, error) {
-	return m.byDoc[id], nil
+	m.ensure()
+	ids := m.byDoc[id]
+	out := make([]domain.Oferta, 0, len(ids))
+	for _, oid := range ids {
+		if o, ok := m.byID[oid]; ok {
+			out = append(out, o)
+		}
+	}
+	return out, nil
 }
+
 func (m *memOfertas) ListDocumentoIDsByProduto(_ context.Context, produtoID domain.ProdutoID) ([]domain.DocumentoID, error) {
 	set := m.byProduto[produtoID]
 	ids := make([]domain.DocumentoID, 0, len(set))
@@ -151,17 +249,6 @@ func (m *memOfertas) ListDocumentoIDsByProduto(_ context.Context, produtoID doma
 		ids = append(ids, id)
 	}
 	return ids, nil
-}
-
-func produtoIDsFromOfertas(ofertas []domain.Oferta) map[domain.ProdutoID]struct{} {
-	out := make(map[domain.ProdutoID]struct{})
-	for _, o := range ofertas {
-		if o.ProdutoID == "" {
-			continue
-		}
-		out[o.ProdutoID] = struct{}{}
-	}
-	return out
 }
 
 type memFalhas struct {
@@ -204,6 +291,9 @@ func (memArtefatos) SaveUsoExtrator(context.Context, domain.Documento, string, d
 	return nil
 }
 func (memArtefatos) SaveValidated(context.Context, domain.Documento, string, []domain.Oferta, []domain.FalhaExtracao) error {
+	return nil
+}
+func (memArtefatos) SaveConteudoIdentico(context.Context, domain.Documento, string, domain.DocumentoID) error {
 	return nil
 }
 
@@ -261,7 +351,7 @@ func TestRunDailyJob_PersistsValidOferta(t *testing.T) {
 	if doc.Estado != domain.EstadoConcluido {
 		t.Fatalf("estado=%s ultimoErro=%s", doc.Estado, doc.UltimoErro)
 	}
-	got := ofertas.byDoc[doc.ID]
+	got, _ := ofertas.ListByDocumento(context.Background(), doc.ID)
 	if len(got) != 1 {
 		t.Fatalf("ofertas=%v", got)
 	}
@@ -270,6 +360,9 @@ func TestRunDailyJob_PersistsValidOferta(t *testing.T) {
 	}
 	if got[0].OrigemDataInicio != domain.OrigemExtrator || got[0].OrigemDataExpiracao != domain.OrigemExtrator {
 		t.Fatalf("origens=%s/%s", got[0].OrigemDataInicio, got[0].OrigemDataExpiracao)
+	}
+	if doc.Fingerprint == "" {
+		t.Fatal("fingerprint empty")
 	}
 }
 
@@ -486,5 +579,74 @@ func TestRunDailyJob_SkipsParcial(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("parcial should not reprocess; calls=%d", calls)
+	}
+}
+
+func TestRunDailyJob_ConteudoIdentico(t *testing.T) {
+	loc, _ := time.LoadLocation("America/Sao_Paulo")
+	body := []byte("%PDF-identical")
+	fp := domain.FingerprintPDF(body)
+	docs := newMemDocs()
+	ofertas := &memOfertas{}
+	prior := domain.Documento{
+		ID: "d-prior", FonteID: "f1", MercadoID: "m1",
+		Filename: "encarte.pdf", Dia: "2026-07-17",
+		Estado: domain.EstadoConcluido, Fingerprint: fp,
+	}
+	_ = docs.Save(context.Background(), prior)
+	_ = ofertas.SaveAll(context.Background(), prior.ID, []domain.Oferta{{
+		ID: "o1", ProdutoID: "p1", MercadoID: "m1", Valor: 9,
+		Quantidades: []float64{500}, Medida: domain.MedidaG,
+		DataInicio: "2026-07-17", DataExpiracao: "2026-07-19",
+		OrigemDataInicio: domain.OrigemExtrator, OrigemDataExpiracao: domain.OrigemExtrator,
+	}})
+
+	calls := 0
+	now := time.Date(2026, 7, 18, 8, 0, 0, 0, loc)
+	deps := application.RunDailyJobDeps{
+		Fontes:     &memFontes{items: []domain.Fonte{{ID: "f1", MercadoID: "m1"}}},
+		Documentos: docs,
+		Produtos:   &memProdutos{},
+		Marcas:     &memMarcas{},
+		Ofertas:    ofertas,
+		Falhas:     &memFalhas{},
+		FonteHTTP: &memFonteHTTP{
+			pdfs: map[string][]domain.PDFDescoberto{"f1": {{Filename: "encarte.pdf", URL: "u"}}},
+			body: body,
+		},
+		Raster: raster.Fixed{Pages: []domain.PageImage{{Page: 1, JPEG: []byte{1}}}},
+		Extrator: &countingExtrator{
+			inner: extrator.Stub{Candidatos: []domain.CandidatoOferta{{
+				Produto: "should-not-run", Valor: 1, Quantidades: []float64{1}, Medida: "g",
+				DataInicio: "2026-07-18", DataExpiracao: "2026-07-25",
+			}}},
+			n: &calls,
+		},
+		Artefatos: memArtefatos{},
+		Dates:     filenamedate.Parser{},
+		Clock:     fixedClock{t: now},
+		Log:       log.New(&bytes.Buffer{}, "", 0),
+		Location:  loc,
+	}
+	if err := application.RunDailyJob(context.Background(), deps); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 {
+		t.Fatalf("extrator should be skipped; calls=%d", calls)
+	}
+	doc, ok, _ := docs.GetByIdentity(context.Background(), "f1", "encarte.pdf", "2026-07-18")
+	if !ok || doc.Estado != domain.EstadoConcluido {
+		t.Fatalf("ok=%v estado=%s", ok, doc.Estado)
+	}
+	if doc.ConteudoIdenticoA == nil || *doc.ConteudoIdenticoA != prior.ID {
+		t.Fatalf("conteudoIdenticoA=%v", doc.ConteudoIdenticoA)
+	}
+	got, _ := ofertas.ListByDocumento(context.Background(), doc.ID)
+	if len(got) != 1 || got[0].ID != "o1" {
+		t.Fatalf("associated ofertas=%v", got)
+	}
+	// Same catalog entity — not a clone.
+	if len(ofertas.byID) != 1 {
+		t.Fatalf("catalog size=%d want 1", len(ofertas.byID))
 	}
 }

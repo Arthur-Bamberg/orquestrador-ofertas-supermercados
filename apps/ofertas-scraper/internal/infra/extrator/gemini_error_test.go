@@ -14,7 +14,6 @@ import (
 func TestMapGeminiError_Indisponivel(t *testing.T) {
 	cases := []error{
 		context.DeadlineExceeded,
-		genai.APIError{Code: 429, Message: "rate", Status: "RESOURCE_EXHAUSTED"},
 		genai.APIError{Code: 503, Message: "down", Status: "UNAVAILABLE"},
 		fmt.Errorf("boom: %w", genai.APIError{Code: 500, Message: "err", Status: "INTERNAL"}),
 	}
@@ -22,6 +21,22 @@ func TestMapGeminiError_Indisponivel(t *testing.T) {
 		got := mapGeminiError(err)
 		if !errors.Is(got, domain.ErrExtratorIndisponivel) {
 			t.Fatalf("err %v → %v, want ErrExtratorIndisponivel", err, got)
+		}
+		if errors.Is(got, domain.ErrExtratorCota) {
+			t.Fatalf("err %v should not be cota", err)
+		}
+	}
+}
+
+func TestMapGeminiError_Cota(t *testing.T) {
+	cases := []error{
+		genai.APIError{Code: 429, Message: "rate", Status: "RESOURCE_EXHAUSTED"},
+		genai.APIError{Code: 429, Message: "rate", Status: "RESOURCE_EXHAUSTED"},
+	}
+	for _, err := range cases {
+		got := mapGeminiError(err)
+		if !errors.Is(got, domain.ErrExtratorCota) {
+			t.Fatalf("err %v → %v, want ErrExtratorCota", err, got)
 		}
 	}
 }

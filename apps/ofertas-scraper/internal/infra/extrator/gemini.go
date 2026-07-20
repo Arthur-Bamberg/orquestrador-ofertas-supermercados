@@ -122,7 +122,7 @@ func (g *Gemini) Extract(ctx context.Context, images []domain.PageImage) ([]doma
 	// One API call per page (ADR 0031): dense encartes lose Ofertas when many pages
 	// share a single vision pass.
 	var all []domain.CandidatoOferta
-	uso := &domain.UsoExtrator{Model: g.model}
+	uso := &domain.UsoExtrator{Provider: domain.ExtratorProviderGemini, Model: g.model}
 	for _, img := range images {
 		if len(img.JPEG) == 0 {
 			continue
@@ -285,19 +285,20 @@ func mapGeminiError(err error) error {
 	}
 	var apiErr genai.APIError
 	if errors.As(err, &apiErr) {
-		if apiErr.Code == 429 || apiErr.Code >= 500 {
-			return fmt.Errorf("%w: %v", domain.ErrExtratorIndisponivel, err)
-		}
 		status := strings.ToUpper(apiErr.Status)
-		if status == "UNAVAILABLE" || status == "RESOURCE_EXHAUSTED" || status == "DEADLINE_EXCEEDED" {
+		if apiErr.Code == 429 || status == "RESOURCE_EXHAUSTED" {
+			return fmt.Errorf("%w: %v", domain.ErrExtratorCota, err)
+		}
+		if apiErr.Code >= 500 || status == "UNAVAILABLE" || status == "DEADLINE_EXCEEDED" {
 			return fmt.Errorf("%w: %v", domain.ErrExtratorIndisponivel, err)
 		}
 	}
 	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "resource_exhausted") || strings.Contains(msg, "429") {
+		return fmt.Errorf("%w: %v", domain.ErrExtratorCota, err)
+	}
 	if strings.Contains(msg, "unavailable") ||
-		strings.Contains(msg, "resource_exhausted") ||
 		strings.Contains(msg, "deadline exceeded") ||
-		strings.Contains(msg, "429") ||
 		strings.Contains(msg, "500") ||
 		strings.Contains(msg, "502") ||
 		strings.Contains(msg, "503") {

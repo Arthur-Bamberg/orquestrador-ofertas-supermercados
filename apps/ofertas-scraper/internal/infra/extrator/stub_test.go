@@ -24,8 +24,8 @@ func TestStub_ReturnsCandidatosAndRaw(t *testing.T) {
 	if len(raw) == 0 {
 		t.Fatal("raw empty")
 	}
-	if uso != nil {
-		t.Fatalf("stub uso should be nil, got %#v", uso)
+	if uso == nil || uso.Provider != domain.ExtratorProviderStub {
+		t.Fatalf("stub uso=%#v", uso)
 	}
 }
 

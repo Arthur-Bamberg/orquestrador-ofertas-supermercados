@@ -151,7 +151,7 @@ RASTER_JPEG_QUALITY=80
 TZ=America/Sao_Paulo
 ```
 
-Production Extrator: set `EXTRATOR_STUB=0` and either `CURSOR_API_KEY` (Cursor Agent SDK; needs `pip install cursor-sdk`) or `GEMINI_API_KEY`. With `EXTRATOR_PROVIDER=auto` (default), Cursor wins when its key is set. Local/dev may keep the stub (ADR 0023).
+With `EXTRATOR_PROVIDER=auto` (default), Gemini is primary and Cursor is failover on rate-limit (ADR 0037).
 
 CLI (from this directory):
 

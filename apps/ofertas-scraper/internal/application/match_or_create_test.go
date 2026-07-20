@@ -18,7 +18,7 @@ func TestPersistirOfertasValidas_MatchOrCreateAndCategoriasUnion(t *testing.T) {
 	marcas := &memMarcas{}
 	doc := domain.Documento{ID: "d1", MercadoID: "m1"}
 
-	ofertas, err := application.PersistirOfertasValidas(context.Background(), produtos, marcas, doc, []domain.OfertaValidada{
+	ofertas, err := application.PersistirOfertasValidas(context.Background(), produtos, marcas, nil, doc, []domain.OfertaValidada{
 		{
 			Produto: "Arroz Integral", Marca: "Camil", Categorias: []string{"grãos"},
 			Valor: 10, Quantidades: []float64{1000}, Medida: domain.MedidaG,

@@ -28,7 +28,7 @@ func (s Stub) Extract(context.Context, []domain.PageImage) ([]domain.CandidatoOf
 			return nil, nil, nil, err
 		}
 	}
-	return s.Candidatos, raw, nil, nil
+	return s.Candidatos, raw, &domain.UsoExtrator{Provider: domain.ExtratorProviderStub, Model: "stub"}, nil
 }
 
 // Unavailable always returns ErrExtratorIndisponivel.
@@ -36,7 +36,12 @@ func Unavailable() Stub {
 	return Stub{Err: domain.ErrExtratorIndisponivel}
 }
 
-// IsIndisponivel reports whether err (or a wrapped err) means Extrator outage.
+// IsIndisponivel reports whether err (or a wrapped err) means Extrator outage (non-quota).
 func IsIndisponivel(err error) bool {
 	return errors.Is(err, domain.ErrExtratorIndisponivel)
+}
+
+// IsCota reports whether err means rate-limit / quota exhaustion.
+func IsCota(err error) bool {
+	return errors.Is(err, domain.ErrExtratorCota)
 }

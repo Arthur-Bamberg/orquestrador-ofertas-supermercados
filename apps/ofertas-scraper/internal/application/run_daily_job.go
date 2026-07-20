@@ -160,11 +160,12 @@ func processDocumento(
 	tentativa := now.Format("20060102T150405")
 	doc.Estado = domain.EstadoProcessando
 	doc.UltimoErro = ""
+	doc.ConteudoIdenticoA = nil
 	doc.Atualizado = now
 	if err := d.Documentos.Save(ctx, doc); err != nil {
 		return fmt.Errorf("%w: save documento: %v", errGlobalInfra, err)
 	}
-	// Clear previous Ofertas/Falhas for this Documento (ADR 0017) before the new attempt.
+	// Clear previous Ofertas/Falhas for this Documento (ADR 0017/0036) before the new attempt.
 	if err := d.Ofertas.SaveAll(ctx, doc.ID, nil); err != nil {
 		return fmt.Errorf("%w: clear ofertas: %v", errGlobalInfra, err)
 	}
@@ -187,8 +188,19 @@ func processDocumento(
 	if err != nil {
 		return fail(fmt.Sprintf("download: %v", err))
 	}
+	fp := domain.FingerprintPDF(pdfBytes)
+	doc.Fingerprint = fp
+	if err := d.Documentos.Save(ctx, doc); err != nil {
+		return fmt.Errorf("%w: save fingerprint: %v", errGlobalInfra, err)
+	}
 	if err := d.Artefatos.SavePDF(ctx, doc, tentativa, pdfBytes); err != nil {
 		return fail(fmt.Sprintf("artefato pdf: %v", err))
+	}
+
+	if prior, ok, err := findConteudoIdentico(ctx, d, fonte.ID, pdf.Filename, dia, fp); err != nil {
+		return fmt.Errorf("%w: conteudo identico: %v", errGlobalInfra, err)
+	} else if ok {
+		return concludeConteudoIdentico(ctx, d, doc, tentativa, prior, pdf.Filename)
 	}
 
 	images, err := d.Raster.Rasterize(ctx, pdfBytes)
@@ -224,8 +236,8 @@ func processDocumento(
 				return fail(fmt.Sprintf("persist uso: %v", err))
 			}
 		}
-		d.Log.Printf("%s uso-extrator prompt=%d cache=%d output=%d path=%s",
-			pdf.Filename, uso.PromptTokens, uso.CacheTokens, uso.OutputTokens, uso.ArtefatoPath)
+		d.Log.Printf("%s uso-extrator provider=%s model=%s prompt=%d cache=%d output=%d path=%s",
+			pdf.Filename, uso.Provider, uso.Model, uso.PromptTokens, uso.CacheTokens, uso.OutputTokens, uso.ArtefatoPath)
 	}
 
 	primeiroDia := dia
@@ -240,7 +252,7 @@ func processDocumento(
 	}
 	validas, falhas, estado := ValidarExtracaoResolvida(resolvidos)
 
-	ofertas, err := PersistirOfertasValidas(ctx, d.Produtos, d.Marcas, doc, validas)
+	ofertas, err := PersistirOfertasValidas(ctx, d.Produtos, d.Marcas, d.Ofertas, doc, validas)
 	if err != nil {
 		return fail(fmt.Sprintf("match-or-create: %v", err))
 	}
@@ -264,19 +276,87 @@ func processDocumento(
 	return nil
 }
 
-func extractWithRetry(	ctx context.Context,
+func findConteudoIdentico(
+	ctx context.Context,
+	d RunDailyJobDeps,
+	fonteID domain.FonteID,
+	filename, dia, fingerprint string,
+) (domain.Documento, bool, error) {
+	dias, err := d.Documentos.ListDias(ctx, fonteID, filename)
+	if err != nil {
+		return domain.Documento{}, false, err
+	}
+	var best domain.Documento
+	found := false
+	for _, otherDia := range dias {
+		if otherDia == dia {
+			continue
+		}
+		prior, ok, err := d.Documentos.GetByIdentity(ctx, fonteID, filename, otherDia)
+		if err != nil {
+			return domain.Documento{}, false, err
+		}
+		if !ok || prior.Estado != domain.EstadoConcluido || prior.Fingerprint == "" {
+			continue
+		}
+		if prior.Fingerprint != fingerprint {
+			continue
+		}
+		if !found || prior.Dia > best.Dia {
+			best = prior
+			found = true
+		}
+	}
+	return best, found, nil
+}
+
+func concludeConteudoIdentico(
+	ctx context.Context,
+	d RunDailyJobDeps,
+	doc domain.Documento,
+	tentativa string,
+	prior domain.Documento,
+	filename string,
+) error {
+	ofertas, err := d.Ofertas.ListByDocumento(ctx, prior.ID)
+	if err != nil {
+		return fmt.Errorf("%w: list ofertas prior: %v", errGlobalInfra, err)
+	}
+	if err := d.Ofertas.SaveAll(ctx, doc.ID, ofertas); err != nil {
+		return fmt.Errorf("%w: associate ofertas: %v", errGlobalInfra, err)
+	}
+	priorID := prior.ID
+	doc.ConteudoIdenticoA = &priorID
+	doc.Estado = domain.EstadoConcluido
+	doc.UltimoErro = ""
+	doc.Atualizado = d.Clock.Now().UTC()
+	if err := d.Artefatos.SaveConteudoIdentico(ctx, doc, tentativa, prior.ID); err != nil {
+		return fmt.Errorf("%w: artefato conteudo identico: %v", errGlobalInfra, err)
+	}
+	if err := d.Documentos.Save(ctx, doc); err != nil {
+		return fmt.Errorf("%w: save documento identico: %v", errGlobalInfra, err)
+	}
+	d.Log.Printf("%s → concluido (conteudo identico a %s; ofertas=%d)", filename, prior.ID, len(ofertas))
+	return nil
+}
+
+func extractWithRetry(
+	ctx context.Context,
 	d RunDailyJobDeps,
 	images []domain.PageImage,
 	budgetLeft *time.Duration,
 	knownDown *bool,
 ) ([]domain.CandidatoOferta, []byte, *domain.UsoExtrator, error) {
-	backoff := time.Second
-	const maxBackoff = 5 * time.Minute
+	backoff := 5 * time.Minute
+	const maxBackoff = 30 * time.Minute
 
 	for {
 		candidatos, raw, uso, err := d.Extrator.Extract(ctx, images)
 		if err == nil {
 			return candidatos, raw, uso, nil
+		}
+		if errors.Is(err, domain.ErrExtratorCota) {
+			return nil, nil, nil, err
 		}
 		if !errors.Is(err, domain.ErrExtratorIndisponivel) {
 			return nil, nil, nil, err

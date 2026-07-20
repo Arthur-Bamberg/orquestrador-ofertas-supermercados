@@ -13,11 +13,12 @@ func NewID() string {
 	return uuid.NewString()
 }
 
-// PersistirOfertasValidas match-or-creates Produto/Marca and builds persisted Ofertas.
+// PersistirOfertasValidas match-or-creates Produto/Marca and builds unique catalog Ofertas (ADR 0036).
 func PersistirOfertasValidas(
 	ctx context.Context,
 	produtos domain.ProdutoRepository,
 	marcas domain.MarcaRepository,
+	ofertasRepo domain.OfertaRepository,
 	doc domain.Documento,
 	validas []domain.OfertaValidada,
 ) ([]domain.Oferta, error) {
@@ -36,9 +37,7 @@ func PersistirOfertasValidas(
 			id := marca.ID
 			marcaID = &id
 		}
-		out = append(out, domain.Oferta{
-			ID:                  domain.OfertaID(NewID()),
-			DocumentoID:         doc.ID,
+		candidate := domain.Oferta{
 			ProdutoID:           produto.ID,
 			MarcaID:             marcaID,
 			MercadoID:           doc.MercadoID,
@@ -51,7 +50,20 @@ func PersistirOfertasValidas(
 			OrigemDataExpiracao: v.OrigemDataExpiracao,
 			Promocao:            v.Promocao,
 			Comparativo:         v.Comparativo,
-		})
+		}
+		chave := domain.ChaveUnicaOferta(candidate)
+		if ofertasRepo != nil {
+			existing, ok, err := ofertasRepo.GetByUniq(ctx, chave)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				out = append(out, existing)
+				continue
+			}
+		}
+		candidate.ID = domain.OfertaID(NewID())
+		out = append(out, candidate)
 	}
 	return out, nil
 }

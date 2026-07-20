@@ -12,8 +12,6 @@ func TestMapCursorBridgeError_Indisponivel(t *testing.T) {
 		msg  string
 		code string
 	}{
-		{msg: "too many requests", code: "rate_limit"},
-		{msg: "HTTP 429", code: ""},
 		{msg: "service unavailable", code: "unavailable"},
 		{msg: "context deadline exceeded", code: ""},
 	}
@@ -21,6 +19,22 @@ func TestMapCursorBridgeError_Indisponivel(t *testing.T) {
 		got := mapCursorBridgeError(tc.msg, tc.code)
 		if !errors.Is(got, domain.ErrExtratorIndisponivel) {
 			t.Fatalf("msg=%q code=%q → %v, want ErrExtratorIndisponivel", tc.msg, tc.code, got)
+		}
+	}
+}
+
+func TestMapCursorBridgeError_Cota(t *testing.T) {
+	cases := []struct {
+		msg  string
+		code string
+	}{
+		{msg: "too many requests", code: "rate_limit"},
+		{msg: "HTTP 429", code: ""},
+	}
+	for _, tc := range cases {
+		got := mapCursorBridgeError(tc.msg, tc.code)
+		if !errors.Is(got, domain.ErrExtratorCota) {
+			t.Fatalf("msg=%q code=%q → %v, want ErrExtratorCota", tc.msg, tc.code, got)
 		}
 	}
 }
