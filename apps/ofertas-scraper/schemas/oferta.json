@@ -54,45 +54,18 @@
       "description": "End of flyer validity for this Oferta (YYYY-MM-DD); may be in the past (history)"
     },
     "promocao": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["leve", "pague", "valorPromocional"],
-          "properties": {
-            "leve": { "type": "number", "exclusiveMinimum": 0 },
-            "pague": { "type": "number", "exclusiveMinimum": 0 },
-            "valorPromocional": { "type": "number", "exclusiveMinimum": 0 }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["quantidadePromocao", "valorPromocional"],
-          "properties": {
-            "quantidadePromocao": { "type": "number", "exclusiveMinimum": 0 },
-            "valorPromocional": { "type": "number", "exclusiveMinimum": 0 }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["promocaoCartao", "valorPromocional"],
-          "properties": {
-            "promocaoCartao": { "const": true },
-            "valorPromocional": { "type": "number", "exclusiveMinimum": 0 }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["promocaoClube", "valorPromocional"],
-          "properties": {
-            "promocaoClube": { "const": true },
-            "valorPromocional": { "type": "number", "exclusiveMinimum": 0 }
-          }
-        }
-      ]
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["valorPromocional"],
+      "description": "Optional commercial condition: valorPromocional plus channel (cartao XOR clube) and/or quantity mechanic (leve+pague XOR quantidadePromocao). At least one of channel or mechanic required; both may compose when they share the same price (ADR 0032).",
+      "properties": {
+        "leve": { "type": "number", "exclusiveMinimum": 0 },
+        "pague": { "type": "number", "exclusiveMinimum": 0 },
+        "quantidadePromocao": { "type": "number", "exclusiveMinimum": 0 },
+        "promocaoCartao": { "const": true },
+        "promocaoClube": { "const": true },
+        "valorPromocional": { "type": "number", "exclusiveMinimum": 0 }
+      }
     }
   }
 }

@@ -2,6 +2,6 @@
 status: accepted
 ---
 
-# Promoção clube is a fourth exclusive Extrator shape
+# Promoção clube is a distinct Extrator channel
 
-Promoção remains optional and exactly one of four shapes: leve/pague, quantidade+valorPromocional, `promocaoCartao=true`+valorPromocional, or `promocaoClube=true`+valorPromocional. Cartão and clube are distinct (loyalty/app/clube without card → clube; store/brand card → cartão). Rejected: a generic vínculo/canal enum that collapses the two, which would block consumers from filtering each condition separately.
+`promocaoClube` is a distinct channel from `promocaoCartao` (loyalty/app/clube without card → clube; store/brand card → cartão). Rejected: a generic vínculo/canal enum that collapses the two. Mutual exclusivity of the four *shapes* was relaxed by ADR 0032 (channel and quantity mechanic may compose); cartão XOR clube remains.

@@ -46,7 +46,7 @@ func TestLiveFortPage1Hires(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cands, _, err := g.Extract(ctx, []domain.PageImage{{Page: 1, JPEG: b}})
+	cands, _, _, err := g.Extract(ctx, []domain.PageImage{{Page: 1, JPEG: b}})
 	if err != nil {
 		t.Fatal(err)
 	}

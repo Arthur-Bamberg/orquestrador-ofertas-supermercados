@@ -34,24 +34,30 @@ func TestLoadGeminiResponseSchema(t *testing.T) {
 		t.Fatal("exclusiveMinimum should be sanitized away")
 	}
 	promo, _ := oferta["properties"].(map[string]any)["promocao"].(map[string]any)
-	oneOf, _ := promo["oneOf"].([]any)
-	if len(oneOf) != 4 {
-		t.Fatalf("promocao oneOf len=%d", len(oneOf))
+	if _, hasOneOf := promo["oneOf"]; hasOneOf {
+		t.Fatal("promocao should be a composable object, not oneOf")
 	}
-	cartao := oneOf[2].(map[string]any)
-	props := cartao["properties"].(map[string]any)
-	cartaoField := props["promocaoCartao"].(map[string]any)
+	props, _ := promo["properties"].(map[string]any)
+	cartaoField, _ := props["promocaoCartao"].(map[string]any)
 	if _, hasConst := cartaoField["const"]; hasConst {
 		t.Fatal("const should become enum")
 	}
 	if cartaoField["enum"] == nil {
 		t.Fatalf("expected enum for promocaoCartao: %#v", cartaoField)
 	}
-	clube := oneOf[3].(map[string]any)
-	clubeProps := clube["properties"].(map[string]any)
-	clubeField := clubeProps["promocaoClube"].(map[string]any)
+	clubeField, _ := props["promocaoClube"].(map[string]any)
 	if clubeField["enum"] == nil {
 		t.Fatalf("expected enum for promocaoClube: %#v", clubeField)
+	}
+	requiredPromo, _ := promo["required"].([]any)
+	hasValorPromo := false
+	for _, r := range requiredPromo {
+		if r == "valorPromocional" {
+			hasValorPromo = true
+		}
+	}
+	if !hasValorPromo {
+		t.Fatalf("promocao must require valorPromocional: %#v", requiredPromo)
 	}
 	required, _ := oferta["required"].([]any)
 	hasInicio, hasQuantidades := false, false

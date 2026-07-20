@@ -27,6 +27,7 @@ type RunDailyJobDeps struct {
 	Marcas     domain.MarcaRepository
 	Ofertas    domain.OfertaRepository
 	Falhas     domain.FalhaExtracaoRepository
+	Usos       domain.UsoExtratorRepository // optional; when nil, usage is only written to Artefatos
 	FonteHTTP  domain.FonteClient
 	Raster     domain.Rasterizer
 	Extrator   domain.Extrator
@@ -200,15 +201,31 @@ func processDocumento(
 
 	var candidatos []domain.CandidatoOferta
 	var raw []byte
+	var uso *domain.UsoExtrator
 	if *extratorKnownDown {
 		return fail("extrator indisponivel (orçamento de retry esgotado neste run)")
 	}
-	candidatos, raw, err = extractWithRetry(ctx, d, images, extratorBudgetLeft, extratorKnownDown)
+	candidatos, raw, uso, err = extractWithRetry(ctx, d, images, extratorBudgetLeft, extratorKnownDown)
 	if err != nil {
 		return fail(fmt.Sprintf("extrator: %v", err))
 	}
 	if err := d.Artefatos.SaveRawExtrator(ctx, doc, tentativa, raw); err != nil {
 		return fail(fmt.Sprintf("artefato raw: %v", err))
+	}
+	if uso != nil {
+		uso.DocumentoID = doc.ID
+		uso.Tentativa = tentativa
+		uso.ArtefatoPath = d.Artefatos.AttemptPath(doc, tentativa)
+		if err := d.Artefatos.SaveUsoExtrator(ctx, doc, tentativa, *uso); err != nil {
+			return fail(fmt.Sprintf("artefato uso: %v", err))
+		}
+		if d.Usos != nil {
+			if err := d.Usos.Save(ctx, *uso); err != nil {
+				return fail(fmt.Sprintf("persist uso: %v", err))
+			}
+		}
+		d.Log.Printf("%s uso-extrator prompt=%d cache=%d output=%d path=%s",
+			pdf.Filename, uso.PromptTokens, uso.CacheTokens, uso.OutputTokens, uso.ArtefatoPath)
 	}
 
 	primeiroDia := dia
@@ -252,21 +269,21 @@ func extractWithRetry(	ctx context.Context,
 	images []domain.PageImage,
 	budgetLeft *time.Duration,
 	knownDown *bool,
-) ([]domain.CandidatoOferta, []byte, error) {
+) ([]domain.CandidatoOferta, []byte, *domain.UsoExtrator, error) {
 	backoff := time.Second
 	const maxBackoff = 5 * time.Minute
 
 	for {
-		candidatos, raw, err := d.Extrator.Extract(ctx, images)
+		candidatos, raw, uso, err := d.Extrator.Extract(ctx, images)
 		if err == nil {
-			return candidatos, raw, nil
+			return candidatos, raw, uso, nil
 		}
 		if !errors.Is(err, domain.ErrExtratorIndisponivel) {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if *budgetLeft <= 0 {
 			*knownDown = true
-			return nil, nil, domain.ErrExtratorIndisponivel
+			return nil, nil, nil, domain.ErrExtratorIndisponivel
 		}
 		wait := backoff
 		if wait > *budgetLeft {
@@ -277,7 +294,7 @@ func extractWithRetry(	ctx context.Context,
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return nil, nil, ctx.Err()
+			return nil, nil, nil, ctx.Err()
 		case <-timer.C:
 		}
 		*budgetLeft -= wait

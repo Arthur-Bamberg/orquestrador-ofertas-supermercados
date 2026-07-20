@@ -60,8 +60,8 @@ Page-1 grid alone is ~20 cells; the inset Girando Sol 800g (R$ 4,98) is an extra
 1. **Baseline** — count `ofertas` in the attempt’s `extrator-raw.json`; open `images/page-*.jpg` and spot-check missing cells (especially first page).
 2. **Change one lever** — prompt wording, per-page vs multi-page (ADR 0031), resolution (`RASTER_MAX_EDGE_PX`), or model. Prefer one change per live run (API cost/latency).
 3. **Re-run live test** — watch logs `gemini extrator page=N ofertas=M`; fail if total collapses.
-4. **Compare to images** — duplicates (same produto/valor twice), wrong `quantidades`, cartão/clube as second Oferta instead of `promocao`, missed insets.
-5. **Optional side folder** — write a review copy under the same PDF dir (gitignored `.data/`), e.g. `…/{filename}/live-page-by-page/extrator-raw.json` + symlink `images/` → attempt images. Not a formal Artefato tentativa; just for human review.
+4. **Compare to images** — duplicates (same produto/valor twice), wrong `quantidades`, cartão/clube as second Oferta instead of `promocao`, missed insets, missing `promocao` on VuonCard/Clube/leve-pague cells.
+5. **Optional side folder** — `TestLiveFortArtefato` writes `…/{filename}/live-page-by-page/extrator-raw.json`, `uso-extrator.json` (token counts), and symlink `images/` → attempt images. Not a formal Artefato tentativa; just for human review. Redis Uso do Extrator is only on the real job (`run`).
 
 ## Prompt pitfalls already seen
 

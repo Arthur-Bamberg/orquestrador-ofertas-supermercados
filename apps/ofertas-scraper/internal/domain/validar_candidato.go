@@ -207,44 +207,38 @@ func validarPromocao(c CandidatoOferta) *FalhaExtracao {
 		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "valorPromocional deve ser > 0", Candidato: c}
 	}
 
-	levePague := p.Leve != nil || p.Pague != nil
-	qtd := p.QuantidadePromocao != nil
+	// Canal: at most one of cartão/clube (ADR 0032).
 	cartao := p.PromocaoCartao != nil
 	clube := p.PromocaoClube != nil
-	n := 0
-	if levePague {
-		n++
+	if cartao && clube {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocaoCartao e promocaoClube são mutuamente exclusivos", Candidato: c}
 	}
-	if qtd {
-		n++
+	if cartao && !*p.PromocaoCartao {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocaoCartao deve ser true", Candidato: c}
 	}
-	if cartao {
-		n++
+	if clube && !*p.PromocaoClube {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocaoClube deve ser true", Candidato: c}
 	}
-	if clube {
-		n++
-	}
-	if n != 1 {
-		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocao deve ser exatamente um dos quatro formatos", Candidato: c}
-	}
+	temCanal := cartao || clube
 
-	switch {
-	case levePague:
+	// Mecânica: at most one of leve/pague or quantidadePromocao.
+	levePague := p.Leve != nil || p.Pague != nil
+	qtd := p.QuantidadePromocao != nil
+	if levePague && qtd {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "leve/pague e quantidadePromocao são mutuamente exclusivos", Candidato: c}
+	}
+	if levePague {
 		if p.Leve == nil || p.Pague == nil || *p.Leve <= 0 || *p.Pague <= 0 {
 			return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "leve/pague inválidos", Candidato: c}
 		}
-	case qtd:
-		if *p.QuantidadePromocao <= 0 {
-			return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "quantidadePromocao inválida", Candidato: c}
-		}
-	case cartao:
-		if !*p.PromocaoCartao {
-			return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocaoCartao deve ser true", Candidato: c}
-		}
-	case clube:
-		if !*p.PromocaoClube {
-			return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocaoClube deve ser true", Candidato: c}
-		}
+	}
+	if qtd && *p.QuantidadePromocao <= 0 {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "quantidadePromocao inválida", Candidato: c}
+	}
+	temMecanica := levePague || qtd
+
+	if !temCanal && !temMecanica {
+		return &FalhaExtracao{Codigo: CodigoPromocaoInvalida, Detalhe: "promocao exige canal e/ou mecânica de quantidade", Candidato: c}
 	}
 	return nil
 }

@@ -221,6 +221,33 @@ func TestValidarCandidato_rejeitaPromocaoCartaoEClube(t *testing.T) {
 	}
 }
 
+func TestValidarCandidato_aceitaPromocaoCanalEMecanicaCompostos(t *testing.T) {
+	clube := true
+	leve, pague := 12.0, 10.0
+	c := domain.CandidatoOferta{
+		Produto:       "Cerveja Lata",
+		Marca:         "Brahma",
+		Valor:         4.99,
+		Quantidades:   []float64{473},
+		Medida:        "ml",
+		DataInicio:    "2026-07-18",
+		DataExpiracao: "2026-07-20",
+		Promocao: &domain.Promocao{
+			Leve:             &leve,
+			Pague:            &pague,
+			PromocaoClube:    &clube,
+			ValorPromocional: 4.16,
+		},
+	}
+	oferta, falha := domain.ValidarCandidato(c)
+	if falha != nil {
+		t.Fatalf("composicao canal+mecanica válida: %#v", falha)
+	}
+	if oferta.Promocao == nil || oferta.Promocao.Leve == nil || oferta.Promocao.PromocaoClube == nil {
+		t.Fatalf("promocao: %#v", oferta.Promocao)
+	}
+}
+
 func TestValidarCandidato_marcaOpcional(t *testing.T) {
 	c := domain.CandidatoOferta{
 		Produto:       "Banana",

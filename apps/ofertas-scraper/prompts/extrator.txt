@@ -12,7 +12,8 @@ Regras obrigatórias:
 - Não duplique a mesma Oferta (mesmo produto, marca, valor e quantidades). Preço de cartão/clube/leve-pague vai em `promocao`, não como segunda Oferta.
 - Só emita segunda Oferta na mesma célula quando houver outra embalagem/tamanho com preço de prateleira distinto (ex.: pack principal 4kg e inset 800g com preços diferentes).
 - Cada item precisa de: produto, valor, quantidades, medida, dataInicio, dataExpiracao.
-- quantidades é um array com pelo menos um número: os tamanhos/embalagens daquele preço, na mesma medida (ex.: um tamanho → [1000]; vários no mesmo preço → [90, 150, 200]).
+- valor é o preço de prateleira / unitário sem condição (o preço “cheio” do bloco).
+- quantidades é um array com pelo menos um número: os tamanhos/embalagens daquele preço, na mesma medida (ex.: um tamanho → [1000]; vários no mesmo preço → [90, 150, 200]). Não use quantidades para “leve N” / LV/PG — isso é promocao.
 - Só coloque vários valores em quantidades quando o encarte amarra explicitamente uma lista discreta de tamanhos ao mesmo preço (ex.: "90g / 150g / 200g — R$ 5,99"). Preços ou blocos separados → Ofertas distintas, mesmo Produto/Marca.
 - Não invente tamanhos: omita o item se só houver "diversos tamanhos", "várias gramaturas" ou intervalo aberto ("90g a 200g") sem lista discreta.
 - marca é opcional; categorias é um array de strings (pode ser vazio se não houver indício claro).
@@ -21,11 +22,19 @@ Regras obrigatórias:
 - Se o encarte usar L ou litro, converta para ml (1 L = 1000 ml) e ajuste cada valor em quantidades.
 - dataInicio é o início da validade da oferta no encarte (YYYY-MM-DD). dataExpiracao é o fim. Podem estar no passado ou no futuro. dataInicio deve ser ≤ dataExpiracao.
 - Se o encarte mostrar só o fim (“válido até”), ainda assim tente inferir o início quando houver intervalo explícito; se não houver indício de início, omita dataInicio (deixe vazio) — o sistema preenche depois.
-- promocao é opcional e deve ser exatamente um destes formatos (aplica ao bloco inteiro, inclusive multi-tamanho):
-  1) leve + pague + valorPromocional
-  2) quantidadePromocao + valorPromocional
-  3) promocaoCartao=true + valorPromocional (preço exclusivo de cartão da loja/bandeira)
-  4) promocaoClube=true + valorPromocional (clube, app ou fidelidade sem menção a cartão)
-- Se cartão e clube aparecerem no mesmo preço de forma ambígua, omita promocao e mantenha o valor de prateleira.
+
+Promoção (opcional, mas obrigatória quando o bloco tiver condição comercial):
+- Sempre que houver selo/preço de cartão, clube, leve/pague ou “a partir de N”, preencha `promocao` — não deixe só o valor de prateleira.
+- `valorPromocional` = preço já sob a condição (unitário ou do pack, conforme o encarte mostra). Nunca o total do leve/pague, salvo se for o único número exibido.
+- Canal (no máximo um): menção a cartão/card (ex.: VuonCard) → `promocaoCartao=true`; menção a clube (ex.: Clube MAIS) sem cartão → `promocaoClube=true`.
+- Mecânica (no máximo uma):
+  - “Leve X pague Y” / “LV16 PG15” → `leve` + `pague`
+  - “A partir de N un.” / “levando N ou mais” → `quantidadePromocao`
+  - Pack multiunidade com preço de kit e nota “1 un. sai por …” (sem pague / sem a partir de) → NÃO é promocao; `valor` = preço do kit.
+- Canal e mecânica podem coexistir só quando descrevem a MESMA condição (mesmo preço). Ex.: leve 12 pague 10 no preço do Clube → preencha leve, pague, promocaoClube e esse valorPromocional.
+- Se o bloco tiver duas condições com preços promocionais DISTINTOS (ex.: “a partir de 2” a R$ 7,45 e cartão a R$ 6,99), use só o canal (cartão/clube) e seu preço — não invente segunda Oferta.
+- Se cartão e clube aparecerem de forma ambígua no mesmo preço, omita promocao e mantenha o valor de prateleira.
+- Se o bloco só mostra um preço com selo de canal, `valor` e `valorPromocional` são iguais e o canal fica preenchido.
+
 - Ignore arte decorativa, anúncios sem preço claro e texto ilegível.
 - Não invente preços, quantidades, datas, produtos ou marcas. Se um item não puder ser extraído com confiança, omita-o da lista.

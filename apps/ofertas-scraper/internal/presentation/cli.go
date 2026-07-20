@@ -156,6 +156,7 @@ func RunDaily(ctx context.Context, env Env) error {
 		Marcas:     upstash.NewMarcaRepo(client),
 		Ofertas:    upstash.NewOfertaRepo(client),
 		Falhas:     upstash.NewFalhaRepo(client),
+		Usos:       upstash.NewUsoExtratorRepo(client),
 		FonteHTTP:  fontehttp.New(http.DefaultClient),
 		Raster:     raster.NewPdftoppm(env.RasterMaxPx, env.RasterJPEGQ),
 		Extrator:   ext,

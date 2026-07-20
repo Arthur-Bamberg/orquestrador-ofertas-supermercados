@@ -104,7 +104,8 @@ Same-day re-run: skip `concluido` and `parcial`; retry `falhou` and orphan `proc
 - `medida` is only `g` | `ml` | `unidade`
 - Extrator must normalize **kg → 1000 g** and **L → 1000 ml** (adjust each value in `quantidades`) before output; domain does **not** convert — any other `medida` is a Falha de Extração (see ADR 0004; hybrid domain safety-net deferred)
 - `dataInicio` / `dataExpiracao` = vigência no encarte; both required in Extrator contract; cascades always on (ADR 0028): Extrator wins when present; missing início → distinct start in filename → primeira descoberta na Fonte; missing fim → filename end, else Falha; past/future dates OK (ADR 0016); `dataInicio` ≤ `dataExpiracao`
-- `promocao` is optional and one of four shapes (leve/pague, quantidade+valor, cartão, clube — ADR 0029)
+- `promocao` is optional: `valorPromocional` plus channel (cartão XOR clube) and/or quantity mechanic (leve/pague XOR quantidadePromocao); channel+mechanic may compose when they share the same price (ADR 0032; clube shape in ADR 0029)
+- Each Extrator tentativa persists **Uso do Extrator** (prompt/cache/output tokens + Artefato path) to Redis and `uso-extrator.json` (ADR 0033)
 - Domain match-or-create for Produto/Marca uses normalized exact label match only (ADR 0011); no fuzzy matching in the MVP
 
 ## Artefatos
@@ -114,7 +115,8 @@ For each processing attempt, persist **best-effort** what the pipeline produced 
 1. Original PDF (if download succeeded)
 2. Images sent to Extrator (if raster succeeded)
 3. Raw Extrator response (if Extract returned)
-4. Validated result (Ofertas + Falhas de Extração) when validation ran
+4. Uso do Extrator (`uso-extrator.json`) when usage was reported
+5. Validated result (Ofertas + Falhas de Extração) when validation ran
 
 Do not write empty placeholders for steps that never ran. Store via `ArtefatoStore` only — never write files ad hoc from use cases.
 

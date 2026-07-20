@@ -14,7 +14,7 @@ func TestStub_ReturnsCandidatosAndRaw(t *testing.T) {
 		Produto: "Arroz", Valor: 1, Quantidades: []float64{1}, Medida: "g",
 		DataInicio: "2026-07-18", DataExpiracao: "2026-07-20",
 	}}}
-	cands, raw, err := s.Extract(context.Background(), nil)
+	cands, raw, uso, err := s.Extract(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,10 +24,13 @@ func TestStub_ReturnsCandidatosAndRaw(t *testing.T) {
 	if len(raw) == 0 {
 		t.Fatal("raw empty")
 	}
+	if uso != nil {
+		t.Fatalf("stub uso should be nil, got %#v", uso)
+	}
 }
 
 func TestStub_Unavailable(t *testing.T) {
-	_, _, err := extrator.Unavailable().Extract(context.Background(), nil)
+	_, _, _, err := extrator.Unavailable().Extract(context.Background(), nil)
 	if !errors.Is(err, domain.ErrExtratorIndisponivel) {
 		t.Fatalf("err=%v", err)
 	}

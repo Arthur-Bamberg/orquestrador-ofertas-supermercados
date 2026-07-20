@@ -2,6 +2,7 @@ package extrator_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -74,16 +75,71 @@ func TestLiveFortArtefato(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cands, raw, err := g.Extract(ctx, images)
+	// One Extract per page so a mid-run 429 still keeps earlier pages for review.
+	var cands []domain.CandidatoOferta
+	uso := &domain.UsoExtrator{Model: os.Getenv("GEMINI_MODEL")}
+	var extractErr error
+	for _, img := range images {
+		pageCands, _, pageUso, err := g.Extract(ctx, []domain.PageImage{img})
+		if err != nil {
+			extractErr = err
+			t.Logf("page=%d extract failed: %v", img.Page, err)
+			break
+		}
+		cands = append(cands, pageCands...)
+		if pageUso != nil {
+			if uso.Model == "" {
+				uso.Model = pageUso.Model
+			}
+			uso.PromptTokens += pageUso.PromptTokens
+			uso.CacheTokens += pageUso.CacheTokens
+			uso.OutputTokens += pageUso.OutputTokens
+			uso.Paginas = append(uso.Paginas, pageUso.Paginas...)
+		}
+	}
+	raw, err := json.Marshal(struct {
+		Ofertas []domain.CandidatoOferta `json:"ofertas"`
+	}{Ofertas: cands})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("ofertas=%d raw_bytes=%d", len(cands), len(raw))
+
+	t.Logf("ofertas=%d raw_bytes=%d pages_ok=%d", len(cands), len(raw), len(uso.Paginas))
+	t.Logf("uso-extrator prompt=%d cache=%d output=%d",
+		uso.PromptTokens, uso.CacheTokens, uso.OutputTokens)
+	withPromo := 0
 	for i, c := range cands {
-		t.Logf("%02d. %s | %s | %.2f | %v%s", i+1, c.Marca, c.Produto, c.Valor, c.Quantidades, c.Medida)
+		promo := ""
+		if c.Promocao != nil {
+			withPromo++
+			b, _ := json.Marshal(c.Promocao)
+			promo = " | " + string(b)
+		}
+		t.Logf("%02d. %s | %s | %.2f | %v%s%s", i+1, c.Marca, c.Produto, c.Valor, c.Quantidades, c.Medida, promo)
+	}
+	t.Logf("com promocao=%d / %d", withPromo, len(cands))
+
+	// Side folder for human review (gitignored .data) — raw + uso, no Redis.
+	reviewDir := filepath.Join(filepath.Dir(root), "live-page-by-page")
+	if err := os.MkdirAll(reviewDir, 0o755); err == nil {
+		_ = os.WriteFile(filepath.Join(reviewDir, "extrator-raw.json"), raw, 0o644)
+		uso.ArtefatoPath = reviewDir
+		if b, err := json.MarshalIndent(uso, "", "  "); err == nil {
+			_ = os.WriteFile(filepath.Join(reviewDir, "uso-extrator.json"), b, 0o644)
+		}
+		imgLink := filepath.Join(reviewDir, "images")
+		_ = os.Remove(imgLink)
+		_ = os.Symlink(imgDir, imgLink)
+	}
+
+	if extractErr != nil {
+		t.Fatalf("extract incomplete: %v (saved partial to %s)", extractErr, reviewDir)
 	}
 	// Fort Canoas 20–24/jul: ~95 priced offers (4-page grid + Girando Sol 800g inset).
 	if len(cands) < 90 {
 		t.Fatalf("recall too low: got %d ofertas (want ≥90)", len(cands))
+	}
+	if withPromo < 30 {
+		t.Fatalf("promocao recall too low: got %d with promocao (want ≥30 on Fort)", withPromo)
 	}
 }

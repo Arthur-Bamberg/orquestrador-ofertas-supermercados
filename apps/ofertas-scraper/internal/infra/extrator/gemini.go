@@ -115,22 +115,34 @@ func NewGemini(ctx context.Context, cfg GeminiConfig) (*Gemini, error) {
 	return g, nil
 }
 
-func (g *Gemini) Extract(ctx context.Context, images []domain.PageImage) ([]domain.CandidatoOferta, []byte, error) {
+func (g *Gemini) Extract(ctx context.Context, images []domain.PageImage) ([]domain.CandidatoOferta, []byte, *domain.UsoExtrator, error) {
 	if len(images) == 0 {
-		return nil, nil, fmt.Errorf("gemini extrator: no images")
+		return nil, nil, nil, fmt.Errorf("gemini extrator: no images")
 	}
 	// One API call per page (ADR 0031): dense encartes lose Ofertas when many pages
 	// share a single vision pass.
 	var all []domain.CandidatoOferta
+	uso := &domain.UsoExtrator{Model: g.model}
 	for _, img := range images {
 		if len(img.JPEG) == 0 {
 			continue
 		}
-		cands, _, err := g.extract(ctx, img, true)
+		cands, _, pageUso, err := g.extract(ctx, img, true)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		g.log.Printf("gemini extrator page=%d ofertas=%d", img.Page, len(cands))
+		if pageUso != nil {
+			uso.PromptTokens += pageUso.PromptTokens
+			uso.CacheTokens += pageUso.CacheTokens
+			uso.OutputTokens += pageUso.OutputTokens
+			uso.Paginas = append(uso.Paginas, *pageUso)
+		}
+		g.log.Printf("gemini extrator page=%d ofertas=%d promptTokens=%d cacheTokens=%d outputTokens=%d",
+			img.Page, len(cands),
+			pageUsoToken(pageUso, func(u domain.UsoExtratorPagina) int64 { return u.PromptTokens }),
+			pageUsoToken(pageUso, func(u domain.UsoExtratorPagina) int64 { return u.CacheTokens }),
+			pageUsoToken(pageUso, func(u domain.UsoExtratorPagina) int64 { return u.OutputTokens }),
+		)
 		all = append(all, cands...)
 	}
 	if all == nil {
@@ -140,14 +152,23 @@ func (g *Gemini) Extract(ctx context.Context, images []domain.PageImage) ([]doma
 		Ofertas []domain.CandidatoOferta `json:"ofertas"`
 	}{Ofertas: all})
 	if err != nil {
-		return nil, nil, fmt.Errorf("gemini extrator: marshal merged raw: %w", err)
+		return nil, nil, nil, fmt.Errorf("gemini extrator: marshal merged raw: %w", err)
 	}
-	return all, raw, nil
+	g.log.Printf("gemini extrator total ofertas=%d promptTokens=%d cacheTokens=%d outputTokens=%d",
+		len(all), uso.PromptTokens, uso.CacheTokens, uso.OutputTokens)
+	return all, raw, uso, nil
 }
 
-func (g *Gemini) extract(ctx context.Context, img domain.PageImage, retryCacheMiss bool) ([]domain.CandidatoOferta, []byte, error) {
+func pageUsoToken(u *domain.UsoExtratorPagina, f func(domain.UsoExtratorPagina) int64) int64 {
+	if u == nil {
+		return 0
+	}
+	return f(*u)
+}
+
+func (g *Gemini) extract(ctx context.Context, img domain.PageImage, retryCacheMiss bool) ([]domain.CandidatoOferta, []byte, *domain.UsoExtratorPagina, error) {
 	if len(img.JPEG) == 0 {
-		return nil, nil, fmt.Errorf("gemini extrator: empty page image")
+		return nil, nil, nil, fmt.Errorf("gemini extrator: empty page image")
 	}
 
 	pageLabel := img.Page
@@ -190,25 +211,39 @@ func (g *Gemini) extract(ctx context.Context, img domain.PageImage, retryCacheMi
 			_ = g.ensureCache(ctx)
 			return g.extract(ctx, img, false)
 		}
-		return nil, nil, mapGeminiError(err)
+		return nil, nil, nil, mapGeminiError(err)
 	}
 
 	rawText := strings.TrimSpace(resp.Text())
 	if rawText == "" {
-		return nil, nil, fmt.Errorf("gemini extrator: empty response")
+		return nil, nil, nil, fmt.Errorf("gemini extrator: empty response")
 	}
 	raw := []byte(rawText)
+
+	var pageUso *domain.UsoExtratorPagina
+	if resp.UsageMetadata != nil {
+		page := img.Page
+		if page <= 0 {
+			page = 1
+		}
+		pageUso = &domain.UsoExtratorPagina{
+			Page:         page,
+			PromptTokens: int64(resp.UsageMetadata.PromptTokenCount),
+			CacheTokens:  int64(resp.UsageMetadata.CachedContentTokenCount),
+			OutputTokens: int64(resp.UsageMetadata.CandidatesTokenCount),
+		}
+	}
 
 	var parsed struct {
 		Ofertas []domain.CandidatoOferta `json:"ofertas"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return nil, raw, fmt.Errorf("gemini extrator: decode structured output: %w", err)
+		return nil, raw, pageUso, fmt.Errorf("gemini extrator: decode structured output: %w", err)
 	}
 	if parsed.Ofertas == nil {
 		parsed.Ofertas = []domain.CandidatoOferta{}
 	}
-	return parsed.Ofertas, raw, nil
+	return parsed.Ofertas, raw, pageUso, nil
 }
 
 func (g *Gemini) ensureCache(ctx context.Context) error {

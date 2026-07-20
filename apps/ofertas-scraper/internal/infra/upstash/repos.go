@@ -33,6 +33,12 @@ func ofertasProdutoKey(id domain.ProdutoID) string {
 	return "ofertas:produto:" + string(id)
 }
 func falhasDocKey(id domain.DocumentoID) string { return "falhas:documento:" + string(id) }
+func usoExtratorKey(documentoID domain.DocumentoID, tentativa string) string {
+	return fmt.Sprintf("uso-extrator:%s:%s", documentoID, tentativa)
+}
+func usoExtratorDocKey(id domain.DocumentoID) string {
+	return "uso-extrator:documento:" + string(id)
+}
 
 type MercadoRepo struct{ c *Client }
 
@@ -317,4 +323,22 @@ func (r *FalhaRepo) SaveAll(ctx context.Context, documentoID domain.DocumentoID,
 		return err
 	}
 	return r.c.Set(ctx, falhasDocKey(documentoID), string(b))
+}
+
+type UsoExtratorRepo struct{ c *Client }
+
+func NewUsoExtratorRepo(c *Client) *UsoExtratorRepo { return &UsoExtratorRepo{c: c} }
+
+func (r *UsoExtratorRepo) Save(ctx context.Context, uso domain.UsoExtrator) error {
+	if uso.DocumentoID == "" || uso.Tentativa == "" {
+		return fmt.Errorf("uso-extrator: documentoId e tentativa são obrigatórios")
+	}
+	b, err := json.Marshal(uso)
+	if err != nil {
+		return err
+	}
+	if err := r.c.Set(ctx, usoExtratorKey(uso.DocumentoID, uso.Tentativa), string(b)); err != nil {
+		return err
+	}
+	return r.c.SAdd(ctx, usoExtratorDocKey(uso.DocumentoID), uso.Tentativa)
 }
