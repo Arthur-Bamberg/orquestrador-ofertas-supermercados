@@ -24,7 +24,7 @@ Processing is **sequential** in the MVP (Fonte by Fonte, Documento by Documento)
 | Language | Go (workspace module) |
 | Persistence | Upstash Redis (REST) — shared instance with other monorepo apps |
 | Local Redis | Root `docker-compose.yml` (Redis + [SRH](https://upstash.com/docs/redis/sdks/ts/developing)) |
-| Extrator impl | Gemini (prompt cache + structured output) |
+| Extrator impl | Gemini and/or Cursor (same port; ADR 0023, 0034) |
 | Schedule | External cron/systemd timer; binary is a one-shot CLI |
 | Timezone | `America/Sao_Paulo` |
 
@@ -86,13 +86,14 @@ Persisted states: `processando` → `concluido` | `parcial` | `falhou` (`descobe
 
 Same-day re-run: skip `concluido` and `parcial`; retry `falhou` and orphan `processando`.
 
-## Extrator (Gemini adapter)
+## Extrator (Gemini / Cursor adapters)
 
 - System prompt: `prompts/extrator.txt` — must spell out glossary definitions for Produto (sem marca), Marca, and Categoria (taxonômia, não tipo vendável) so extraction stays assertive (ADR 0012)
 - Output schema: `schemas/extracao.json` → items conform to `schemas/oferta.json`
 - Keep prompt/schema **unversioned** until an explicit version bump is requested (ADR 0014)
-- Cache the **stable prompt** (and schema binding) via Gemini context cache; **do not** cache Documento images
-- Gemini adapter: **one API call per page image**, then merge candidates (ADR 0031) — use case still calls `Extract(images)` once
+- Gemini: cache the **stable prompt** (and schema binding) via context cache when the API allows; **do not** cache Documento images
+- Cursor: local Agent SDK via embedded Python bridge (`cursor-sdk`); prompt+schema in the user turn (no native response schema)
+- Both adapters: **one API/vision turn per page image**, then merge candidates (ADR 0031) — use case still calls `Extract(images)` once
 - Adapter lives in `infra`; use case only sees `Extrator`
 - Domain validates every candidate Oferta after extraction (do not trust the model alone)
 - **Recall / prompt iteration:** compare Extrator output to Artefato page images via opt-in live tests — see [`docs/extrator-live-recall.md`](./docs/extrator-live-recall.md)
@@ -133,9 +134,12 @@ Do not write empty placeholders for steps that never ran. Store via `ArtefatoSto
 ```
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
+EXTRATOR_PROVIDER=auto
+EXTRATOR_STUB=1
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3-flash-preview
-EXTRATOR_STUB=1
+CURSOR_API_KEY=
+CURSOR_MODEL=composer-2.5
 EXTRATOR_PROMPT_PATH=./prompts/extrator.txt
 EXTRACAO_SCHEMA_PATH=./schemas/extracao.json
 OFERTA_SCHEMA_PATH=./schemas/oferta.json
@@ -146,7 +150,7 @@ RASTER_JPEG_QUALITY=80
 TZ=America/Sao_Paulo
 ```
 
-Production Extrator: set `GEMINI_API_KEY` and `EXTRATOR_STUB=0` (or unset stub). Local/dev may keep the stub (ADR 0023).
+Production Extrator: set `EXTRATOR_STUB=0` and either `CURSOR_API_KEY` (Cursor Agent SDK; needs `pip install cursor-sdk`) or `GEMINI_API_KEY`. With `EXTRATOR_PROVIDER=auto` (default), Cursor wins when its key is set. Local/dev may keep the stub (ADR 0023).
 
 CLI (from this directory):
 

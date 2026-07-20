@@ -13,17 +13,67 @@ import (
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper/internal/infra/extrator"
 )
 
+// newLiveExtrator picks Cursor (preferred) or Gemini from env for opt-in live tests.
+func newLiveExtrator(t *testing.T, ctx context.Context) domain.Extrator {
+	t.Helper()
+	prompt := filepath.Join("..", "..", "..", "prompts", "extrator.txt")
+	extracao := filepath.Join("..", "..", "..", "schemas", "extracao.json")
+	oferta := filepath.Join("..", "..", "..", "schemas", "oferta.json")
+
+	provider := os.Getenv("EXTRATOR_PROVIDER")
+	cursorKey := os.Getenv("CURSOR_API_KEY")
+	geminiKey := os.Getenv("GEMINI_API_KEY")
+	useCursor := provider == "cursor" || ((provider == "" || provider == "auto") && cursorKey != "")
+	if useCursor {
+		if cursorKey == "" {
+			t.Fatal("CURSOR_API_KEY required for Cursor Extrator")
+		}
+		c, err := extrator.NewCursor(extrator.CursorConfig{
+			APIKey:             cursorKey,
+			Model:              os.Getenv("CURSOR_MODEL"),
+			PythonPath:         os.Getenv("CURSOR_PYTHON"),
+			PromptPath:         prompt,
+			ExtracaoSchemaPath: extracao,
+			OfertaSchemaPath:   oferta,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	if geminiKey == "" {
+		t.Fatal("GEMINI_API_KEY or CURSOR_API_KEY required")
+	}
+	g, err := extrator.NewGemini(ctx, extrator.GeminiConfig{
+		APIKey:             geminiKey,
+		Model:              os.Getenv("GEMINI_MODEL"),
+		PromptPath:         prompt,
+		ExtracaoSchemaPath: extracao,
+		OfertaSchemaPath:   oferta,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+func liveExtratorModel() string {
+	if os.Getenv("CURSOR_API_KEY") != "" && os.Getenv("EXTRATOR_PROVIDER") != "gemini" {
+		if m := os.Getenv("CURSOR_MODEL"); m != "" {
+			return m
+		}
+		return "composer-2.5"
+	}
+	return os.Getenv("GEMINI_MODEL")
+}
+
 // Live smoke against a retained Fort Artefato (page-by-page Extrator).
 // Run from apps/ofertas-scraper:
 //
-//	LIVE_EXTRATOR=1 go test ./internal/infra/extrator/ -run TestLiveFortArtefato -count=1 -timeout 10m
+//	LIVE_EXTRATOR=1 go test ./internal/infra/extrator/ -run TestLiveFortArtefato -count=1 -timeout 15m -v
 func TestLiveFortArtefato(t *testing.T) {
 	if os.Getenv("LIVE_EXTRATOR") == "" {
 		t.Skip("set LIVE_EXTRATOR=1 to run")
-	}
-	apiKey := os.Getenv("GEMINI_API_KEY")
-	if apiKey == "" {
-		t.Fatal("GEMINI_API_KEY required")
 	}
 
 	root := os.Getenv("LIVE_ARTEFATO_DIR")
@@ -60,27 +110,17 @@ func TestLiveFortArtefato(t *testing.T) {
 		images = append(images, domain.PageImage{Page: i + 1, JPEG: b})
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
-	model := os.Getenv("GEMINI_MODEL")
-	g, err := extrator.NewGemini(ctx, extrator.GeminiConfig{
-		APIKey:             apiKey,
-		Model:              model,
-		PromptPath:         filepath.Join("..", "..", "..", "prompts", "extrator.txt"),
-		ExtracaoSchemaPath: filepath.Join("..", "..", "..", "schemas", "extracao.json"),
-		OfertaSchemaPath:   filepath.Join("..", "..", "..", "schemas", "oferta.json"),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	ext := newLiveExtrator(t, ctx)
 
 	// One Extract per page so a mid-run 429 still keeps earlier pages for review.
 	var cands []domain.CandidatoOferta
-	uso := &domain.UsoExtrator{Model: os.Getenv("GEMINI_MODEL")}
+	uso := &domain.UsoExtrator{Model: liveExtratorModel()}
 	var extractErr error
 	for _, img := range images {
-		pageCands, _, pageUso, err := g.Extract(ctx, []domain.PageImage{img})
+		pageCands, _, pageUso, err := ext.Extract(ctx, []domain.PageImage{img})
 		if err != nil {
 			extractErr = err
 			t.Logf("page=%d extract failed: %v", img.Page, err)
