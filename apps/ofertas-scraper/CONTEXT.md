@@ -49,15 +49,19 @@ Selo informativo opcional de uma Oferta que mostra quanto “sai por” uma fra�
 _Avoid_: equivalência, preço unitário (como entidade), segunda Oferta, Promoção, desconto
 
 **Falha de Extração**:
-Registro de uma tentativa de Oferta que não passou na validação, vinculada ao Documento de origem: código estável do motivo, detalhe livre opcional e cópia do candidato rejeitado.
+Registro de uma tentativa de Oferta que não passou na validação, vinculada ao Documento de origem: código estável do motivo, detalhe livre opcional e cópia do candidato rejeitado. Também pode ser criada, alterada ou apagada fora do Extrator; criação exige Documento de origem.
 _Avoid_: export com erro, erro de IA, rejeição
 
 **Artefato**:
-Material obtido ou gerado em uma tentativa de processamento de um Documento e retido para debug — tipicamente PDF original, imagens enviadas ao Extrator, resposta bruta do Extrator, Uso do Extrator e resultado validado (Ofertas e Falhas de Extração). Em falha dura, persiste-se só o que a tentativa chegou a produzir (best-effort); não se fabricam placeholders para etapas que não rodaram. Em conteúdo idêntico, a tentativa retém o PDF baixado e o rastro do ponteiro ao Documento anterior — sem imagens, raw nem Uso. Cada reprocessamento acrescenta uma nova tentativa; tentativas anteriores permanecem. Associações Documento↔Oferta e Falhas de Extração do estado atual do Documento são substituídas na nova tentativa — o histórico de tentativas vive nos Artefatos. Oferta que este Documento deixou de reencontrar e que nenhum outro Documento referencia é removida do catálogo. Hoje em armazenamento local; depois em bucket.
+Material obtido ou gerado em uma tentativa de processamento de um Documento e retido para debug — tipicamente PDF original, imagens enviadas ao Extrator, resposta bruta do Extrator, Uso do Extrator e resultado validado (Ofertas e Falhas de Extração). Em falha dura, persiste-se só o que a tentativa chegou a produzir (best-effort); não se fabricam placeholders para etapas que não rodaram. Em conteúdo idêntico, a tentativa retém o PDF baixado e o rastro do ponteiro ao Documento anterior — sem imagens, raw nem Uso. Cada reprocessamento acrescenta uma nova tentativa; tentativas anteriores permanecem. Associações Documento↔Oferta e Falhas de Extração do estado atual do Documento são substituídas na nova tentativa — o histórico de tentativas vive nos Artefatos. Oferta que este Documento deixou de reencontrar e que nenhum outro Documento referencia é removida do catálogo. Hoje em armazenamento local; depois em bucket. Administração: listar/descarregar por Documento e tentativa; upload ou substituição de ficheiro numa tentativa; apagar ficheiro ou a tentativa inteira — não existe Artefato sem Documento.
 _Avoid_: arquivo, blob, export, attachment, log
 
+**Operação de Pipeline**:
+Pedido administrativo para correr trabalho do scraper (job diário, descoberta numa Fonte, ou reprocessamento de um Documento). Processa-se em fila serial (uma de cada vez); pedidos seguintes ficam pendentes e podem ser cancelados enquanto pendentes; o histórico permanece consultável.
+_Avoid_: job genérico, task, queue item (como sinónimo de domínio)
+
 **Uso do Extrator**:
-Registro de consumo de uma tentativa de extração de um Documento: path do Artefato da tentativa, nome do adapter do Extrator usado na tentativa, modelo, totais de tokens de input (prompt), cache e output, com detalhe por página quando houver várias chamadas. Persiste no Redis para consulta e espelha-se no Artefato da mesma tentativa. Não substitui o conteúdo extraído — só mensura o custo e qual Extrator/modelo atendeu a chamada.
+Registro de consumo de uma tentativa de extração de um Documento: path do Artefato da tentativa, nome do adapter do Extrator usado na tentativa, modelo, totais de tokens de input (prompt), cache e output, com detalhe por página quando houver várias chamadas. Persiste no Redis para consulta e espelha-se no Artefato da mesma tentativa. Não substitui o conteúdo extraído — só mensura o custo e qual Extrator/modelo atendeu a chamada. Também pode ser criado, alterado ou apagado na administração (espelho no Artefato da tentativa quando o ficheiro existir).
 _Avoid_: billing, fatura, métrica genérica, log de API
 
 ## Qualidade local

@@ -122,10 +122,46 @@ func RunSeed(ctx context.Context, env Env) error {
 	return nil
 }
 
-// RunDaily wires adapters and runs the daily job.
-func RunDaily(ctx context.Context, env Env) error {
+func RunDiscover(ctx context.Context, env Env, fonteID string) error {
 	if env.UpstashURL == "" || env.UpstashToken == "" {
 		return fmt.Errorf("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN required")
+	}
+	client := upstash.NewClient(env.UpstashURL, env.UpstashToken, nil)
+	deps := application.RunDailyJobDeps{
+		Fontes:     upstash.NewFonteRepo(client),
+		Documentos: upstash.NewDocumentoRepo(client),
+		FonteHTTP:  fontehttp.New(http.DefaultClient),
+		Log:        log.Default(),
+	}
+	return application.DiscoverDocumentos(ctx, deps, domain.FonteID(fonteID))
+}
+
+// RunDaily wires adapters and runs the daily job.
+func RunDaily(ctx context.Context, env Env) error {
+	deps, err := buildRunDeps(ctx, env)
+	if err != nil {
+		return err
+	}
+	if env.RunFonteID != "" {
+		log.Printf("smoke: RUN_FONTE_ID=%s", env.RunFonteID)
+	}
+	if env.RunMaxDocumentos > 0 {
+		log.Printf("smoke: RUN_MAX_DOCUMENTOS=%d", env.RunMaxDocumentos)
+	}
+	return application.RunDailyJob(ctx, deps)
+}
+
+func RunReprocess(ctx context.Context, env Env, documentoID string) error {
+	deps, err := buildRunDeps(ctx, env)
+	if err != nil {
+		return err
+	}
+	return application.ReprocessDocumento(ctx, deps, domain.DocumentoID(documentoID))
+}
+
+func buildRunDeps(ctx context.Context, env Env) (application.RunDailyJobDeps, error) {
+	if env.UpstashURL == "" || env.UpstashToken == "" {
+		return application.RunDailyJobDeps{}, fmt.Errorf("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN required")
 	}
 	client := upstash.NewClient(env.UpstashURL, env.UpstashToken, nil)
 
@@ -137,7 +173,7 @@ func RunDaily(ctx context.Context, env Env) error {
 		// EXTRATOR_PROVIDER=cursor|gemini|auto (empty=auto). Auto = Gemini first, Cursor on rate-limit (ADR 0037).
 		loc, err := time.LoadLocation("America/Sao_Paulo")
 		if err != nil {
-			return err
+			return application.RunDailyJobDeps{}, err
 		}
 		cota := upstash.NewCotaRepo(client)
 		switch env.ExtratorProvider {
@@ -152,7 +188,7 @@ func RunDaily(ctx context.Context, env Env) error {
 				Logger:             log.Default(),
 			})
 			if err != nil {
-				return fmt.Errorf("cursor extrator: %w", err)
+				return application.RunDailyJobDeps{}, fmt.Errorf("cursor extrator: %w", err)
 			}
 			model := env.CursorModel
 			if model == "" {
@@ -170,7 +206,7 @@ func RunDaily(ctx context.Context, env Env) error {
 				Logger:             log.Default(),
 			})
 			if err != nil {
-				return fmt.Errorf("gemini extrator: %w", err)
+				return application.RunDailyJobDeps{}, fmt.Errorf("gemini extrator: %w", err)
 			}
 			model := env.GeminiModel
 			if model == "" {
@@ -190,7 +226,7 @@ func RunDaily(ctx context.Context, env Env) error {
 					Logger:             log.Default(),
 				})
 				if err != nil {
-					return fmt.Errorf("gemini extrator: %w", err)
+					return application.RunDailyJobDeps{}, fmt.Errorf("gemini extrator: %w", err)
 				}
 				primary = g
 				model := env.GeminiModel
@@ -210,7 +246,7 @@ func RunDaily(ctx context.Context, env Env) error {
 					Logger:             log.Default(),
 				})
 				if err != nil {
-					return fmt.Errorf("cursor extrator: %w", err)
+					return application.RunDailyJobDeps{}, fmt.Errorf("cursor extrator: %w", err)
 				}
 				secondary = c
 				model := env.CursorModel
@@ -234,35 +270,27 @@ func RunDaily(ctx context.Context, env Env) error {
 			} else if secondary != nil {
 				ext = secondary
 			} else {
-				return fmt.Errorf("no Extrator API key configured")
+				return application.RunDailyJobDeps{}, fmt.Errorf("no Extrator API key configured")
 			}
 		}
 	}
 
-	if env.RunFonteID != "" {
-		log.Printf("smoke: RUN_FONTE_ID=%s", env.RunFonteID)
-	}
-	if env.RunMaxDocumentos > 0 {
-		log.Printf("smoke: RUN_MAX_DOCUMENTOS=%d", env.RunMaxDocumentos)
-	}
-
-	deps := application.RunDailyJobDeps{
-		Fontes:     upstash.NewFonteRepo(client),
-		Documentos: upstash.NewDocumentoRepo(client),
-		Produtos:   upstash.NewProdutoRepo(client),
-		Marcas:     upstash.NewMarcaRepo(client),
-		Ofertas:    upstash.NewOfertaRepo(client),
-		Falhas:     upstash.NewFalhaRepo(client),
-		Usos:       upstash.NewUsoExtratorRepo(client),
-		FonteHTTP:  fontehttp.New(http.DefaultClient),
-		Raster:     raster.NewPdftoppm(env.RasterMaxPx, env.RasterJPEGQ),
-		Extrator:   ext,
-		Artefatos:  artefato.NewLocalStore(env.ArtefatoRoot),
-		Dates:      filenamedate.Parser{},
-		Log:        log.Default(),
+	return application.RunDailyJobDeps{
+		Fontes:              upstash.NewFonteRepo(client),
+		Documentos:          upstash.NewDocumentoRepo(client),
+		Produtos:            upstash.NewProdutoRepo(client),
+		Marcas:              upstash.NewMarcaRepo(client),
+		Ofertas:             upstash.NewOfertaRepo(client),
+		Falhas:              upstash.NewFalhaRepo(client),
+		Usos:                upstash.NewUsoExtratorRepo(client),
+		FonteHTTP:           fontehttp.New(http.DefaultClient),
+		Raster:              raster.NewPdftoppm(env.RasterMaxPx, env.RasterJPEGQ),
+		Extrator:            ext,
+		Artefatos:           artefato.NewLocalStore(env.ArtefatoRoot),
+		Dates:               filenamedate.Parser{},
+		Log:                 log.Default(),
 		ExtratorRetryBudget: time.Hour,
 		OnlyFonteID:         domain.FonteID(env.RunFonteID),
 		MaxDocumentos:       env.RunMaxDocumentos,
-	}
-	return application.RunDailyJob(ctx, deps)
+	}, nil
 }

@@ -494,7 +494,7 @@ func TestRunDailyJob_MaxDocumentos(t *testing.T) {
 	calls := 0
 
 	deps := application.RunDailyJobDeps{
-		Fontes: &memFontes{items: []domain.Fonte{{ID: "f1", MercadoID: "m1"}}},
+		Fontes:     &memFontes{items: []domain.Fonte{{ID: "f1", MercadoID: "m1"}}},
 		Documentos: docs,
 		Produtos:   &memProdutos{},
 		Marcas:     &memMarcas{},

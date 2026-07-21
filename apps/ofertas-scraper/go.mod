@@ -3,6 +3,7 @@ module github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas
 go 1.24.5
 
 require (
+	github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store v0.0.0
 	github.com/google/uuid v1.6.0
 	golang.org/x/image v0.28.0
 	google.golang.org/genai v1.64.0
@@ -26,3 +27,5 @@ require (
 	google.golang.org/grpc v1.66.2 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
+
+replace github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store => ../../modules/ofertas-store
