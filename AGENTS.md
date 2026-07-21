@@ -9,6 +9,8 @@ Workspace for supermarket-offers apps. It is **not** itself an application binar
 | Status | App | Role |
 |--------|-----|------|
 | **Current** | `ofertas-scraper` | Daily job: Fontes → Documentos → Extrator → Ofertas |
+| **Planned** | `ofertas-api` | Go HTTP API over shared Redis (CRUD + pipeline ops; ADR 0005) |
+| **Planned** | `ofertas-backoffice` | Vite/React SPA backoffice (filters + screens; ADR 0005) |
 | **Planned** | `gateway-whatsapp` | WhatsApp channel gateway |
 | **Planned** | `agente-ofertas-worker` | Agent/worker over ofertas |
 | **Planned** | `mcp-server-ofertas` | MCP server for ofertas |
@@ -116,3 +118,4 @@ Default for this repo: work on **`main`**. Do **not** create a feature branch, o
 | App | Agents | Domain |
 |-----|--------|--------|
 | ofertas-scraper | [`apps/ofertas-scraper/AGENTS.md`](./apps/ofertas-scraper/AGENTS.md) | [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md) |
+| ofertas-api / ofertas-backoffice | (when implemented) | Same glossary as scraper (`CONTEXT.md` above; ADR 0005) |
