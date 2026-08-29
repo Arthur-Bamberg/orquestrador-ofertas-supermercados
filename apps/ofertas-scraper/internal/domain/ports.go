@@ -2,81 +2,39 @@ package domain
 
 import (
 	"context"
-	"time"
+
+	store "github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store"
 )
 
-type MercadoID string
-type FonteID string
-type ProdutoID string
-type MarcaID string
-type DocumentoID string
-type OfertaID string
+type MercadoID = store.MercadoID
+type FonteID = store.FonteID
+type ProdutoID = store.ProdutoID
+type MarcaID = store.MarcaID
+type DocumentoID = store.DocumentoID
+type OfertaID = store.OfertaID
 
-type Mercado struct {
-	ID   MercadoID `json:"id"`
-	Nome string    `json:"nome"`
-}
+type Mercado = store.Mercado
 
-type Fonte struct {
-	ID                  FonteID   `json:"id"`
-	MercadoID           MercadoID `json:"mercadoId"`
-	URL                 string    `json:"url"`
-	FiltroNomeDocumento string    `json:"filtroNomeDocumento"`
-}
+type Fonte = store.Fonte
 
-type Produto struct {
-	ID         ProdutoID `json:"id"`
-	Nome       string    `json:"nome"`
-	NomeNorm   string    `json:"nomeNorm"`
-	Categorias []string  `json:"categorias"`
-}
+type Produto = store.Produto
 
-type Marca struct {
-	ID       MarcaID `json:"id"`
-	Nome     string  `json:"nome"`
-	NomeNorm string  `json:"nomeNorm"`
-}
+type Marca = store.Marca
 
-type Documento struct {
-	ID                DocumentoID     `json:"id"`
-	FonteID           FonteID         `json:"fonteId"`
-	MercadoID         MercadoID       `json:"mercadoId"`
-	Filename          string          `json:"filename"`
-	Dia               string          `json:"dia"`
-	Estado            EstadoDocumento `json:"estado"`
-	Fingerprint       string          `json:"fingerprint,omitempty"`       // SHA-256 hex of PDF (ADR 0036)
-	ConteudoIdenticoA *DocumentoID    `json:"conteudoIdenticoA,omitempty"` // prior Documento when shortcut (ADR 0036)
-	UltimoErro        string          `json:"ultimoErro,omitempty"`
-	Atualizado        time.Time       `json:"atualizado"`
-}
+type Documento = store.Documento
 
 // OrigemData records how a vigência date was obtained (ADR 0028).
-type OrigemData string
+type OrigemData = store.OrigemData
 
 const (
-	OrigemExtrator           OrigemData = "extrator"
-	OrigemFilename           OrigemData = "filename"
-	OrigemPrimeiraDescoberta OrigemData = "primeiraDescoberta"
+	OrigemExtrator           = store.OrigemExtrator
+	OrigemFilename           = store.OrigemFilename
+	OrigemPrimeiraDescoberta = store.OrigemPrimeiraDescoberta
 )
 
 // Oferta is the unique catalog price observation (ADR 0036). DocumentoID is optional
 // legacy/debug (first association); ownership is N∶1 via OfertaRepository associations.
-type Oferta struct {
-	ID                  OfertaID     `json:"id"`
-	DocumentoID         DocumentoID  `json:"documentoId,omitempty"`
-	ProdutoID           ProdutoID    `json:"produtoId"`
-	MarcaID             *MarcaID     `json:"marcaId,omitempty"`
-	MercadoID           MercadoID    `json:"mercadoId"`
-	Valor               float64      `json:"valor"`
-	Quantidades         []float64    `json:"quantidades"`
-	Medida              Medida       `json:"medida"`
-	DataInicio          string       `json:"dataInicio"`
-	DataExpiracao       string       `json:"dataExpiracao"`
-	OrigemDataInicio    OrigemData   `json:"origemDataInicio"`
-	OrigemDataExpiracao OrigemData   `json:"origemDataExpiracao"`
-	Promocao            *Promocao    `json:"promocao,omitempty"`
-	Comparativo         *Comparativo `json:"comparativo,omitempty"`
-}
+type Oferta = store.Oferta
 
 type MercadoRepository interface {
 	List(ctx context.Context) ([]Mercado, error)
@@ -115,7 +73,7 @@ type OfertaRepository interface {
 	SaveAll(ctx context.Context, documentoID DocumentoID, ofertas []Oferta) error
 	ListByDocumento(ctx context.Context, documentoID DocumentoID) ([]Oferta, error)
 	GetByUniq(ctx context.Context, chave string) (Oferta, bool, error)
-	// ListDocumentoIDsByProduto returns Documento ids indexed under ofertas:produto:{produtoId} (ADR 0026).
+	// ListDocumentoIDsByProduto returns Documentos that currently associate Ofertas of this Produto (ADR 0026 / 0038).
 	ListDocumentoIDsByProduto(ctx context.Context, produtoID ProdutoID) ([]DocumentoID, error)
 }
 
@@ -123,33 +81,27 @@ type FalhaExtracaoRepository interface {
 	SaveAll(ctx context.Context, documentoID DocumentoID, falhas []FalhaExtracao) error
 }
 
-type PageImage struct {
-	Page int
-	JPEG []byte
-}
+type Medida = store.Medida
+
+const (
+	MedidaG       = store.MedidaG
+	MedidaML      = store.MedidaML
+	MedidaUnidade = store.MedidaUnidade
+)
+
+type Promocao = store.Promocao
+type Comparativo = store.Comparativo
+type CandidatoOferta = store.CandidatoOferta
+type FalhaExtracao = store.FalhaExtracao
+type PageImage = store.PageImage
 
 // UsoExtratorPagina is per-page token usage inside one Extract call (ADR 0031/0033).
-type UsoExtratorPagina struct {
-	Page         int   `json:"page"`
-	PromptTokens int64 `json:"promptTokens"`
-	CacheTokens  int64 `json:"cacheTokens"`
-	OutputTokens int64 `json:"outputTokens"`
-}
+type UsoExtratorPagina = store.UsoExtratorPagina
 
 // UsoExtrator records Extrator token consumption for one processing tentativa (ADR 0033/0037).
-type UsoExtrator struct {
-	DocumentoID  DocumentoID         `json:"documentoId,omitempty"`
-	Tentativa    string              `json:"tentativa,omitempty"`
-	ArtefatoPath string              `json:"artefatoPath"`
-	Provider     string              `json:"provider,omitempty"` // gemini|cursor|stub
-	Model        string              `json:"model"`
-	PromptTokens int64               `json:"promptTokens"`
-	CacheTokens  int64               `json:"cacheTokens"`
-	OutputTokens int64               `json:"outputTokens"`
-	Paginas      []UsoExtratorPagina `json:"paginas,omitempty"`
-}
+type UsoExtrator = store.UsoExtrator
 
-// ExtratorCotaStore persists daily adapter quota exhaustion (ADR 0037; operational keys).
+// ExtratorCotaStore persists daily adapter quota exhaustion (ADR 0037 / 0038).
 type ExtratorCotaStore interface {
 	Esgotado(ctx context.Context, provider, dia string) (bool, error)
 	MarcarEsgotado(ctx context.Context, provider, dia string) error
@@ -165,10 +117,7 @@ type UsoExtratorRepository interface {
 }
 
 // PDFDescoberto is a PDF link found on a Fonte page (ADR 0020).
-type PDFDescoberto struct {
-	Filename string // last path segment — Documento identity
-	URL      string // absolute download URL
-}
+type PDFDescoberto = store.PDFDescoberto
 
 type ArtefatoStore interface {
 	// AttemptPath is the directory for a Documento tentativa (relative or absolute under the store root).
@@ -192,10 +141,7 @@ type Rasterizer interface {
 }
 
 // FilenameVigencia holds optional start/end dates parsed from a Documento filename (ADR 0028).
-type FilenameVigencia struct {
-	DataInicio    string // empty when no distinct start
-	DataExpiracao string // empty when no end token
-}
+type FilenameVigencia = store.FilenameVigencia
 
 // FilenameDateParser extracts vigência hints from a Documento filename.
 type FilenameDateParser interface {

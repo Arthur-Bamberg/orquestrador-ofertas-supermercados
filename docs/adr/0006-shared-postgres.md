@@ -1,0 +1,3 @@
+# Shared PostgreSQL catalog
+
+All apps use the same PostgreSQL instance for local and cloud (`DATABASE_URL`). Domain tables (Mercado, Fonte, Documento, Oferta, Produto, Marca, Falha de Extração, Uso do Extrator) live in one schema owned by `modules/ofertas-store`. Operational state that is not domain language (Operação de Pipeline, cota diária do Extrator) lives in separate tables in the same database so channel concerns do not pollute Oferta/Documento rows. This supersedes ADR 0002 (shared Redis / Upstash). Artefatos remain on the filesystem (later a bucket) behind `ArtefatoStore`. Local compose takes `POSTGRES_PASSWORD` from the root `.env` (not committed).

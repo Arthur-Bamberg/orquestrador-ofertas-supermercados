@@ -1,6 +1,6 @@
 # AGENTS.md — ofertas-scraper
 
-Instructions for coding agents working on **this app** inside the monorepo. Workspace rules (Go modules, compose, hooks, Redis compartilhado): [`../../AGENTS.md`](../../AGENTS.md). Domain language: [`CONTEXT.md`](./CONTEXT.md). App ADRs: [`docs/adr/`](./docs/adr/). Prefer glossary terms (`Oferta`, `Fonte`, `Documento`, `Extrator`, …) over synonyms.
+Instructions for coding agents working on **this app** inside the monorepo. Workspace rules (Go modules, compose, hooks, Postgres compartilhado): [`../../AGENTS.md`](../../AGENTS.md). Domain language: [`CONTEXT.md`](./CONTEXT.md). App ADRs: [`docs/adr/`](./docs/adr/). Prefer glossary terms (`Oferta`, `Fonte`, `Documento`, `Extrator`, …) over synonyms.
 
 Module path: `github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper`
 
@@ -8,7 +8,7 @@ Module path: `github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/
 
 Daily job (08:00 America/Sao_Paulo) that:
 
-1. Loads **Fontes** from Redis (Upstash)
+1. Loads **Fontes** from PostgreSQL
 2. GETs each Fonte, discovers `.pdf` names, applies optional per-Fonte filter
 3. Creates **Documentos** (identity: Fonte + filename + discovery day)
 4. Downloads PDF → rasterizes pages → downscales images → sends to **Extrator**
@@ -22,8 +22,8 @@ Processing is **sequential** in the MVP (Fonte by Fonte, Documento by Documento)
 | Concern | Choice |
 |---------|--------|
 | Language | Go (workspace module) |
-| Persistence | Upstash Redis (REST) — shared instance with other monorepo apps |
-| Local Redis | Root `docker-compose.yml` (Redis + [SRH](https://upstash.com/docs/redis/sdks/ts/developing)) |
+| Persistence | PostgreSQL — shared instance with other monorepo apps (`DATABASE_URL`) |
+| Local Postgres | Root `docker-compose.yml` |
 | Extrator impl | Gemini and/or Cursor (same port; ADR 0023, 0034) |
 | Schedule | External cron/systemd timer; binary is a one-shot CLI |
 | Timezone | `America/Sao_Paulo` |
@@ -36,7 +36,7 @@ internal/
   domain/                     # entities + ports (interfaces)
   application/                # use cases / job flows
   presentation/               # CLI entry only (calls application)
-  infra/                      # Gemini, Upstash, HTTP Fonte, PDF→image, local Artefatos
+  infra/                      # Gemini, HTTP Fonte, PDF→image, local Artefatos
 schemas/oferta.json           # Extrator candidate / Oferta contract
 schemas/extracao.json         # Extrator root response (list of candidates)
 prompts/extrator.txt          # stable system prompt (bump only when explicitly versioning)
@@ -51,7 +51,8 @@ Monorepo root owns: `go.work`, `docker-compose.yml`, `.githooks/`, workspace `do
 ### Dependency rule
 
 - `presentation` → `application` → `domain`
-- `infra` implements interfaces defined in `domain`
+- `infra` implements Extrator, Fonte HTTP, raster, Artefatos (interfaces in `domain`)
+- Catalog ports are implemented in `modules/ofertas-store`; `presentation` wires `store.New*Repo` (workspace DRY / ADR 0038)
 - `domain` never imports `infra`, `application`, or `presentation`
 - `application` depends on `domain` interfaces only
 - Do not import this app’s `internal/` from other apps — extract to `modules/` when sharing (workspace DRY rule)
@@ -65,7 +66,7 @@ Required ports (names may vary; responsibilities must not):
 - **ProdutoRepository** — list/save Produtos (catalog identity + categorias)
 - **MarcaRepository** — list/save Marcas
 - **DocumentoRepository** — track Documento lifecycle
-- **OfertaRepository** — persist Ofertas linked to Documento (and Produto + Marca + Mercado); maintain SET index `ofertas:produto:{produtoId}` → documentoIds (ADR 0026)
+- **OfertaRepository** — persist Ofertas linked to Documento (and Produto + Marca + Mercado); listar Documentos por Produto (ADR 0026 / 0038)
 - **FalhaExtracaoRepository** — persist Falhas de Extração linked to Documento
 - **Extrator** — images in → candidate Ofertas (raw) out
 - **ArtefatoStore** — save/load Artefatos (local now; bucket later behind same interface)
@@ -107,7 +108,7 @@ Same-day re-run: skip `concluido` and `parcial`; retry `falhou` and orphan `proc
 - `dataInicio` / `dataExpiracao` = vigência no encarte; both required in Extrator contract; cascades always on (ADR 0028): Extrator wins when present; missing início → distinct start in filename → primeira descoberta na Fonte; missing fim → filename end, else Falha; past/future dates OK (ADR 0016); `dataInicio` ≤ `dataExpiracao`
 - `promocao` is optional: `valorPromocional` plus channel (cartão XOR clube) and/or quantity mechanic (leve/pague XOR quantidadePromocao); channel+mechanic may compose when they share the same price (ADR 0032; clube shape in ADR 0029)
 - `comparativo` is optional: `{ quantidade, valor }` pack-fraction / “sai por nesta embalagem” badge; Medida inherited from Oferta; not Promoção and not a second Oferta (ADR 0035)
-- Each Extrator tentativa persists **Uso do Extrator** (prompt/cache/output tokens + Artefato path) to Redis and `uso-extrator.json` (ADR 0033)
+- Each Extrator tentativa persists **Uso do Extrator** (prompt/cache/output tokens + Artefato path) to Postgres and `uso-extrator.json` (ADR 0033)
 - Domain match-or-create for Produto/Marca uses normalized exact label match only (ADR 0011); no fuzzy matching in the MVP
 
 ## Artefatos
@@ -124,7 +125,7 @@ Do not write empty placeholders for steps that never ran. Store via `ArtefatoSto
 
 ## Local environment
 
-- From **monorepo root**: `docker compose up` starts Redis + SRH
+- From **monorepo root**: copy `.env.example` → `.env`, then `docker compose up` starts Postgres
 - App env: `apps/ofertas-scraper/.env` (gitignored) + `.env.example` (versioned)
 - Paths in `.env` (`SEED_PATH`, `ARTEFATO_ROOT`, schemas, prompts) are **relative to this app directory** — run the CLI from here
 - Artefatos default: `./.data/artefatos` (gitignored; not ported)
@@ -133,8 +134,7 @@ Do not write empty placeholders for steps that never ran. Store via `ArtefatoSto
 ### Suggested env vars
 
 ```
-UPSTASH_REDIS_REST_URL=
-UPSTASH_REDIS_REST_TOKEN=
+DATABASE_URL=postgres://ofertas:ofertas@localhost:5432/ofertas?sslmode=disable
 EXTRATOR_PROVIDER=auto
 EXTRATOR_STUB=1
 GEMINI_API_KEY=
@@ -167,19 +167,20 @@ Rasterizer needs `pdftoppm` (poppler-utils) on PATH.
 **Do**
 
 - Use glossary terms from `CONTEXT.md`
-- Follow workspace rules in root `AGENTS.md` (modules, Redis prefixes, DRY extract)
+- Follow workspace rules in root `AGENTS.md` (modules, shared Postgres, DRY extract)
 - Add/change persistence and Extrator only behind `domain` interfaces
 - Keep job orchestration in `application`
 - Keep prompt + schema in sync; only introduce versioned filenames when explicitly asked to bump the Extrator contract (ADR 0014)
+- Follow workspace TDD in [`../../AGENTS.md`](../../AGENTS.md): one observable behavior — failing test → code that passes → refactor the test → refactor the code
 - Prefer small, sequential changes with tests around domain validation
 - After **any** prompt or Extrator schema change, run live recall and **validate manually** against page images (`docs/extrator-live-recall.md`) — automated floors alone are not enough
 
 **Don't**
 
-- Call Gemini or Redis from `domain` or `application` directly
+- Call Gemini or Postgres from `domain` or `application` directly
 - Put ports in `presentation` (CLI only)
 - Send raw PDF bytes to the Extrator (images only)
-- Hardcode Fonte URLs (they live in Redis)
+- Hardcode Fonte URLs (they live in the catalog)
 - Parallelize Fontes/Documentos in the MVP without an explicit decision
 - Commit secrets (`.env`, API keys)
 - Skip pre-commit with `--no-verify` unless the user explicitly asks

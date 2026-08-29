@@ -1,0 +1,3 @@
+# PostgreSQL holds current catalog; Artefatos keep each attempt
+
+The shared catalog (Mercado, Fonte, Documento, Oferta, Falha de Extração, Uso do Extrator, Operação de Pipeline, cota do Extrator) is PostgreSQL, opened via `modules/ofertas-store`. Redis/Upstash is only an optional source for the one-shot `migrate-from-redis` command (`modules/ofertas-store/redismigrate`); the API binary does not import that package. Local compose runs Postgres 16; apps share `DATABASE_URL`. This supersedes scraper ADRs 0001 (Upstash REST + SRH) and 0019 (Redis key layout) for persistence, and the Redis key wording in 0022, 0026, 0033, and 0037. Current Ofertas/Falhas are still replaced on Documento reprocess (same rule as ADR 0017); Artefatos still keep each attempt on disk.

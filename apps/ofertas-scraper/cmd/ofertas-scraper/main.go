@@ -10,7 +10,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: ofertas-scraper <run|seed>")
+		fmt.Fprintln(os.Stderr, "usage: ofertas-scraper <run|seed|migrate-from-redis|discover <fonteId>|reprocess <documentoId>>")
 		os.Exit(2)
 	}
 	env := presentation.LoadEnv()
@@ -21,6 +21,20 @@ func main() {
 		err = presentation.RunDaily(ctx, env)
 	case "seed":
 		err = presentation.RunSeed(ctx, env)
+	case "migrate-from-redis":
+		err = presentation.RunMigrateFromRedis(ctx, env, os.Getenv("UPSTASH_REDIS_REST_URL"), os.Getenv("UPSTASH_REDIS_REST_TOKEN"))
+	case "discover":
+		if len(os.Args) != 3 {
+			fmt.Fprintln(os.Stderr, "usage: ofertas-scraper discover <fonteId>")
+			os.Exit(2)
+		}
+		err = presentation.RunDiscover(ctx, env, os.Args[2])
+	case "reprocess":
+		if len(os.Args) != 3 {
+			fmt.Fprintln(os.Stderr, "usage: ofertas-scraper reprocess <documentoId>")
+			os.Exit(2)
+		}
+		err = presentation.RunReprocess(ctx, env, os.Args[2])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n", os.Args[1])
 		os.Exit(2)

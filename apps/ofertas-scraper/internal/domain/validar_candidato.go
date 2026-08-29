@@ -1,18 +1,9 @@
 package domain
 
 import (
-	"encoding/json"
 	"sort"
 	"strings"
 	"time"
-)
-
-type Medida string
-
-const (
-	MedidaG       Medida = "g"
-	MedidaML      Medida = "ml"
-	MedidaUnidade Medida = "unidade"
 )
 
 const (
@@ -26,51 +17,6 @@ const (
 	CodigoPromocaoInvalida      = "promocao_invalida"
 	CodigoComparativoInvalido   = "comparativo_invalido"
 )
-
-// CandidatoOferta is the Extrator candidate before match-or-create.
-type CandidatoOferta struct {
-	Produto       string       `json:"produto"`
-	Marca         string       `json:"marca,omitempty"`
-	Categorias    []string     `json:"categorias,omitempty"`
-	Valor         float64      `json:"valor"`
-	Quantidades   []float64    `json:"quantidades"`
-	Medida        string       `json:"medida"`
-	DataInicio    string       `json:"dataInicio"`
-	DataExpiracao string       `json:"dataExpiracao"`
-	Promocao      *Promocao    `json:"promocao,omitempty"`
-	Comparativo   *Comparativo `json:"comparativo,omitempty"`
-}
-
-// UnmarshalJSON accepts quantidades[] and legacy singular quantidade (ADR 0030).
-func (c *CandidatoOferta) UnmarshalJSON(data []byte) error {
-	var j struct {
-		Produto       string       `json:"produto"`
-		Marca         string       `json:"marca,omitempty"`
-		Categorias    []string     `json:"categorias,omitempty"`
-		Valor         float64      `json:"valor"`
-		Quantidades   []float64    `json:"quantidades"`
-		Quantidade    *float64     `json:"quantidade"`
-		Medida        string       `json:"medida"`
-		DataInicio    string       `json:"dataInicio"`
-		DataExpiracao string       `json:"dataExpiracao"`
-		Promocao      *Promocao    `json:"promocao,omitempty"`
-		Comparativo   *Comparativo `json:"comparativo,omitempty"`
-	}
-	if err := json.Unmarshal(data, &j); err != nil {
-		return err
-	}
-	c.Produto = j.Produto
-	c.Marca = j.Marca
-	c.Categorias = j.Categorias
-	c.Valor = j.Valor
-	c.Quantidades = coalesceQuantidades(j.Quantidades, j.Quantidade)
-	c.Medida = j.Medida
-	c.DataInicio = j.DataInicio
-	c.DataExpiracao = j.DataExpiracao
-	c.Promocao = j.Promocao
-	c.Comparativo = j.Comparativo
-	return nil
-}
 
 // OfertaValidada is a candidate that passed domain validation (labels, not ids).
 type OfertaValidada struct {
@@ -86,28 +32,6 @@ type OfertaValidada struct {
 	OrigemDataExpiracao OrigemData
 	Promocao            *Promocao
 	Comparativo         *Comparativo
-}
-
-type Promocao struct {
-	Leve               *float64 `json:"leve,omitempty"`
-	Pague              *float64 `json:"pague,omitempty"`
-	QuantidadePromocao *float64 `json:"quantidadePromocao,omitempty"`
-	PromocaoCartao     *bool    `json:"promocaoCartao,omitempty"`
-	PromocaoClube      *bool    `json:"promocaoClube,omitempty"`
-	ValorPromocional   float64  `json:"valorPromocional"`
-}
-
-// Comparativo is an optional unit-price / pack-fraction badge (ADR 0035).
-// Medida is inherited from the parent Oferta.
-type Comparativo struct {
-	Quantidade float64 `json:"quantidade"`
-	Valor      float64 `json:"valor"`
-}
-
-type FalhaExtracao struct {
-	Codigo    string          `json:"codigo"`
-	Detalhe   string          `json:"detalhe,omitempty"`
-	Candidato CandidatoOferta `json:"candidato"`
 }
 
 func ValidarCandidato(c CandidatoOferta) (OfertaValidada, *FalhaExtracao) {

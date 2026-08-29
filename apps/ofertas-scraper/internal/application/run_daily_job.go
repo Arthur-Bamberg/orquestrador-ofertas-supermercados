@@ -44,8 +44,7 @@ type RunDailyJobDeps struct {
 	MaxDocumentos int
 }
 
-// RunDailyJob processes Fontes sequentially for the current discovery day.
-func RunDailyJob(ctx context.Context, d RunDailyJobDeps) error {
+func prepareRunDeps(d RunDailyJobDeps) (RunDailyJobDeps, error) {
 	if d.Clock == nil {
 		d.Clock = realClock{}
 	}
@@ -55,12 +54,22 @@ func RunDailyJob(ctx context.Context, d RunDailyJobDeps) error {
 	if d.Location == nil {
 		loc, err := time.LoadLocation("America/Sao_Paulo")
 		if err != nil {
-			return err
+			return d, err
 		}
 		d.Location = loc
 	}
 	if d.ExtratorRetryBudget <= 0 {
 		d.ExtratorRetryBudget = time.Hour
+	}
+	return d, nil
+}
+
+// RunDailyJob processes Fontes sequentially for the current discovery day.
+func RunDailyJob(ctx context.Context, d RunDailyJobDeps) error {
+	var err error
+	d, err = prepareRunDeps(d)
+	if err != nil {
+		return err
 	}
 
 	now := d.Clock.Now().In(d.Location)
@@ -112,7 +121,7 @@ func RunDailyJob(ctx context.Context, d RunDailyJobDeps) error {
 				d.Log.Printf("RUN_MAX_DOCUMENTOS=%d reached; stopping", d.MaxDocumentos)
 				return nil
 			}
-			if err := processDocumento(ctx, d, fonte, pdf, dia, &extratorBudgetLeft, &extratorKnownDown); err != nil {
+			if err := processDocumento(ctx, d, fonte, pdf, dia, &extratorBudgetLeft, &extratorKnownDown, processDocumentoOptions{}); err != nil {
 				if errors.Is(err, errGlobalInfra) {
 					return err
 				}
@@ -126,6 +135,113 @@ func RunDailyJob(ctx context.Context, d RunDailyJobDeps) error {
 
 var errGlobalInfra = errors.New("global infra failure")
 
+type processDocumentoOptions struct {
+	Force bool
+}
+
+// DiscoverDocumentos creates today's Documento records for one Fonte without processing them.
+func DiscoverDocumentos(ctx context.Context, d RunDailyJobDeps, fonteID domain.FonteID) error {
+	var err error
+	d, err = prepareRunDeps(d)
+	if err != nil {
+		return err
+	}
+	fonte, err := findFonte(ctx, d.Fontes, fonteID)
+	if err != nil {
+		return err
+	}
+	now := d.Clock.Now().In(d.Location)
+	dia := now.Format("2006-01-02")
+	all, err := d.FonteHTTP.DiscoverPDFs(ctx, fonte)
+	if err != nil {
+		return err
+	}
+	kept, rejected, err := FiltrarPDFs(fonte, all)
+	if err != nil {
+		return err
+	}
+	d.Log.Printf("fonte %s pdfs descobertos=%d filtrados_out=%d mantidos=%d", fonte.ID, len(all), len(rejected), len(kept))
+	for _, pdf := range kept {
+		if _, ok, err := d.Documentos.GetByIdentity(ctx, fonte.ID, pdf.Filename, dia); err != nil {
+			return fmt.Errorf("%w: get documento: %v", errGlobalInfra, err)
+		} else if ok {
+			d.Log.Printf("documento já existe hoje: %s", pdf.Filename)
+			continue
+		}
+		doc := domain.Documento{
+			ID:         domain.DocumentoID(NewID()),
+			FonteID:    fonte.ID,
+			MercadoID:  fonte.MercadoID,
+			Filename:   pdf.Filename,
+			Dia:        dia,
+			Estado:     domain.EstadoProcessando,
+			UltimoErro: "descoberto sem processamento",
+			Atualizado: d.Clock.Now().UTC(),
+		}
+		if err := d.Documentos.Save(ctx, doc); err != nil {
+			return fmt.Errorf("%w: save documento: %v", errGlobalInfra, err)
+		}
+		d.Log.Printf("documento descoberto: %s (%s)", doc.ID, doc.Filename)
+	}
+	return nil
+}
+
+// ReprocessDocumento forces a Documento through processing even when its state would normally skip.
+func ReprocessDocumento(ctx context.Context, d RunDailyJobDeps, documentoID domain.DocumentoID) error {
+	var err error
+	d, err = prepareRunDeps(d)
+	if err != nil {
+		return err
+	}
+	doc, ok, err := d.Documentos.Get(ctx, documentoID)
+	if err != nil {
+		return fmt.Errorf("%w: get documento: %v", errGlobalInfra, err)
+	}
+	if !ok {
+		return fmt.Errorf("documento %s not found", documentoID)
+	}
+	fonte, err := findFonte(ctx, d.Fontes, doc.FonteID)
+	if err != nil {
+		return err
+	}
+	all, err := d.FonteHTTP.DiscoverPDFs(ctx, fonte)
+	if err != nil {
+		return err
+	}
+	kept, _, err := FiltrarPDFs(fonte, all)
+	if err != nil {
+		return err
+	}
+	var pdf domain.PDFDescoberto
+	found := false
+	for _, candidate := range kept {
+		if candidate.Filename == doc.Filename {
+			pdf = candidate
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("documento %s filename %q não encontrado na Fonte %s", documentoID, doc.Filename, fonte.ID)
+	}
+	extratorBudgetLeft := d.ExtratorRetryBudget
+	extratorKnownDown := false
+	return processDocumento(ctx, d, fonte, pdf, doc.Dia, &extratorBudgetLeft, &extratorKnownDown, processDocumentoOptions{Force: true})
+}
+
+func findFonte(ctx context.Context, repo domain.FonteRepository, fonteID domain.FonteID) (domain.Fonte, error) {
+	fontes, err := repo.List(ctx)
+	if err != nil {
+		return domain.Fonte{}, err
+	}
+	for _, fonte := range fontes {
+		if fonte.ID == fonteID {
+			return fonte, nil
+		}
+	}
+	return domain.Fonte{}, fmt.Errorf("fonte %s not found", fonteID)
+}
+
 func processDocumento(
 	ctx context.Context,
 	d RunDailyJobDeps,
@@ -134,6 +250,7 @@ func processDocumento(
 	dia string,
 	extratorBudgetLeft *time.Duration,
 	extratorKnownDown *bool,
+	opts processDocumentoOptions,
 ) error {
 	existing, ok, err := d.Documentos.GetByIdentity(ctx, fonte.ID, pdf.Filename, dia)
 	if err != nil {
@@ -141,7 +258,7 @@ func processDocumento(
 	}
 	var doc domain.Documento
 	if ok {
-		if !domain.DeveReprocessar(existing.Estado) {
+		if !opts.Force && !domain.DeveReprocessar(existing.Estado) {
 			d.Log.Printf("skip %s (%s)", pdf.Filename, existing.Estado)
 			return nil
 		}

@@ -494,7 +494,7 @@ func TestRunDailyJob_MaxDocumentos(t *testing.T) {
 	calls := 0
 
 	deps := application.RunDailyJobDeps{
-		Fontes: &memFontes{items: []domain.Fonte{{ID: "f1", MercadoID: "m1"}}},
+		Fontes:     &memFontes{items: []domain.Fonte{{ID: "f1", MercadoID: "m1"}}},
 		Documentos: docs,
 		Produtos:   &memProdutos{},
 		Marcas:     &memMarcas{},
@@ -648,5 +648,159 @@ func TestRunDailyJob_ConteudoIdentico(t *testing.T) {
 	// Same catalog entity — not a clone.
 	if len(ofertas.byID) != 1 {
 		t.Fatalf("catalog size=%d want 1", len(ofertas.byID))
+	}
+}
+
+func sampleCandidato() domain.CandidatoOferta {
+	return domain.CandidatoOferta{
+		Produto: "Arroz", Valor: 10, Quantidades: []float64{1000}, Medida: "g",
+		DataInicio: "2026-07-18", DataExpiracao: "2026-07-25",
+	}
+}
+
+func TestRunDailyJob_ReprocessaFalhou(t *testing.T) {
+	loc, now := jobClock()
+	docs := newMemDocs()
+	_ = docs.Save(context.Background(), domain.Documento{
+		ID: "d-falhou", FonteID: "f1", MercadoID: "m1",
+		Filename: "encarte.pdf", Dia: "2026-07-18", Estado: domain.EstadoFalhou,
+		UltimoErro: "extrator anterior",
+	})
+	calls := 0
+	deps := baseJobDeps(t, loc, now, docs, &countingExtrator{inner: extrator.Stub{Candidatos: []domain.CandidatoOferta{sampleCandidato()}}, n: &calls})
+
+	if err := application.RunDailyJob(context.Background(), deps); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("falhou should reprocess; calls=%d", calls)
+	}
+	doc, ok, _ := docs.GetByIdentity(context.Background(), "f1", "encarte.pdf", "2026-07-18")
+	if !ok || doc.Estado != domain.EstadoConcluido {
+		t.Fatalf("ok=%v estado=%s ultimoErro=%s", ok, doc.Estado, doc.UltimoErro)
+	}
+}
+
+func TestRunDailyJob_ReprocessaProcessandoOrfao(t *testing.T) {
+	loc, now := jobClock()
+	docs := newMemDocs()
+	_ = docs.Save(context.Background(), domain.Documento{
+		ID: "d-orfao", FonteID: "f1", MercadoID: "m1",
+		Filename: "encarte.pdf", Dia: "2026-07-18", Estado: domain.EstadoProcessando,
+	})
+	calls := 0
+	deps := baseJobDeps(t, loc, now, docs, &countingExtrator{inner: extrator.Stub{Candidatos: []domain.CandidatoOferta{sampleCandidato()}}, n: &calls})
+
+	if err := application.RunDailyJob(context.Background(), deps); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("processando órfão should reprocess; calls=%d", calls)
+	}
+	doc, ok, _ := docs.GetByIdentity(context.Background(), "f1", "encarte.pdf", "2026-07-18")
+	if !ok || doc.Estado != domain.EstadoConcluido {
+		t.Fatalf("ok=%v estado=%s", ok, doc.Estado)
+	}
+}
+
+func TestRunDailyJob_ListaVaziaDoExtratorEhFalhou(t *testing.T) {
+	loc, now := jobClock()
+	docs := newMemDocs()
+	ofertas := &memOfertas{}
+	deps := baseJobDeps(t, loc, now, docs, extrator.Stub{Candidatos: nil})
+	deps.Ofertas = ofertas
+
+	if err := application.RunDailyJob(context.Background(), deps); err != nil {
+		t.Fatal(err)
+	}
+	doc, ok, _ := docs.GetByIdentity(context.Background(), "f1", "encarte.pdf", "2026-07-18")
+	if !ok || doc.Estado != domain.EstadoFalhou {
+		t.Fatalf("ok=%v estado=%s ultimoErro=%s", ok, doc.Estado, doc.UltimoErro)
+	}
+	got, _ := ofertas.ListByDocumento(context.Background(), doc.ID)
+	if len(got) != 0 {
+		t.Fatalf("ofertas=%v", got)
+	}
+}
+
+func TestRunDailyJob_ExtratorIndisponivelMarcaFalhou(t *testing.T) {
+	loc, now := jobClock()
+	docs := newMemDocs()
+	calls := 0
+	deps := baseJobDeps(t, loc, now, docs, &countingExtrator{inner: extrator.Unavailable(), n: &calls})
+	deps.ExtratorRetryBudget = time.Nanosecond
+
+	if err := application.RunDailyJob(context.Background(), deps); err != nil {
+		t.Fatal(err)
+	}
+	if calls < 1 {
+		t.Fatal("extrator should be called")
+	}
+	doc, ok, _ := docs.GetByIdentity(context.Background(), "f1", "encarte.pdf", "2026-07-18")
+	if !ok || doc.Estado != domain.EstadoFalhou {
+		t.Fatalf("ok=%v estado=%s ultimoErro=%s", ok, doc.Estado, doc.UltimoErro)
+	}
+	if doc.UltimoErro == "" {
+		t.Fatal("ultimoErro should explain extrator outage")
+	}
+}
+
+func TestRunDailyJob_FiltroInvalidoNaoAbortaOutrasFontes(t *testing.T) {
+	loc, now := jobClock()
+	docs := newMemDocs()
+	calls := 0
+	deps := baseJobDeps(t, loc, now, docs, &countingExtrator{inner: extrator.Stub{Candidatos: []domain.CandidatoOferta{sampleCandidato()}}, n: &calls})
+	deps.Fontes = &memFontes{items: []domain.Fonte{
+		{ID: "f-bad", MercadoID: "m1", FiltroNomeDocumento: "["},
+		{ID: "f1", MercadoID: "m1"},
+	}}
+	deps.FonteHTTP = &memFonteHTTP{
+		pdfs: map[string][]domain.PDFDescoberto{
+			"f-bad": {{Filename: "bad.pdf", URL: "u-bad"}},
+			"f1":    {{Filename: "encarte.pdf", URL: "u"}},
+		},
+		body: []byte("%PDF"),
+	}
+
+	if err := application.RunDailyJob(context.Background(), deps); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("valid fonte should still run; calls=%d", calls)
+	}
+	if _, ok, _ := docs.GetByIdentity(context.Background(), "f-bad", "bad.pdf", "2026-07-18"); ok {
+		t.Fatal("invalid filtro should not create documento")
+	}
+	doc, ok, _ := docs.GetByIdentity(context.Background(), "f1", "encarte.pdf", "2026-07-18")
+	if !ok || doc.Estado != domain.EstadoConcluido {
+		t.Fatalf("ok=%v estado=%s", ok, doc.Estado)
+	}
+}
+
+func jobClock() (*time.Location, time.Time) {
+	loc, _ := time.LoadLocation("America/Sao_Paulo")
+	return loc, time.Date(2026, 7, 18, 8, 0, 0, 0, loc)
+}
+
+func baseJobDeps(t *testing.T, loc *time.Location, now time.Time, docs *memDocs, extr domain.Extrator) application.RunDailyJobDeps {
+	t.Helper()
+	return application.RunDailyJobDeps{
+		Fontes:     &memFontes{items: []domain.Fonte{{ID: "f1", MercadoID: "m1"}}},
+		Documentos: docs,
+		Produtos:   &memProdutos{},
+		Marcas:     &memMarcas{},
+		Ofertas:    &memOfertas{},
+		Falhas:     &memFalhas{},
+		FonteHTTP: &memFonteHTTP{
+			pdfs: map[string][]domain.PDFDescoberto{"f1": {{Filename: "encarte.pdf", URL: "u"}}},
+			body: []byte("%PDF"),
+		},
+		Raster:    raster.Fixed{Pages: []domain.PageImage{{Page: 1, JPEG: []byte{0xff, 0xd8}}}},
+		Extrator:  extr,
+		Artefatos: memArtefatos{},
+		Dates:     filenamedate.Parser{},
+		Clock:     fixedClock{t: now},
+		Log:       log.New(&bytes.Buffer{}, "", 0),
+		Location:  loc,
 	}
 }

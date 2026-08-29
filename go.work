@@ -1,3 +1,9 @@
 go 1.24.5
 
-use ./apps/ofertas-scraper
+use (
+	./apps/ofertas-api
+	./apps/ofertas-scraper
+	./modules/ofertas-store
+)
+
+replace github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store v0.0.0 => ./modules/ofertas-store

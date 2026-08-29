@@ -10,12 +10,12 @@ import (
 
 func TestValidarCandidato_aceitaCandidatoValido(t *testing.T) {
 	c := domain.CandidatoOferta{
-		Produto:       "Arroz integral",
-		Valor:         12.9,
+		Produto:     "Arroz integral",
+		Valor:       12.9,
 		Quantidades: []float64{1000},
-		Medida:        "g",
-		DataInicio: "2026-07-18", DataExpiracao: "2026-07-20",
-		Categorias:    []string{"mercearia", "arroz"},
+		Medida:      "g",
+		DataInicio:  "2026-07-18", DataExpiracao: "2026-07-20",
+		Categorias: []string{"mercearia", "arroz"},
 	}
 
 	oferta, falha := domain.ValidarCandidato(c)
@@ -32,11 +32,11 @@ func TestValidarCandidato_aceitaCandidatoValido(t *testing.T) {
 
 func TestValidarCandidato_rejeitaMedidaNaoNormalizada(t *testing.T) {
 	c := domain.CandidatoOferta{
-		Produto:       "Arroz integral",
-		Valor:         12.9,
+		Produto:     "Arroz integral",
+		Valor:       12.9,
 		Quantidades: []float64{1},
-		Medida:        "kg",
-		DataInicio: "2026-07-18", DataExpiracao: "2026-07-20",
+		Medida:      "kg",
+		DataInicio:  "2026-07-18", DataExpiracao: "2026-07-20",
 	}
 
 	_, falha := domain.ValidarCandidato(c)
@@ -53,11 +53,11 @@ func TestValidarCandidato_rejeitaMedidaNaoNormalizada(t *testing.T) {
 
 func TestValidarCandidato_rejeitaProdutoVazio(t *testing.T) {
 	c := domain.CandidatoOferta{
-		Produto:       "  ",
-		Valor:         1,
+		Produto:     "  ",
+		Valor:       1,
 		Quantidades: []float64{1},
-		Medida:        "unidade",
-		DataInicio: "2026-07-18", DataExpiracao: "2026-07-20",
+		Medida:      "unidade",
+		DataInicio:  "2026-07-18", DataExpiracao: "2026-07-20",
 	}
 
 	_, falha := domain.ValidarCandidato(c)
@@ -71,11 +71,11 @@ func TestValidarCandidato_rejeitaProdutoVazio(t *testing.T) {
 
 func TestValidarCandidato_rejeitaValorNaoPositivo(t *testing.T) {
 	c := domain.CandidatoOferta{
-		Produto:       "Banana",
-		Valor:         0,
+		Produto:     "Banana",
+		Valor:       0,
 		Quantidades: []float64{1},
-		Medida:        "unidade",
-		DataInicio: "2026-07-18", DataExpiracao: "2026-07-20",
+		Medida:      "unidade",
+		DataInicio:  "2026-07-18", DataExpiracao: "2026-07-20",
 	}
 
 	_, falha := domain.ValidarCandidato(c)
@@ -86,11 +86,11 @@ func TestValidarCandidato_rejeitaValorNaoPositivo(t *testing.T) {
 
 func TestValidarCandidato_aceitaDataExpiracaoPassada(t *testing.T) {
 	c := domain.CandidatoOferta{
-		Produto:       "Banana",
-		Valor:         2.5,
+		Produto:     "Banana",
+		Valor:       2.5,
 		Quantidades: []float64{1},
-		Medida:        "unidade",
-		DataInicio: "2020-01-01", DataExpiracao: "2020-01-01",
+		Medida:      "unidade",
+		DataInicio:  "2020-01-01", DataExpiracao: "2020-01-01",
 	}
 
 	oferta, falha := domain.ValidarCandidato(c)
@@ -104,11 +104,11 @@ func TestValidarCandidato_aceitaDataExpiracaoPassada(t *testing.T) {
 
 func TestValidarCandidato_rejeitaDataExpiracaoInvalida(t *testing.T) {
 	c := domain.CandidatoOferta{
-		Produto:       "Banana",
-		Valor:         2.5,
+		Produto:     "Banana",
+		Valor:       2.5,
 		Quantidades: []float64{1},
-		Medida:        "unidade",
-		DataInicio: "2020-01-01", DataExpiracao: "20/01/2020",
+		Medida:      "unidade",
+		DataInicio:  "2020-01-01", DataExpiracao: "20/01/2020",
 	}
 
 	_, falha := domain.ValidarCandidato(c)
@@ -121,7 +121,7 @@ func TestValidarCandidato_rejeitaInicioAposExpiracao(t *testing.T) {
 	c := domain.CandidatoOferta{
 		Produto:       "Banana",
 		Valor:         2.5,
-		Quantidades: []float64{1},
+		Quantidades:   []float64{1},
 		Medida:        "unidade",
 		DataInicio:    "2026-07-25",
 		DataExpiracao: "2026-07-20",
@@ -137,7 +137,7 @@ func TestValidarCandidato_aceitaVigenciaUmDia(t *testing.T) {
 	c := domain.CandidatoOferta{
 		Produto:       "Banana",
 		Valor:         2.5,
-		Quantidades: []float64{1},
+		Quantidades:   []float64{1},
 		Medida:        "unidade",
 		DataInicio:    "2026-07-20",
 		DataExpiracao: "2026-07-20",
@@ -151,7 +151,7 @@ func TestValidarCandidato_rejeitaDataInicioInvalida(t *testing.T) {
 	c := domain.CandidatoOferta{
 		Produto:       "Banana",
 		Valor:         2.5,
-		Quantidades: []float64{1},
+		Quantidades:   []float64{1},
 		Medida:        "unidade",
 		DataInicio:    "20/07/2026",
 		DataExpiracao: "2026-07-20",
@@ -164,11 +164,11 @@ func TestValidarCandidato_rejeitaDataInicioInvalida(t *testing.T) {
 
 func TestValidarCandidato_rejeitaDataExpiracaoVazia(t *testing.T) {
 	c := domain.CandidatoOferta{
-		Produto:    "Banana",
-		Valor:      2.5,
+		Produto:     "Banana",
+		Valor:       2.5,
 		Quantidades: []float64{1},
-		Medida:     "unidade",
-		DataInicio: "2026-07-18",
+		Medida:      "unidade",
+		DataInicio:  "2026-07-18",
 	}
 	_, falha := domain.ValidarCandidato(c)
 	if falha == nil || falha.Codigo != domain.CodigoDataExpiracaoInvalida {
@@ -181,7 +181,7 @@ func TestValidarCandidato_aceitaPromocaoClube(t *testing.T) {
 	c := domain.CandidatoOferta{
 		Produto:       "Leite",
 		Valor:         5,
-		Quantidades: []float64{1000},
+		Quantidades:   []float64{1000},
 		Medida:        "ml",
 		DataInicio:    "2026-07-18",
 		DataExpiracao: "2026-07-20",
@@ -205,7 +205,7 @@ func TestValidarCandidato_rejeitaPromocaoCartaoEClube(t *testing.T) {
 	c := domain.CandidatoOferta{
 		Produto:       "Leite",
 		Valor:         5,
-		Quantidades: []float64{1000},
+		Quantidades:   []float64{1000},
 		Medida:        "ml",
 		DataInicio:    "2026-07-18",
 		DataExpiracao: "2026-07-20",
@@ -250,11 +250,11 @@ func TestValidarCandidato_aceitaPromocaoCanalEMecanicaCompostos(t *testing.T) {
 
 func TestValidarCandidato_marcaOpcional(t *testing.T) {
 	c := domain.CandidatoOferta{
-		Produto:       "Banana",
-		Valor:         2.5,
+		Produto:     "Banana",
+		Valor:       2.5,
 		Quantidades: []float64{1},
-		Medida:        "unidade",
-		DataInicio: "2026-07-18", DataExpiracao: "2026-07-20",
+		Medida:      "unidade",
+		DataInicio:  "2026-07-18", DataExpiracao: "2026-07-20",
 	}
 
 	oferta, falha := domain.ValidarCandidato(c)
@@ -333,12 +333,12 @@ func TestValidarCandidato_aceitaComparativoComPromocao(t *testing.T) {
 func TestValidarCandidato_aceitaPromocaoLevePague(t *testing.T) {
 	leve, pague := 3.0, 2.0
 	c := domain.CandidatoOferta{
-		Produto:       "Refrigerante",
-		Marca:         "Cola",
-		Valor:         8,
+		Produto:     "Refrigerante",
+		Marca:       "Cola",
+		Valor:       8,
 		Quantidades: []float64{2000},
-		Medida:        "ml",
-		DataInicio: "2026-07-18", DataExpiracao: "2026-07-20",
+		Medida:      "ml",
+		DataInicio:  "2026-07-18", DataExpiracao: "2026-07-20",
 		Promocao: &domain.Promocao{
 			Leve:             &leve,
 			Pague:            &pague,

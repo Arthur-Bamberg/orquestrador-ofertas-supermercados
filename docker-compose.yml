@@ -1,17 +1,21 @@
-# Monorepo local stack (workspace ADR 0004). Apps use UPSTASH_* → SRH :8079.
+# Local stack (workspace ADR 0004 / 0006). Apps use DATABASE_URL → Postgres :5432.
+# Senha: copie `.env.example` na raiz para `.env` (gitignored). docker compose lê POSTGRES_PASSWORD de lá.
 services:
-  redis:
-    image: redis:7-alpine
+  postgres:
+    image: postgres:16-alpine
     ports:
-      - "6379:6379" # Redis Insight / redis-cli; apps still use SRH on 8079
-
-  srh:
-    image: hiett/serverless-redis-http:latest
-    ports:
-      - "8079:80"
+      - "5432:5432"
     environment:
-      SRH_MODE: env
-      SRH_TOKEN: local_dev_token
-      SRH_CONNECTION_STRING: redis://redis:6379
-    depends_on:
-      - redis
+      POSTGRES_USER: ofertas
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy .env.example to .env at repo root}
+      POSTGRES_DB: ofertas
+    volumes:
+      - ofertas_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ofertas -d ofertas"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  ofertas_pg:

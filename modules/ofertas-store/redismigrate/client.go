@@ -1,4 +1,4 @@
-package upstash
+package redismigrate
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Client talks to Upstash Redis REST (or SRH locally) — ADR 0001 / 0019.
+// Client talks to Upstash Redis REST or SRH using plain Redis commands.
 type Client struct {
 	baseURL    string
 	token      string
@@ -65,6 +65,21 @@ func (c *Client) Do(ctx context.Context, args ...any) (json.RawMessage, error) {
 	return envelope.Result, nil
 }
 
+func (c *Client) Keys(ctx context.Context, pattern string) ([]string, error) {
+	result, err := c.Do(ctx, "KEYS", pattern)
+	if err != nil {
+		return nil, err
+	}
+	if string(result) == "null" {
+		return nil, nil
+	}
+	var keys []string
+	if err := json.Unmarshal(result, &keys); err != nil {
+		return nil, err
+	}
+	return keys, nil
+}
+
 func (c *Client) Get(ctx context.Context, key string) (string, bool, error) {
 	result, err := c.Do(ctx, "GET", key)
 	if err != nil {
@@ -85,7 +100,7 @@ func (c *Client) Set(ctx context.Context, key, value string) error {
 	return err
 }
 
-// SetEX sets key with TTL in seconds (Upstash SET … EX).
+// SetEX sets a key with TTL in seconds using SET key value EX ttl.
 func (c *Client) SetEX(ctx context.Context, key, value string, ttlSeconds int) error {
 	_, err := c.Do(ctx, "SET", key, value, "EX", ttlSeconds)
 	return err
