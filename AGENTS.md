@@ -1,6 +1,6 @@
 # AGENTS.md — orquestrador-ofertas-supermercados
 
-Instructions for coding agents on this **monorepo / Go workspace**. Domain language for the scraper lives in [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md); workspace ADRs in [`docs/adr/`](./docs/adr/); app ADRs under each `apps/<name>/docs/adr/`.
+Instructions for coding agents on this **monorepo / Go workspace**. Domain language: scraper [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md); WhatsApp channel [`apps/gateway-whatsapp/CONTEXT.md`](./apps/gateway-whatsapp/CONTEXT.md); map [`CONTEXT-MAP.md`](./CONTEXT-MAP.md). Workspace ADRs in [`docs/adr/`](./docs/adr/); app ADRs under each `apps/<name>/docs/adr/`.
 
 ## What this repository is
 
@@ -11,7 +11,7 @@ Workspace for supermarket-offers apps. It is **not** itself an application binar
 | **Current** | `ofertas-scraper` | Daily job: Fontes → Documentos → Extrator → Ofertas |
 | **Current** | `ofertas-api` | Go HTTP API over shared Postgres (CRUD + pipeline ops; ADR 0005 / 0006) |
 | **Current** | `ofertas-backoffice` | Vite/React SPA backoffice (filters + screens; ADR 0005) |
-| **Planned** | `gateway-whatsapp` | WhatsApp channel gateway |
+| **Current** | `gateway-whatsapp` | WhatsApp channel gateway (whatsmeow; ADR 0007) |
 | **Planned** | `agente-ofertas-worker` | Agent/worker over ofertas |
 | **Planned** | `mcp-server-ofertas` | MCP server for ofertas |
 
@@ -37,7 +37,9 @@ AGENTS.md                       # this file (workspace)
 docs/adr/                       # workspace / platform decisions
 apps/
   ofertas-scraper/              # first app (own go.mod, AGENTS.md, CONTEXT.md, ADRs)
-  # gateway-whatsapp/           # planned
+  ofertas-api/
+  ofertas-backoffice/
+  gateway-whatsapp/             # WhatsApp channel (ADR 0007)
   # agente-ofertas-worker/      # planned
   # mcp-server-ofertas/         # planned
 modules/                        # shared Go modules — create only when extracting
@@ -66,16 +68,17 @@ Register new modules in root `go.work` (`use ./apps/...` or `./modules/...`).
 - One Postgres for all apps (local via compose; cloud via any `DATABASE_URL`).
 - **Domain tables** (Oferta, Documento, Produto, …): shared contract in `modules/ofertas-store` (scraper ADR 0038). Any app may read/write through that module.
 - **Operational / channel state** (e.g. WhatsApp send tracking): separate tables — do not stuff into Oferta/Documento (workspace ADR 0006).
-- Env: each app has its own `.env` (gitignored) + `.env.example` (versioned). Point `DATABASE_URL` at the same instance when sharing data.
+- Env: scraper/api/backoffice keep `.env` per app. `gateway-whatsapp` reads the **root** `.env` (same file as compose; it walks up from cwd). Point `DATABASE_URL` at the same Postgres instance.
 
 ## Local environment
 
 ```bash
-cp .env.example .env              # senha local do Postgres (compose)
+cp .env.example .env              # senha local do Postgres (compose) + gateway-whatsapp
 docker compose up                 # from repo root — Postgres
 ./scripts/install-git-hooks.sh    # once per clone
 cd apps/ofertas-scraper && cp .env.example .env   # if needed
 # run scraper from apps/ofertas-scraper (paths in .env are relative to app cwd)
+# gateway: go run ./apps/gateway-whatsapp/cmd/gateway-whatsapp   # from repo root
 ```
 
 ### Git hooks
@@ -137,3 +140,4 @@ Default for this repo: work on **`main`**. Do **not** create a feature branch, o
 | ofertas-scraper | [`apps/ofertas-scraper/AGENTS.md`](./apps/ofertas-scraper/AGENTS.md) | [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md) |
 | ofertas-api | [`apps/ofertas-api/AGENTS.md`](./apps/ofertas-api/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0005) |
 | ofertas-backoffice | [`apps/ofertas-backoffice/AGENTS.md`](./apps/ofertas-backoffice/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0005) |
+| gateway-whatsapp | [`apps/gateway-whatsapp/AGENTS.md`](./apps/gateway-whatsapp/AGENTS.md) | [`apps/gateway-whatsapp/CONTEXT.md`](./apps/gateway-whatsapp/CONTEXT.md) |
