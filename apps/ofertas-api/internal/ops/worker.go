@@ -65,33 +65,48 @@ func (w *Worker) runOnce(ctx context.Context) error {
 	return nil
 }
 
-func (w *Worker) execScraper(ctx context.Context, op store.OperacaoPipeline) (string, error) {
+func scraperArgs(op store.OperacaoPipeline) ([]string, error) {
 	args := []string{"run", "./cmd/ofertas-scraper"}
 	switch op.Kind {
 	case store.OperacaoRun:
-		args = append(args, "run")
+		return append(args, "run"), nil
 	case store.OperacaoDiscover:
 		if op.FonteID == "" {
-			return "", fmt.Errorf("fonteId obrigatório")
+			return nil, fmt.Errorf("fonteId obrigatório")
 		}
-		args = append(args, "discover", string(op.FonteID))
+		return append(args, "discover", string(op.FonteID)), nil
 	case store.OperacaoReprocess:
 		if op.DocumentoID == "" {
-			return "", fmt.Errorf("documentoId obrigatório")
+			return nil, fmt.Errorf("documentoId obrigatório")
 		}
-		args = append(args, "reprocess", string(op.DocumentoID))
+		return append(args, "reprocess", string(op.DocumentoID)), nil
 	default:
-		return "", fmt.Errorf("op kind desconhecido: %s", op.Kind)
+		return nil, fmt.Errorf("op kind desconhecido: %s", op.Kind)
 	}
+}
+
+type goCommandFn func(ctx context.Context, dir string, env []string, args ...string) (string, error)
+
+var runGoCommand goCommandFn = defaultRunGoCommand
+
+func defaultRunGoCommand(ctx context.Context, dir string, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "go", args...)
-	cmd.Dir = w.cfg.ScraperDir
-	cmd.Env = append(os.Environ(),
-		"UPSTASH_REDIS_REST_URL="+w.cfg.UpstashURL,
-		"UPSTASH_REDIS_REST_TOKEN="+w.cfg.UpstashToken,
-		"ARTEFATO_ROOT="+w.cfg.ArtefatoRoot,
-	)
+	cmd.Dir = dir
+	cmd.Env = env
 	raw, err := cmd.CombinedOutput()
 	return string(raw), err
+}
+
+func (w *Worker) execScraper(ctx context.Context, op store.OperacaoPipeline) (string, error) {
+	args, err := scraperArgs(op)
+	if err != nil {
+		return "", err
+	}
+	env := append(os.Environ(),
+		"DATABASE_URL="+w.cfg.DatabaseURL,
+		"ARTEFATO_ROOT="+w.cfg.ArtefatoRoot,
+	)
+	return runGoCommand(ctx, w.cfg.ScraperDir, env, args...)
 }
 
 func tail(s string, max int) string {

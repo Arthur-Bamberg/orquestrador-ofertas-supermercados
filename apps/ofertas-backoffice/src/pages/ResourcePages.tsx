@@ -4,9 +4,12 @@ import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-r
 import { create, get, list, remove, update } from "../api";
 import { ErrorAlert } from "../components/ErrorAlert";
 import { FormField, fieldValueToString, parseFieldValue } from "../components/FormField";
-import { ValueView, formatValue } from "../components/ValueView";
-import type { EntityRecord, ResourceConfig } from "../domain";
+import { FormattedValue, formatValue } from "../components/ValueView";
+import { RefSelect } from "../components/RefSelect";
+import type { ColumnFormat } from "../display";
+import type { EntityField, EntityRecord, FilterField, ResourceConfig } from "../domain";
 import { getResource, resources } from "../resources";
+import { useCatalogLookups } from "../useCatalogLookups";
 import { DocumentArtifacts } from "./DocumentArtifacts";
 
 function useResourceConfig(): ResourceConfig | undefined {
@@ -17,6 +20,62 @@ function useResourceConfig(): ResourceConfig | undefined {
 function entityId(entity: EntityRecord, config: ResourceConfig): string {
   const key = config.idField ?? "id";
   return String(entity[key] ?? "");
+}
+
+function formatFromField(field: EntityField): ColumnFormat | undefined {
+  switch (field.kind) {
+    case "date":
+      return "date";
+    case "datetime":
+      return "datetime";
+    case "decimal":
+      return "currency";
+    case "ref":
+      return "ref";
+    default:
+      return undefined;
+  }
+}
+
+function FilterControl({
+  filter,
+  defaultValue,
+  lookups,
+  isLoading,
+}: {
+  filter: FilterField;
+  defaultValue: string;
+  lookups: ReturnType<typeof useCatalogLookups>["lookups"];
+  isLoading: boolean;
+}) {
+  if (filter.kind === "ref" && filter.ref) {
+    if (isLoading) {
+      return (
+        <select name={filter.name} defaultValue={defaultValue} disabled>
+          <option value={defaultValue}>{defaultValue || "Carregando..."}</option>
+        </select>
+      );
+    }
+
+    return (
+      <RefSelect name={filter.name} kind={filter.ref} lookups={lookups} defaultValue={defaultValue} emptyLabel="Todos" />
+    );
+  }
+
+  if (filter.kind === "select") {
+    return (
+      <select name={filter.name} defaultValue={defaultValue}>
+        <option value="">Todos</option>
+        {(filter.options ?? []).map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return <input name={filter.name} type={filter.kind} defaultValue={defaultValue} />;
 }
 
 function activeFilters(config: ResourceConfig, searchParams: URLSearchParams): Record<string, string> {
@@ -31,6 +90,7 @@ export function ResourceListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const filters = activeFilters(resource, searchParams);
+  const { lookups, isLoading: catalogLoading } = useCatalogLookups();
   const query = useQuery({
     queryKey: ["resource-list", resource.slug, filters],
     queryFn: () => list(resource.apiPath, filters),
@@ -38,7 +98,10 @@ export function ResourceListPage() {
   });
   const deleteMutation = useMutation({
     mutationFn: (id: string) => remove(resource.apiPath, id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["resource-list", resource.slug] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["resource-list", resource.slug] });
+      queryClient.invalidateQueries({ queryKey: ["catalog"] });
+    },
   });
 
   function submitFilters(event: React.FormEvent<HTMLFormElement>) {
@@ -84,18 +147,12 @@ export function ResourceListPage() {
           {config.filters.map((filter) => (
             <label key={filter.name}>
               <span>{filter.label}</span>
-              {filter.kind === "select" ? (
-                <select name={filter.name} defaultValue={filters[filter.name] ?? ""}>
-                  <option value="">Todos</option>
-                  {(filter.options ?? []).map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input name={filter.name} type={filter.kind} defaultValue={filters[filter.name] ?? ""} />
-              )}
+              <FilterControl
+                filter={filter}
+                defaultValue={filters[filter.name] ?? ""}
+                lookups={lookups}
+                isLoading={catalogLoading}
+              />
             </label>
           ))}
           <div className="filter-actions">
@@ -137,7 +194,13 @@ export function ResourceListPage() {
                           {column.name === (config.idField ?? "id") && id ? (
                             <Link to={encodeURIComponent(id)}>{id}</Link>
                           ) : (
-                            <ValueView value={entity[column.name]} />
+                            <FormattedValue
+                              value={entity[column.name]}
+                              format={column.format}
+                              refKind={column.ref}
+                              lookups={lookups}
+                              lookupsLoading={catalogLoading}
+                            />
                           )}
                         </td>
                       ))}
@@ -172,6 +235,7 @@ export function ResourceDetailPage() {
   const { id = "" } = useParams();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { lookups } = useCatalogLookups();
 
   const decodedId = decodeURIComponent(id);
   const query = useQuery({
@@ -183,6 +247,7 @@ export function ResourceDetailPage() {
     mutationFn: () => remove(resource.apiPath, decodedId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["resource-list", resource.slug] });
+      queryClient.invalidateQueries({ queryKey: ["catalog"] });
       navigate(`/${resource.slug}`);
     },
   });
@@ -224,14 +289,29 @@ export function ResourceDetailPage() {
       {query.data ? (
         <>
           <dl className="detail-list">
-            {Object.entries(query.data).map(([key, value]) => (
-              <div key={key}>
-                <dt>{key}</dt>
+            {config.fields.map((field) => (
+              <div key={field.name}>
+                <dt>{field.label}</dt>
                 <dd>
-                  <ValueView value={value} />
+                  <FormattedValue
+                    value={query.data?.[field.name]}
+                    format={formatFromField(field)}
+                    refKind={field.ref}
+                    lookups={lookups}
+                  />
                 </dd>
               </div>
             ))}
+            {Object.entries(query.data)
+              .filter(([key]) => !config.fields.some((field) => field.name === key))
+              .map(([key, value]) => (
+                <div key={key}>
+                  <dt>{key}</dt>
+                  <dd>
+                    <FormattedValue value={value} lookups={lookups} />
+                  </dd>
+                </div>
+              ))}
           </dl>
           {config.slug === "documentos" ? <DocumentDetailLinks documentoId={decodedId} /> : null}
           {config.slug === "documentos" ? <DocumentArtifacts documentoId={decodedId} /> : null}
@@ -269,6 +349,7 @@ export function ResourceFormPage({ mode }: { mode: "create" | "edit" }) {
   const decodedId = decodeURIComponent(id);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { lookups } = useCatalogLookups();
 
   const detailQuery = useQuery({
     queryKey: ["resource-detail", resource.slug, decodedId],
@@ -281,6 +362,7 @@ export function ResourceFormPage({ mode }: { mode: "create" | "edit" }) {
     onSuccess: (entity) => {
       queryClient.invalidateQueries({ queryKey: ["resource-list", resource.slug] });
       queryClient.invalidateQueries({ queryKey: ["resource-detail", resource.slug] });
+      queryClient.invalidateQueries({ queryKey: ["catalog"] });
       const nextId = entityId(entity, resource) || decodedId;
       navigate(nextId ? `/${resource.slug}/${encodeURIComponent(nextId)}` : `/${resource.slug}`);
     },
@@ -346,7 +428,13 @@ export function ResourceFormPage({ mode }: { mode: "create" | "edit" }) {
       {mode === "create" || detailQuery.data ? (
         <form className="entity-form" onSubmit={submit}>
           {resource.fields.map((field) => (
-            <FormField key={field.name} field={field} value={values[field.name] ?? ""} onChange={changeField} />
+            <FormField
+              key={field.name}
+              field={field}
+              value={values[field.name] ?? ""}
+              onChange={changeField}
+              lookups={lookups}
+            />
           ))}
           <div className="form-actions">
             <button type="submit" className="primary" disabled={mutation.isPending}>

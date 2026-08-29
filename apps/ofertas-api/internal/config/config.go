@@ -1,13 +1,14 @@
 package config
 
 import (
+	"bufio"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Config struct {
-	UpstashURL   string
-	UpstashToken string
+	DatabaseURL  string
 	HTTPAddr     string
 	CORSOrigin   string
 	ScraperDir   string
@@ -15,9 +16,9 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	loadDotEnv(".env")
 	cfg := Config{
-		UpstashURL:   os.Getenv("UPSTASH_REDIS_REST_URL"),
-		UpstashToken: os.Getenv("UPSTASH_REDIS_REST_TOKEN"),
+		DatabaseURL:  os.Getenv("DATABASE_URL"),
 		HTTPAddr:     envOr("HTTP_ADDR", ":8080"),
 		CORSOrigin:   envOr("CORS_ORIGIN", "http://localhost:5173"),
 		ScraperDir:   envOr("SCRAPER_DIR", "../ofertas-scraper"),
@@ -40,4 +41,35 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// loadDotEnv sets KEY=VALUE from a local .env if the key is not already in the environment.
+func loadDotEnv(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key == "" || os.Getenv(key) != "" {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if len(value) >= 2 {
+			if (value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'') {
+				value = value[1 : len(value)-1]
+			}
+		}
+		_ = os.Setenv(key, value)
+	}
 }

@@ -10,7 +10,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: ofertas-scraper <run|seed|discover <fonteId>|reprocess <documentoId>>")
+		fmt.Fprintln(os.Stderr, "usage: ofertas-scraper <run|seed|migrate-from-redis|discover <fonteId>|reprocess <documentoId>>")
 		os.Exit(2)
 	}
 	env := presentation.LoadEnv()
@@ -21,6 +21,8 @@ func main() {
 		err = presentation.RunDaily(ctx, env)
 	case "seed":
 		err = presentation.RunSeed(ctx, env)
+	case "migrate-from-redis":
+		err = presentation.RunMigrateFromRedis(ctx, env, os.Getenv("UPSTASH_REDIS_REST_URL"), os.Getenv("UPSTASH_REDIS_REST_TOKEN"))
 	case "discover":
 		if len(os.Args) != 3 {
 			fmt.Fprintln(os.Stderr, "usage: ofertas-scraper discover <fonteId>")

@@ -78,7 +78,7 @@ Page-1 grid alone is ~20 cells; Girando Sol 4kg @ R$ 24,90 with red “nesta emb
 2. **Change one lever** — prompt wording, per-page vs multi-page (ADR 0031), resolution (`RASTER_MAX_EDGE_PX`), or model. Prefer one change per live run (API cost/latency).
 3. **Re-run live test** — watch logs `gemini/cursor extrator page=N ofertas=M`; fail if total collapses.
 4. **Compare to images** — duplicates (same produto/valor twice), wrong `quantidades`, cartão/clube as second Oferta instead of `promocao`, “nesta embalagem … sai por” as second Oferta instead of `comparativo`, missed real dual-SKU insets, missing `promocao` on VuonCard/Clube/leve-pague cells.
-5. **Optional side folder** — `TestLiveFortArtefato` writes `…/{filename}/live-page-by-page/extrator-raw.json`, `uso-extrator.json` (token counts), and symlink `images/` → attempt images. Not a formal Artefato tentativa; just for human review. Redis Uso do Extrator is only on the real job (`run`).
+5. **Optional side folder** — `TestLiveFortArtefato` writes `…/{filename}/live-page-by-page/extrator-raw.json`, `uso-extrator.json` (token counts), and symlink `images/` → attempt images. Not a formal Artefato tentativa; just for human review. Uso do Extrator no catálogo is only on the real job (`run`).
 
 ## Prompt pitfalls already seen
 

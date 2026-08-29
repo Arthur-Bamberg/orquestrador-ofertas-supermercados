@@ -18,13 +18,13 @@ import (
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper/internal/infra/filenamedate"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper/internal/infra/fontehttp"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper/internal/infra/raster"
-	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper/internal/infra/upstash"
+	store "github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store"
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store/redismigrate"
 )
 
 // Env holds process configuration.
 type Env struct {
-	UpstashURL         string
-	UpstashToken       string
+	DatabaseURL        string
 	ArtefatoRoot       string
 	RasterMaxPx        int
 	RasterJPEGQ        int
@@ -52,8 +52,7 @@ func LoadEnv() Env {
 	provider := strings.ToLower(strings.TrimSpace(os.Getenv("EXTRATOR_PROVIDER")))
 	stub := os.Getenv("EXTRATOR_STUB") == "1" || (geminiKey == "" && cursorKey == "")
 	return Env{
-		UpstashURL:         os.Getenv("UPSTASH_REDIS_REST_URL"),
-		UpstashToken:       os.Getenv("UPSTASH_REDIS_REST_TOKEN"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
 		ArtefatoRoot:       envOr("ARTEFATO_ROOT", "./.data/artefatos"),
 		RasterMaxPx:        maxPx,
 		RasterJPEGQ:        jpegQ,
@@ -85,11 +84,20 @@ type seedFile struct {
 	Fontes   []domain.Fonte   `json:"fontes"`
 }
 
-// RunSeed upserts Mercados/Fontes from seed JSON into Redis.
-func RunSeed(ctx context.Context, env Env) error {
-	if env.UpstashURL == "" || env.UpstashToken == "" {
-		return fmt.Errorf("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN required")
+func openCatalog(ctx context.Context, env Env) (*store.Catalog, error) {
+	if env.DatabaseURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL required")
 	}
+	return store.Open(ctx, env.DatabaseURL)
+}
+
+// RunSeed upserts Mercados/Fontes from seed JSON into the catalog.
+func RunSeed(ctx context.Context, env Env) error {
+	catalog, err := openCatalog(ctx, env)
+	if err != nil {
+		return err
+	}
+	defer catalog.Close()
 	raw, err := os.ReadFile(env.SeedPath)
 	if err != nil {
 		return err
@@ -98,9 +106,8 @@ func RunSeed(ctx context.Context, env Env) error {
 	if err := json.Unmarshal(raw, &seed); err != nil {
 		return err
 	}
-	client := upstash.NewClient(env.UpstashURL, env.UpstashToken, nil)
-	mercados := upstash.NewMercadoRepo(client)
-	fontes := upstash.NewFonteRepo(client)
+	mercados := store.NewMercadoRepo(catalog)
+	fontes := store.NewFonteRepo(catalog)
 	for _, m := range seed.Mercados {
 		if m.ID == "" {
 			m.ID = domain.MercadoID(application.NewID())
@@ -123,22 +130,41 @@ func RunSeed(ctx context.Context, env Env) error {
 }
 
 func RunDiscover(ctx context.Context, env Env, fonteID string) error {
-	if env.UpstashURL == "" || env.UpstashToken == "" {
-		return fmt.Errorf("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN required")
+	catalog, err := openCatalog(ctx, env)
+	if err != nil {
+		return err
 	}
-	client := upstash.NewClient(env.UpstashURL, env.UpstashToken, nil)
+	defer catalog.Close()
 	deps := application.RunDailyJobDeps{
-		Fontes:     upstash.NewFonteRepo(client),
-		Documentos: upstash.NewDocumentoRepo(client),
+		Fontes:     store.NewFonteRepo(catalog),
+		Documentos: store.NewDocumentoRepo(catalog),
 		FonteHTTP:  fontehttp.New(http.DefaultClient),
 		Log:        log.Default(),
 	}
 	return application.DiscoverDocumentos(ctx, deps, domain.FonteID(fonteID))
 }
 
+func RunMigrateFromRedis(ctx context.Context, env Env, redisURL, redisToken string) error {
+	catalog, err := openCatalog(ctx, env)
+	if err != nil {
+		return err
+	}
+	defer catalog.Close()
+	if redisURL == "" || redisToken == "" {
+		return fmt.Errorf("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN required for migrate-from-redis")
+	}
+	src := redismigrate.NewClient(redisURL, redisToken, nil)
+	return redismigrate.CopyFromRedis(ctx, src, catalog)
+}
+
 // RunDaily wires adapters and runs the daily job.
 func RunDaily(ctx context.Context, env Env) error {
-	deps, err := buildRunDeps(ctx, env)
+	catalog, err := openCatalog(ctx, env)
+	if err != nil {
+		return err
+	}
+	defer catalog.Close()
+	deps, err := buildRunDeps(ctx, env, catalog)
 	if err != nil {
 		return err
 	}
@@ -152,19 +178,19 @@ func RunDaily(ctx context.Context, env Env) error {
 }
 
 func RunReprocess(ctx context.Context, env Env, documentoID string) error {
-	deps, err := buildRunDeps(ctx, env)
+	catalog, err := openCatalog(ctx, env)
+	if err != nil {
+		return err
+	}
+	defer catalog.Close()
+	deps, err := buildRunDeps(ctx, env, catalog)
 	if err != nil {
 		return err
 	}
 	return application.ReprocessDocumento(ctx, deps, domain.DocumentoID(documentoID))
 }
 
-func buildRunDeps(ctx context.Context, env Env) (application.RunDailyJobDeps, error) {
-	if env.UpstashURL == "" || env.UpstashToken == "" {
-		return application.RunDailyJobDeps{}, fmt.Errorf("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN required")
-	}
-	client := upstash.NewClient(env.UpstashURL, env.UpstashToken, nil)
-
+func buildRunDeps(ctx context.Context, env Env, catalog *store.Catalog) (application.RunDailyJobDeps, error) {
 	var ext domain.Extrator
 	if env.UseStubExtrator {
 		log.Printf("using Extrator stub (EXTRATOR_STUB=1 or no Extrator API key)")
@@ -175,7 +201,7 @@ func buildRunDeps(ctx context.Context, env Env) (application.RunDailyJobDeps, er
 		if err != nil {
 			return application.RunDailyJobDeps{}, err
 		}
-		cota := upstash.NewCotaRepo(client)
+		cota := store.NewCotaRepo(catalog)
 		switch env.ExtratorProvider {
 		case "cursor":
 			c, err := extrator.NewCursor(extrator.CursorConfig{
@@ -276,13 +302,13 @@ func buildRunDeps(ctx context.Context, env Env) (application.RunDailyJobDeps, er
 	}
 
 	return application.RunDailyJobDeps{
-		Fontes:              upstash.NewFonteRepo(client),
-		Documentos:          upstash.NewDocumentoRepo(client),
-		Produtos:            upstash.NewProdutoRepo(client),
-		Marcas:              upstash.NewMarcaRepo(client),
-		Ofertas:             upstash.NewOfertaRepo(client),
-		Falhas:              upstash.NewFalhaRepo(client),
-		Usos:                upstash.NewUsoExtratorRepo(client),
+		Fontes:              store.NewFonteRepo(catalog),
+		Documentos:          store.NewDocumentoRepo(catalog),
+		Produtos:            store.NewProdutoRepo(catalog),
+		Marcas:              store.NewMarcaRepo(catalog),
+		Ofertas:             store.NewOfertaRepo(catalog),
+		Falhas:              store.NewFalhaRepo(catalog),
+		Usos:                store.NewUsoExtratorRepo(catalog),
 		FonteHTTP:           fontehttp.New(http.DefaultClient),
 		Raster:              raster.NewPdftoppm(env.RasterMaxPx, env.RasterJPEGQ),
 		Extrator:            ext,

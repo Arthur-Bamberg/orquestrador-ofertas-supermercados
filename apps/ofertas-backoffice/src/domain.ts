@@ -1,3 +1,5 @@
+import type { ColumnFormat, RefKind } from "./display";
+
 export type JsonValue =
   | string
   | number
@@ -17,7 +19,8 @@ export type FieldKind =
   | "datetime"
   | "textarea"
   | "select"
-  | "json";
+  | "json"
+  | "ref";
 
 export type EntityField = {
   name: string;
@@ -26,18 +29,22 @@ export type EntityField = {
   required?: boolean;
   help?: string;
   options?: string[];
+  ref?: RefKind;
 };
 
 export type EntityColumn = {
   name: string;
   label: string;
+  format?: ColumnFormat;
+  ref?: RefKind;
 };
 
 export type FilterField = {
   name: string;
   label: string;
-  kind: "text" | "date" | "select";
+  kind: "text" | "date" | "select" | "ref";
   options?: string[];
+  ref?: RefKind;
 };
 
 export type ResourceConfig = {

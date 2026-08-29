@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs Go tests for every module in the workspace before allowing a commit.
+# Runs workspace tests before allowing a commit (Go modules + ofertas-backoffice).
 set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
@@ -15,3 +15,9 @@ while IFS= read -r dir; do
   echo "pre-commit: go test ./... (in ${dir#"$root"/})"
   (cd "$dir" && go test ./...)
 done < <(go list -f '{{.Dir}}' -m)
+
+backoffice="$root/apps/ofertas-backoffice"
+if [[ -f "$backoffice/package.json" ]]; then
+  echo "pre-commit: npm test (apps/ofertas-backoffice)"
+  (cd "$backoffice" && npm test)
+fi

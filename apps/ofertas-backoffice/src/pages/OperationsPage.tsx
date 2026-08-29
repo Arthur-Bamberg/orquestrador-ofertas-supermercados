@@ -3,8 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { normalizeList, request } from "../api";
 import { ErrorAlert } from "../components/ErrorAlert";
-import { ValueView } from "../components/ValueView";
+import { FormattedValue } from "../components/ValueView";
+import { RefSelect } from "../components/RefSelect";
+import type { ColumnFormat, RefKind } from "../display";
 import type { EntityRecord, OperationStatus } from "../domain";
+import { useCatalogLookups } from "../useCatalogLookups";
 
 function pendingStatus(status: OperationStatus | unknown): boolean {
   const normalized = String(status ?? "").toLowerCase();
@@ -13,6 +16,38 @@ function pendingStatus(status: OperationStatus | unknown): boolean {
 
 function operationId(operation: EntityRecord): string {
   return String(operation.id ?? operation.operacaoId ?? operation.operationId ?? "");
+}
+
+type OperationColumn = {
+  name: string;
+  label: string;
+  aliases?: string[];
+  format?: ColumnFormat;
+  ref?: RefKind;
+};
+
+const operationColumns: OperationColumn[] = [
+  { name: "id", label: "ID" },
+  { name: "kind", label: "Tipo", aliases: ["tipo", "type"] },
+  { name: "status", label: "Status", aliases: ["estado"] },
+  { name: "fonteId", label: "Fonte", format: "ref", ref: "fonte" },
+  { name: "documentoId", label: "Documento", format: "ref", ref: "documento" },
+  { name: "createdAt", label: "Criado", format: "datetime", aliases: ["criadoEm"] },
+  { name: "updatedAt", label: "Atualizado", format: "datetime", aliases: ["atualizadoEm", "finishedAt"] },
+];
+
+function columnValue(record: EntityRecord, column: OperationColumn): unknown {
+  if (record[column.name] !== undefined && record[column.name] !== null && record[column.name] !== "") {
+    return record[column.name];
+  }
+
+  for (const alias of column.aliases ?? []) {
+    if (record[alias] !== undefined && record[alias] !== null && record[alias] !== "") {
+      return record[alias];
+    }
+  }
+
+  return record[column.name];
 }
 
 function operationSections(payload: unknown): { queue: EntityRecord[]; history: EntityRecord[]; all: EntityRecord[] } {
@@ -34,6 +69,7 @@ export function OperationsPage() {
   const [searchParams] = useSearchParams();
   const [fonteId, setFonteId] = React.useState("");
   const [documentoId, setDocumentoId] = React.useState(searchParams.get("documentoId") ?? "");
+  const { lookups, isLoading: catalogLoading } = useCatalogLookups();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["ops"],
@@ -101,8 +137,22 @@ export function OperationsPage() {
           <p>Descobre novos Documentos de uma Fonte sem processá-los.</p>
           <form className="entity-form compact" onSubmit={submitDiscover}>
             <label>
-              <span>Fonte ID</span>
-              <input value={fonteId} onChange={(event) => setFonteId(event.target.value)} required />
+              <span>Fonte</span>
+              {catalogLoading ? (
+                <select disabled>
+                  <option>Carregando...</option>
+                </select>
+              ) : (
+                <RefSelect
+                  kind="fonte"
+                  lookups={lookups}
+                  required
+                  allowEmpty
+                  emptyLabel="Selecione"
+                  value={fonteId}
+                  onChange={setFonteId}
+                />
+              )}
             </label>
             <button type="submit" disabled={discoverMutation.isPending}>
               Discover Fonte
@@ -115,8 +165,22 @@ export function OperationsPage() {
           <p>Agenda nova tentativa de processamento para um Documento.</p>
           <form className="entity-form compact" onSubmit={submitReprocess}>
             <label>
-              <span>Documento ID</span>
-              <input value={documentoId} onChange={(event) => setDocumentoId(event.target.value)} required />
+              <span>Documento</span>
+              {catalogLoading ? (
+                <select disabled>
+                  <option>Carregando...</option>
+                </select>
+              ) : (
+                <RefSelect
+                  kind="documento"
+                  lookups={lookups}
+                  required
+                  allowEmpty
+                  emptyLabel="Selecione"
+                  value={documentoId}
+                  onChange={setDocumentoId}
+                />
+              )}
             </label>
             <button type="submit" disabled={reprocessMutation.isPending}>
               Reprocess Documento
@@ -128,8 +192,22 @@ export function OperationsPage() {
       {query.isLoading ? <p>Carregando Operações de Pipeline...</p> : null}
       {query.data ? (
         <>
-          <OperationTable title="Fila" operations={sections.queue} onCancel={cancelOperation} isCancelling={cancelMutation.isPending} />
-          <OperationTable title="Histórico" operations={sections.history} onCancel={cancelOperation} isCancelling={cancelMutation.isPending} />
+          <OperationTable
+            title="Fila"
+            operations={sections.queue}
+            lookups={lookups}
+            lookupsLoading={catalogLoading}
+            onCancel={cancelOperation}
+            isCancelling={cancelMutation.isPending}
+          />
+          <OperationTable
+            title="Histórico"
+            operations={sections.history}
+            lookups={lookups}
+            lookupsLoading={catalogLoading}
+            onCancel={cancelOperation}
+            isCancelling={cancelMutation.isPending}
+          />
           <details>
             <summary>Resposta bruta de Operações</summary>
             <pre className="json-preview">{JSON.stringify(query.data, null, 2)}</pre>
@@ -143,13 +221,13 @@ export function OperationsPage() {
 type OperationTableProps = {
   title: string;
   operations: EntityRecord[];
+  lookups: ReturnType<typeof useCatalogLookups>["lookups"];
+  lookupsLoading: boolean;
   isCancelling: boolean;
   onCancel: (operation: EntityRecord) => void;
 };
 
-function OperationTable({ title, operations, isCancelling, onCancel }: OperationTableProps) {
-  const columns = ["id", "tipo", "type", "status", "estado", "fonteId", "documentoId", "criadoEm", "createdAt", "atualizadoEm", "updatedAt"];
-
+function OperationTable({ title, operations, lookups, lookupsLoading, isCancelling, onCancel }: OperationTableProps) {
   return (
     <section className="card">
       <h3>{title}</h3>
@@ -157,8 +235,8 @@ function OperationTable({ title, operations, isCancelling, onCancel }: Operation
         <table>
           <thead>
             <tr>
-              {columns.map((column) => (
-                <th key={column}>{column}</th>
+              {operationColumns.map((column) => (
+                <th key={column.name}>{column.label}</th>
               ))}
               <th>Ações</th>
             </tr>
@@ -166,7 +244,7 @@ function OperationTable({ title, operations, isCancelling, onCancel }: Operation
           <tbody>
             {operations.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + 1}>Nenhuma Operação de Pipeline.</td>
+                <td colSpan={operationColumns.length + 1}>Nenhuma Operação de Pipeline.</td>
               </tr>
             ) : (
               operations.map((operation, index) => {
@@ -175,9 +253,15 @@ function OperationTable({ title, operations, isCancelling, onCancel }: Operation
 
                 return (
                   <tr key={id || index}>
-                    {columns.map((column) => (
-                      <td key={column}>
-                        <ValueView value={operation[column]} />
+                    {operationColumns.map((column) => (
+                      <td key={column.name}>
+                        <FormattedValue
+                          value={columnValue(operation, column)}
+                          format={column.format}
+                          refKind={column.ref}
+                          lookups={lookups}
+                          lookupsLoading={lookupsLoading}
+                        />
                       </td>
                     ))}
                     <td className="actions">

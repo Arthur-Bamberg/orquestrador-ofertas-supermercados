@@ -9,7 +9,7 @@ Workspace for supermarket-offers apps. It is **not** itself an application binar
 | Status | App | Role |
 |--------|-----|------|
 | **Current** | `ofertas-scraper` | Daily job: Fontes → Documentos → Extrator → Ofertas |
-| **Current** | `ofertas-api` | Go HTTP API over shared Redis (CRUD + pipeline ops; ADR 0005) |
+| **Current** | `ofertas-api` | Go HTTP API over shared Postgres (CRUD + pipeline ops; ADR 0005 / 0006) |
 | **Current** | `ofertas-backoffice` | Vite/React SPA backoffice (filters + screens; ADR 0005) |
 | **Planned** | `gateway-whatsapp` | WhatsApp channel gateway |
 | **Planned** | `agente-ofertas-worker` | Agent/worker over ofertas |
@@ -25,14 +25,14 @@ Create an app module only when implementing it — do not scaffold empty `apps/`
 | Layout | `apps/<name>` per deployable; `modules/<name>` for shared libs (lazy) |
 | Local infra | Root [`docker-compose.yml`](./docker-compose.yml) |
 | Deploy images | `apps/<name>/Dockerfile` when hosting that app (not required at port time) |
-| Shared data | One Redis/Upstash instance for all apps (ADR 0002) |
+| Shared data | One PostgreSQL instance for all apps (ADR 0006) |
 | Schedule / TZ | Per app (scraper: external cron, `America/Sao_Paulo`) |
 
 ## Repository layout
 
 ```
 go.work
-docker-compose.yml              # local stack (Redis + SRH today)
+docker-compose.yml              # local stack (Postgres today)
 AGENTS.md                       # this file (workspace)
 docs/adr/                       # workspace / platform decisions
 apps/
@@ -61,17 +61,18 @@ Register new modules in root `go.work` (`use ./apps/...` or `./modules/...`).
 - Prefer extracting after the second consumer is real — do not invent empty `modules/` “just in case”.
 - `presentation` → `application` → `domain` (and `infra` implements domain ports) inside each app unless an ADR says otherwise.
 
-## Shared Redis
+## Shared PostgreSQL
 
-- One Redis for all apps (local via compose SRH; cloud via Upstash).
-- **Domain keys** (Oferta, Documento, Produto, …): shared contract from the scraper (see app ADR 0019). Any app may read/write.
-- **Operational / channel state** (e.g. WhatsApp send tracking): app-specific key **prefix** — do not stuff into Oferta/Documento (workspace ADR 0002).
-- Env: each app has its own `.env` (gitignored) + `.env.example` (versioned). Point `UPSTASH_*` at the same instance when sharing data.
+- One Postgres for all apps (local via compose; cloud via any `DATABASE_URL`).
+- **Domain tables** (Oferta, Documento, Produto, …): shared contract in `modules/ofertas-store` (scraper ADR 0038). Any app may read/write through that module.
+- **Operational / channel state** (e.g. WhatsApp send tracking): separate tables — do not stuff into Oferta/Documento (workspace ADR 0006).
+- Env: each app has its own `.env` (gitignored) + `.env.example` (versioned). Point `DATABASE_URL` at the same instance when sharing data.
 
 ## Local environment
 
 ```bash
-docker compose up                 # from repo root — Redis + SRH
+cp .env.example .env              # senha local do Postgres (compose)
+docker compose up                 # from repo root — Postgres
 ./scripts/install-git-hooks.sh    # once per clone
 cd apps/ofertas-scraper && cp .env.example .env   # if needed
 # run scraper from apps/ofertas-scraper (paths in .env are relative to app cwd)
@@ -83,7 +84,22 @@ cd apps/ofertas-scraper && cp .env.example .env   # if needed
 ./scripts/install-git-hooks.sh
 ```
 
-Pre-commit runs `go test ./...` in **every** module in `go.work`. Do not use `--no-verify` unless explicitly required.
+Pre-commit runs `go test ./...` in **every** module in `go.work`, then `npm test` in `apps/ofertas-backoffice`. Do not use `--no-verify` unless explicitly required.
+
+## TDD (required)
+
+Grow production behavior with TDD. One **observable behavior** per cycle, through the public API of the package, type, or function — not an empty constructor test.
+
+1. Write the smallest **failing** test for the next behavior (RED)
+2. Write the smallest code that makes it pass (GREEN)
+3. Refactor the **test** (glossary names from `CONTEXT.md`, duplication, clarity)
+4. Refactor **production** code (tests stay green)
+
+Do **not** write all tests for a unit before any production code (horizontal slice).
+
+**Existing code:** characterization tests (test after the fact) lock current behavior; a failure is a bug to fix. Day-to-day work on new behavior uses the loop above.
+
+**Unit tests here:** ephemeral Postgres via `modules/ofertas-store/storetest` (embedded-postgres), no live Extrator, no `pdftoppm`. In-memory ports count as unit. Live Extrator stays opt-in (`LIVE_EXTRATOR=1`).
 
 ## Git workflow (agents)
 
@@ -108,10 +124,11 @@ Default for this repo: work on **`main`**. Do **not** create a feature branch, o
 - Scaffold planned apps before implementation
 - Import another app’s `internal/` packages
 - Copy-paste shared logic across apps
-- Put domain operational hacks into shared Oferta keys without an ADR
+- Put domain operational hacks into shared Oferta rows without an ADR
 - Commit `.env`, API keys, or `.data/` artefacts
 - Skip pre-commit with `--no-verify` unless the user explicitly asks
 - Create a branch or PR “by default” or because a skill suggests it — only when the user asks
+- Skip the TDD loop for new behavior (all tests first, or production before a failing test)
 
 ## App-specific docs
 

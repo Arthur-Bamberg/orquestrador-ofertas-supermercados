@@ -1,10 +1,13 @@
 import type { ChangeEvent } from "react";
+import type { CatalogLookups } from "../display";
 import type { EntityField, FieldKind } from "../domain";
+import { RefSelect } from "./RefSelect";
 
 type FormFieldProps = {
   field: EntityField;
   value: string;
   onChange: (name: string, value: string) => void;
+  lookups?: CatalogLookups;
 };
 
 export function fieldValueToString(value: unknown, kind: FieldKind): string {
@@ -31,6 +34,7 @@ export function parseFieldValue(field: EntityField, value: string): unknown {
     case "datetime":
     case "textarea":
     case "select":
+    case "ref":
       return value;
     case "number":
       return Number.parseInt(value, 10);
@@ -45,7 +49,7 @@ export function parseFieldValue(field: EntityField, value: string): unknown {
   }
 }
 
-export function FormField({ field, value, onChange }: FormFieldProps) {
+export function FormField({ field, value, onChange, lookups }: FormFieldProps) {
   const inputId = `field-${field.name}`;
   const commonProps = {
     id: inputId,
@@ -63,7 +67,7 @@ export function FormField({ field, value, onChange }: FormFieldProps) {
         {field.label}
         {field.required ? <em aria-label="obrigatório"> *</em> : null}
       </span>
-      {renderInput(field, commonProps)}
+      {renderInput(field, commonProps, value, onChange, lookups)}
       {field.help ? <small>{field.help}</small> : null}
     </label>
   );
@@ -77,7 +81,13 @@ type CommonInputProps = {
   onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
 };
 
-function renderInput(field: EntityField, commonProps: CommonInputProps) {
+function renderInput(
+  field: EntityField,
+  commonProps: CommonInputProps,
+  value: string,
+  onChange: (name: string, next: string) => void,
+  lookups?: CatalogLookups,
+) {
   switch (field.kind) {
     case "textarea":
     case "json":
@@ -92,6 +102,24 @@ function renderInput(field: EntityField, commonProps: CommonInputProps) {
             </option>
           ))}
         </select>
+      );
+    case "ref":
+      if (!field.ref || !lookups) {
+        return <input {...commonProps} type="text" />;
+      }
+
+      return (
+        <RefSelect
+          id={commonProps.id}
+          name={commonProps.name}
+          kind={field.ref}
+          lookups={lookups}
+          required={field.required}
+          allowEmpty
+          emptyLabel="Selecione"
+          value={value}
+          onChange={(next) => onChange(field.name, next)}
+        />
       );
     case "url":
       return <input {...commonProps} type="url" />;

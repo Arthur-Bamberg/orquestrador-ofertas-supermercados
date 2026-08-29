@@ -3,8 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { normalizeList, request } from "../api";
 import { ErrorAlert } from "../components/ErrorAlert";
+import { RefSelect } from "../components/RefSelect";
 import { ValueView } from "../components/ValueView";
 import type { EntityRecord } from "../domain";
+import { useCatalogLookups } from "../useCatalogLookups";
 
 const emptyFalha = {
   codigo: "",
@@ -16,6 +18,7 @@ export function FalhasExtracaoPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const documentoId = searchParams.get("documentoId") ?? "";
   const [draftDocumentoId, setDraftDocumentoId] = React.useState(documentoId);
+  const { lookups, isLoading: catalogLoading } = useCatalogLookups();
   const [editor, setEditor] = React.useState("[]");
   const [parseError, setParseError] = React.useState<Error | null>(null);
   const queryClient = useQueryClient();
@@ -107,8 +110,20 @@ export function FalhasExtracaoPage() {
 
       <form className="filters" onSubmit={applyFilter}>
         <label>
-          <span>Documento ID</span>
-          <input value={draftDocumentoId} onChange={(event) => setDraftDocumentoId(event.target.value)} />
+          <span>Documento</span>
+          {catalogLoading ? (
+            <select disabled>
+              <option>Carregando...</option>
+            </select>
+          ) : (
+            <RefSelect
+              kind="documento"
+              lookups={lookups}
+              value={draftDocumentoId}
+              onChange={setDraftDocumentoId}
+              emptyLabel="Selecione"
+            />
+          )}
         </label>
         <div className="filter-actions">
           <button type="submit">Carregar</button>
@@ -122,7 +137,7 @@ export function FalhasExtracaoPage() {
 
       <ErrorAlert error={parseError ?? query.error ?? saveMutation.error} />
 
-      {!documentoId ? <p>Informe um Documento ID para listar Falhas de Extração.</p> : null}
+      {!documentoId ? <p>Selecione um Documento para listar Falhas de Extração.</p> : null}
       {query.isLoading ? <p>Carregando Falhas de Extração...</p> : null}
       {documentoId && query.data ? (
         <div className="grid-two">

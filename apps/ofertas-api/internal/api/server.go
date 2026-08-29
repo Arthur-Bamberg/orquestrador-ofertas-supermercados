@@ -334,6 +334,30 @@ type ofertaPayload struct {
 	DocumentoIDs []store.DocumentoID `json:"documentoIds"`
 }
 
+func (p *ofertaPayload) UnmarshalJSON(data []byte) error {
+	if err := json.Unmarshal(data, &p.Oferta); err != nil {
+		return err
+	}
+	var extra struct {
+		DocumentoIDs []store.DocumentoID `json:"documentoIds"`
+	}
+	if err := json.Unmarshal(data, &extra); err != nil {
+		return err
+	}
+	p.DocumentoIDs = extra.DocumentoIDs
+	return nil
+}
+
+func (p ofertaPayload) documentoIDs() []store.DocumentoID {
+	if len(p.DocumentoIDs) > 0 {
+		return p.DocumentoIDs
+	}
+	if p.DocumentoID != "" {
+		return []store.DocumentoID{p.DocumentoID}
+	}
+	return nil
+}
+
 func (s *Server) listOfertas(w http.ResponseWriter, r *http.Request) {
 	items, err := s.catalog.ListOfertas(r.Context())
 	q := r.URL.Query()
@@ -363,7 +387,7 @@ func (s *Server) createOferta(w http.ResponseWriter, r *http.Request) {
 	if p.ID == "" {
 		p.ID = store.OfertaID(newID())
 	}
-	if err := s.catalog.SaveOferta(r.Context(), p.Oferta, p.DocumentoIDs); err != nil {
+	if err := s.catalog.SaveOferta(r.Context(), p.Oferta, p.documentoIDs()); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -381,7 +405,7 @@ func (s *Server) updateOferta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.ID = store.OfertaID(r.PathValue("id"))
-	writeResult(w, p, s.catalog.SaveOferta(r.Context(), p.Oferta, p.DocumentoIDs))
+	writeResult(w, p, s.catalog.SaveOferta(r.Context(), p.Oferta, p.documentoIDs()))
 }
 
 func (s *Server) deleteOferta(w http.ResponseWriter, r *http.Request) {

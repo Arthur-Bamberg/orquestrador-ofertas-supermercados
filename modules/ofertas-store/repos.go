@@ -7,7 +7,7 @@ import (
 
 type MercadoRepo struct{ catalog *Catalog }
 
-func NewMercadoRepo(c *Client) *MercadoRepo { return &MercadoRepo{catalog: NewCatalog(c)} }
+func NewMercadoRepo(c *Catalog) *MercadoRepo { return &MercadoRepo{catalog: c} }
 
 func (r *MercadoRepo) Save(ctx context.Context, m Mercado) error {
 	return r.catalog.SaveMercado(ctx, m)
@@ -30,7 +30,7 @@ func (r *MercadoRepo) List(ctx context.Context) ([]Mercado, error) {
 
 type FonteRepo struct{ catalog *Catalog }
 
-func NewFonteRepo(c *Client) *FonteRepo { return &FonteRepo{catalog: NewCatalog(c)} }
+func NewFonteRepo(c *Catalog) *FonteRepo { return &FonteRepo{catalog: c} }
 
 func (r *FonteRepo) Save(ctx context.Context, f Fonte) error {
 	return r.catalog.SaveFonte(ctx, f)
@@ -46,7 +46,7 @@ func (r *FonteRepo) List(ctx context.Context) ([]Fonte, error) {
 
 type ProdutoRepo struct{ catalog *Catalog }
 
-func NewProdutoRepo(c *Client) *ProdutoRepo { return &ProdutoRepo{catalog: NewCatalog(c)} }
+func NewProdutoRepo(c *Catalog) *ProdutoRepo { return &ProdutoRepo{catalog: c} }
 
 func (r *ProdutoRepo) GetByNomeNorm(ctx context.Context, nomeNorm string) (Produto, bool, error) {
 	return r.catalog.GetProdutoByNomeNorm(ctx, nomeNorm)
@@ -58,7 +58,7 @@ func (r *ProdutoRepo) Save(ctx context.Context, p Produto) error {
 
 type MarcaRepo struct{ catalog *Catalog }
 
-func NewMarcaRepo(c *Client) *MarcaRepo { return &MarcaRepo{catalog: NewCatalog(c)} }
+func NewMarcaRepo(c *Catalog) *MarcaRepo { return &MarcaRepo{catalog: c} }
 
 func (r *MarcaRepo) GetByNomeNorm(ctx context.Context, nomeNorm string) (Marca, bool, error) {
 	return r.catalog.GetMarcaByNomeNorm(ctx, nomeNorm)
@@ -70,7 +70,7 @@ func (r *MarcaRepo) Save(ctx context.Context, m Marca) error {
 
 type DocumentoRepo struct{ catalog *Catalog }
 
-func NewDocumentoRepo(c *Client) *DocumentoRepo { return &DocumentoRepo{catalog: NewCatalog(c)} }
+func NewDocumentoRepo(c *Catalog) *DocumentoRepo { return &DocumentoRepo{catalog: c} }
 
 func (r *DocumentoRepo) GetByIdentity(ctx context.Context, fonteID FonteID, filename, dia string) (Documento, bool, error) {
 	return r.catalog.GetDocumentoByIdentity(ctx, fonteID, filename, dia)
@@ -94,7 +94,7 @@ func (r *DocumentoRepo) ListDias(ctx context.Context, fonteID FonteID, filename 
 
 type OfertaRepo struct{ catalog *Catalog }
 
-func NewOfertaRepo(c *Client) *OfertaRepo { return &OfertaRepo{catalog: NewCatalog(c)} }
+func NewOfertaRepo(c *Catalog) *OfertaRepo { return &OfertaRepo{catalog: c} }
 
 func (r *OfertaRepo) GetByUniq(ctx context.Context, chave string) (Oferta, bool, error) {
 	return r.catalog.GetOfertaByUniq(ctx, chave)
@@ -114,7 +114,7 @@ func (r *OfertaRepo) ListDocumentoIDsByProduto(ctx context.Context, produtoID Pr
 
 type FalhaRepo struct{ catalog *Catalog }
 
-func NewFalhaRepo(c *Client) *FalhaRepo { return &FalhaRepo{catalog: NewCatalog(c)} }
+func NewFalhaRepo(c *Catalog) *FalhaRepo { return &FalhaRepo{catalog: c} }
 
 func (r *FalhaRepo) SaveAll(ctx context.Context, documentoID DocumentoID, falhas []FalhaExtracao) error {
 	return r.catalog.SaveFalhasDocumento(ctx, documentoID, falhas)
@@ -122,27 +122,22 @@ func (r *FalhaRepo) SaveAll(ctx context.Context, documentoID DocumentoID, falhas
 
 type UsoExtratorRepo struct{ catalog *Catalog }
 
-func NewUsoExtratorRepo(c *Client) *UsoExtratorRepo {
-	return &UsoExtratorRepo{catalog: NewCatalog(c)}
+func NewUsoExtratorRepo(c *Catalog) *UsoExtratorRepo {
+	return &UsoExtratorRepo{catalog: c}
 }
 
 func (r *UsoExtratorRepo) Save(ctx context.Context, uso UsoExtrator) error {
 	return r.catalog.SaveUsoExtrator(ctx, uso)
 }
 
-type CotaRepo struct{ c *Client }
+type CotaRepo struct{ catalog *Catalog }
 
-func NewCotaRepo(c *Client) *CotaRepo { return &CotaRepo{c: c} }
-
-func extratorCotaKey(provider, dia string) string {
-	return fmt.Sprintf("ofertas-scraper:extrator:%s:esgotado:%s", provider, dia)
-}
+func NewCotaRepo(c *Catalog) *CotaRepo { return &CotaRepo{catalog: c} }
 
 func (r *CotaRepo) Esgotado(ctx context.Context, provider, dia string) (bool, error) {
-	_, ok, err := r.c.Get(ctx, extratorCotaKey(provider, dia))
-	return ok, err
+	return r.catalog.Esgotado(ctx, provider, dia)
 }
 
 func (r *CotaRepo) MarcarEsgotado(ctx context.Context, provider, dia string) error {
-	return r.c.SetEX(ctx, extratorCotaKey(provider, dia), "1", 48*60*60)
+	return r.catalog.MarcarEsgotado(ctx, provider, dia)
 }

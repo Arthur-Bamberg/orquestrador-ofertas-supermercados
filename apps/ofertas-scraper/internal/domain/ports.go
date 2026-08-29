@@ -73,7 +73,7 @@ type OfertaRepository interface {
 	SaveAll(ctx context.Context, documentoID DocumentoID, ofertas []Oferta) error
 	ListByDocumento(ctx context.Context, documentoID DocumentoID) ([]Oferta, error)
 	GetByUniq(ctx context.Context, chave string) (Oferta, bool, error)
-	// ListDocumentoIDsByProduto returns Documento ids indexed under ofertas:produto:{produtoId} (ADR 0026).
+	// ListDocumentoIDsByProduto returns Documentos that currently associate Ofertas of this Produto (ADR 0026 / 0038).
 	ListDocumentoIDsByProduto(ctx context.Context, produtoID ProdutoID) ([]DocumentoID, error)
 }
 
@@ -101,7 +101,7 @@ type UsoExtratorPagina = store.UsoExtratorPagina
 // UsoExtrator records Extrator token consumption for one processing tentativa (ADR 0033/0037).
 type UsoExtrator = store.UsoExtrator
 
-// ExtratorCotaStore persists daily adapter quota exhaustion (ADR 0037; operational keys).
+// ExtratorCotaStore persists daily adapter quota exhaustion (ADR 0037 / 0038).
 type ExtratorCotaStore interface {
 	Esgotado(ctx context.Context, provider, dia string) (bool, error)
 	MarcarEsgotado(ctx context.Context, provider, dia string) error

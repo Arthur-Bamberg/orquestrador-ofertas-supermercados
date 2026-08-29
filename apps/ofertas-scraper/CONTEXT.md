@@ -61,7 +61,7 @@ Pedido administrativo para correr trabalho do scraper (job diário, descoberta n
 _Avoid_: job genérico, task, queue item (como sinónimo de domínio)
 
 **Uso do Extrator**:
-Registro de consumo de uma tentativa de extração de um Documento: path do Artefato da tentativa, nome do adapter do Extrator usado na tentativa, modelo, totais de tokens de input (prompt), cache e output, com detalhe por página quando houver várias chamadas. Persiste no Redis para consulta e espelha-se no Artefato da mesma tentativa. Não substitui o conteúdo extraído — só mensura o custo e qual Extrator/modelo atendeu a chamada. Também pode ser criado, alterado ou apagado na administração (espelho no Artefato da tentativa quando o ficheiro existir).
+Registro de consumo de uma tentativa de extração de um Documento: path do Artefato da tentativa, nome do adapter do Extrator usado na tentativa, modelo, totais de tokens de input (prompt), cache e output, com detalhe por página quando houver várias chamadas. Persiste no catálogo para consulta e espelha-se no Artefato da mesma tentativa. Não substitui o conteúdo extraído — só mensura o custo e qual Extrator/modelo atendeu a chamada. Também pode ser criado, alterado ou apagado na administração (espelho no Artefato da tentativa quando o ficheiro existir).
 _Avoid_: billing, fatura, métrica genérica, log de API
 
 ## Qualidade local

@@ -4,11 +4,14 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { normalizeList, request } from "../api";
 import { ErrorAlert } from "../components/ErrorAlert";
 import { FormField, fieldValueToString, parseFieldValue } from "../components/FormField";
-import { ValueView } from "../components/ValueView";
+import { FormattedValue } from "../components/ValueView";
+import { RefSelect } from "../components/RefSelect";
+import type { ColumnFormat, RefKind } from "../display";
 import type { EntityField, EntityRecord } from "../domain";
+import { useCatalogLookups } from "../useCatalogLookups";
 
 const usoFields: EntityField[] = [
-  { name: "documentoId", label: "Documento ID", kind: "text", required: true },
+  { name: "documentoId", label: "Documento", kind: "ref", ref: "documento", required: true },
   { name: "tentativa", label: "Tentativa", kind: "number", required: true },
   { name: "artefatoPath", label: "Path do Artefato", kind: "text", required: true },
   { name: "provider", label: "Provider", kind: "text" },
@@ -19,7 +22,16 @@ const usoFields: EntityField[] = [
   { name: "paginas", label: "Páginas", kind: "json", help: "JSON opcional com detalhe por página." },
 ];
 
-const usoColumns = ["documentoId", "tentativa", "provider", "model", "promptTokens", "cacheTokens", "outputTokens", "artefatoPath"];
+const usoColumns: { name: string; label: string; format?: ColumnFormat; ref?: RefKind }[] = [
+  { name: "documentoId", label: "Documento", format: "ref", ref: "documento" },
+  { name: "tentativa", label: "Tentativa" },
+  { name: "provider", label: "Provider" },
+  { name: "model", label: "Model" },
+  { name: "promptTokens", label: "Prompt Tokens" },
+  { name: "cacheTokens", label: "Cache Tokens" },
+  { name: "outputTokens", label: "Output Tokens" },
+  { name: "artefatoPath", label: "Artefato" },
+];
 
 function usoPath(documentoId: string, tentativa: string): string {
   return `/usos-extrator/${encodeURIComponent(documentoId)}/${encodeURIComponent(tentativa)}`;
@@ -33,6 +45,7 @@ export function UsoExtratorListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [draftDocumentoId, setDraftDocumentoId] = React.useState(searchParams.get("documentoId") ?? "");
   const documentoId = searchParams.get("documentoId") ?? "";
+  const { lookups, isLoading: catalogLoading } = useCatalogLookups();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["usos-extrator", documentoId],
@@ -78,8 +91,20 @@ export function UsoExtratorListPage() {
 
       <form className="filters" onSubmit={applyFilter}>
         <label>
-          <span>Documento ID</span>
-          <input value={draftDocumentoId} onChange={(event) => setDraftDocumentoId(event.target.value)} />
+          <span>Documento</span>
+          {catalogLoading ? (
+            <select disabled>
+              <option>Carregando...</option>
+            </select>
+          ) : (
+            <RefSelect
+              kind="documento"
+              lookups={lookups}
+              value={draftDocumentoId}
+              onChange={setDraftDocumentoId}
+              emptyLabel="Todos"
+            />
+          )}
         </label>
         <div className="filter-actions">
           <button type="submit">Filtrar</button>
@@ -102,7 +127,7 @@ export function UsoExtratorListPage() {
             <thead>
               <tr>
                 {usoColumns.map((column) => (
-                  <th key={column}>{column}</th>
+                  <th key={column.name}>{column.label}</th>
                 ))}
                 <th>Ações</th>
               </tr>
@@ -120,8 +145,14 @@ export function UsoExtratorListPage() {
                   return (
                     <tr key={usoKey(uso)}>
                       {usoColumns.map((column) => (
-                        <td key={column}>
-                          <ValueView value={uso[column]} />
+                        <td key={column.name}>
+                          <FormattedValue
+                            value={uso[column.name]}
+                            format={column.format}
+                            refKind={column.ref}
+                            lookups={lookups}
+                            lookupsLoading={catalogLoading}
+                          />
                         </td>
                       ))}
                       <td className="actions">
@@ -159,6 +190,7 @@ export function UsoExtratorDetailPage() {
     queryKey: ["uso-extrator-detail", decodedDocumentoId, decodedTentativa],
     queryFn: () => request<EntityRecord>(usoPath(decodedDocumentoId, decodedTentativa)),
   });
+  const { lookups } = useCatalogLookups();
   const deleteMutation = useMutation({
     mutationFn: () => request<void>(usoPath(decodedDocumentoId, decodedTentativa), { method: "DELETE" }),
     onSuccess: () => {
@@ -199,14 +231,29 @@ export function UsoExtratorDetailPage() {
       {query.isLoading ? <p>Carregando detalhe...</p> : null}
       {query.data ? (
         <dl className="detail-list">
-          {Object.entries(query.data).map(([key, value]) => (
-            <div key={key}>
-              <dt>{key}</dt>
+          {usoFields.map((field) => (
+            <div key={field.name}>
+              <dt>{field.label}</dt>
               <dd>
-                <ValueView value={value} />
+                <FormattedValue
+                  value={query.data?.[field.name]}
+                  format={field.kind === "ref" ? "ref" : undefined}
+                  refKind={field.ref}
+                  lookups={lookups}
+                />
               </dd>
             </div>
           ))}
+          {Object.entries(query.data)
+            .filter(([key]) => !usoFields.some((field) => field.name === key))
+            .map(([key, value]) => (
+              <div key={key}>
+                <dt>{key}</dt>
+                <dd>
+                  <FormattedValue value={value} lookups={lookups} />
+                </dd>
+              </div>
+            ))}
         </dl>
       ) : null}
     </section>
@@ -223,6 +270,7 @@ export function UsoExtratorFormPage({ mode }: { mode: "create" | "edit" }) {
   const [parseError, setParseError] = React.useState<Error | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { lookups } = useCatalogLookups();
   const detailQuery = useQuery({
     queryKey: ["uso-extrator-detail", decodedDocumentoId, decodedTentativa],
     queryFn: () => request<EntityRecord>(usoPath(decodedDocumentoId, decodedTentativa)),
@@ -291,7 +339,13 @@ export function UsoExtratorFormPage({ mode }: { mode: "create" | "edit" }) {
       {mode === "create" || detailQuery.data ? (
         <form className="entity-form" onSubmit={submit}>
           {usoFields.map((field) => (
-            <FormField key={field.name} field={field} value={values[field.name] ?? ""} onChange={changeField} />
+            <FormField
+              key={field.name}
+              field={field}
+              value={values[field.name] ?? ""}
+              onChange={changeField}
+              lookups={lookups}
+            />
           ))}
           <div className="form-actions">
             <button type="submit" className="primary" disabled={mutation.isPending}>

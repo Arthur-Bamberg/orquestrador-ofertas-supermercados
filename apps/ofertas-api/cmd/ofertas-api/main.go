@@ -20,13 +20,17 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if cfg.UpstashURL == "" || cfg.UpstashToken == "" {
-		fmt.Fprintln(os.Stderr, "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN required")
+	if cfg.DatabaseURL == "" {
+		fmt.Fprintln(os.Stderr, "DATABASE_URL required")
 		os.Exit(1)
 	}
 
-	client := store.NewClient(cfg.UpstashURL, cfg.UpstashToken, nil)
-	catalog := store.NewCatalog(client)
+	catalog, err := store.Open(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer catalog.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
