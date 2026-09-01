@@ -5,6 +5,7 @@ import (
 	"os"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/application"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/domain"
@@ -71,10 +72,58 @@ func TestStore_receberGrupoEMidiaRoundtrip(t *testing.T) {
 	}
 }
 
+func TestStore_listarConversasOrdenaPelaUltima(t *testing.T) {
+	repo := pgtest.New(t)
+	var n atomic.Int64
+	gw := application.New(application.Deps{
+		Allow: domain.NovaAllowlist(""),
+		Repo:  repo,
+		Canal: stubCanal{},
+		NewID: func() string {
+			return t.Name() + "-" + itoa(n.Add(1))
+		},
+	})
+	ctx := context.Background()
+	if _, err := gw.Receber(ctx, application.Entrada{
+		ProvedorID:   "wamid.old",
+		ConversaJID:  "5511999999999",
+		RemetenteJID: "5511999999999",
+		Corpo:        "antiga",
+		CriadoEm:     time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gw.Receber(ctx, application.Entrada{
+		ProvedorID:   "wamid.new",
+		ConversaJID:  "5511888888888",
+		RemetenteJID: "5511888888888",
+		Corpo:        "nova",
+		PushName:     "Beto",
+		CriadoEm:     time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := repo.ListarConversas(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len=%d", len(got))
+	}
+	if got[0].UltimaMensagem == nil || got[0].UltimaMensagem.Corpo != "nova" {
+		t.Fatalf("ordem %+v", got)
+	}
+	if got[0].TotalMensagens != 1 {
+		t.Fatalf("total=%d", got[0].TotalMensagens)
+	}
+}
+
 type stubCanal struct{}
 
-func (stubCanal) Enviar(context.Context, domain.JID, string, *domain.MidiaBytes) error { return nil }
-func (stubCanal) Conectado() bool                                                      { return true }
+func (stubCanal) Enviar(context.Context, domain.JID, string, *domain.MidiaBytes) (string, error) {
+	return "stub", nil
+}
+func (stubCanal) Conectado() bool { return true }
 
 type memMidia struct{ files map[string][]byte }
 

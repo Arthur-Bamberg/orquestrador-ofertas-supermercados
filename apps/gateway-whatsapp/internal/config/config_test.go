@@ -18,6 +18,8 @@ func TestLoad_leDotEnvDoDiretorioPai(t *testing.T) {
 	unset(t, "HTTP_ADDR")
 	unset(t, "WHATSAPP_STUB")
 	unset(t, "WHATSAPP_ACK_TEXTO")
+	unset(t, "WHATSAPP_AUTO_NOME")
+	unset(t, "WHATSAPP_AUTO_TEXTO")
 	unset(t, "WHATSAPP_SESSION_PATH")
 	unset(t, "MIDIA_ROOT")
 	body := "DATABASE_URL=postgres://from-root/ofertas\nGATEWAY_TOKEN=from-root\nWHATSAPP_ALLOWLIST=5511999999999\nWHATSAPP_STUB=1\n"
@@ -44,6 +46,8 @@ func TestLoad_defaultsEAllowlist(t *testing.T) {
 	t.Setenv("WHATSAPP_STUB", "1")
 	unset(t, "HTTP_ADDR")
 	unset(t, "WHATSAPP_ACK_TEXTO")
+	unset(t, "WHATSAPP_AUTO_NOME")
+	unset(t, "WHATSAPP_AUTO_TEXTO")
 	unset(t, "WHATSAPP_SESSION_PATH")
 	unset(t, "MIDIA_ROOT")
 
@@ -57,8 +61,34 @@ func TestLoad_defaultsEAllowlist(t *testing.T) {
 	if cfg.AckTexto == "" {
 		t.Fatal("ack default")
 	}
+	if cfg.AutoNome != "" || cfg.AutoTexto != "" {
+		t.Fatalf("resposta automática deveria nascer desligada: %+v", cfg)
+	}
 	if !filepath.IsAbs(cfg.SessionPath) || !filepath.IsAbs(cfg.MidiaRoot) {
 		t.Fatalf("paths %+v", cfg)
+	}
+}
+
+func TestLoad_leAutoNomeETexto(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("DATABASE_URL", "postgres://ofertas:ofertas@localhost:5432/ofertas?sslmode=disable")
+	t.Setenv("GATEWAY_TOKEN", "secret")
+	t.Setenv("WHATSAPP_ALLOWLIST", "5511999999999")
+	t.Setenv("WHATSAPP_STUB", "1")
+	t.Setenv("WHATSAPP_AUTO_NOME", "Bruna")
+	t.Setenv("WHATSAPP_AUTO_TEXTO", "Estou trabalhando, não posso no momento")
+	unset(t, "HTTP_ADDR")
+	unset(t, "WHATSAPP_ACK_TEXTO")
+	unset(t, "WHATSAPP_SESSION_PATH")
+	unset(t, "MIDIA_ROOT")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AutoNome != "Bruna" || cfg.AutoTexto != "Estou trabalhando, não posso no momento" {
+		t.Fatalf("%+v", cfg)
 	}
 }
 

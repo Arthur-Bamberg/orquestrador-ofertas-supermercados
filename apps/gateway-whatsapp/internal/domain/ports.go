@@ -10,7 +10,7 @@ type MidiaBytes struct {
 }
 
 type Canal interface {
-	Enviar(ctx context.Context, destino JID, corpo string, midia *MidiaBytes) error
+	Enviar(ctx context.Context, destino JID, corpo string, midia *MidiaBytes) (provedorID string, err error)
 	Conectado() bool
 }
 
@@ -20,9 +20,11 @@ type Repositorio interface {
 	SalvarMensagem(ctx context.Context, m Mensagem) error
 	MensagemPorProvedor(ctx context.Context, provedorID string) (Mensagem, bool, error)
 	ListarMensagens(ctx context.Context, conversaID ConversaID) ([]Mensagem, error)
+	ListarConversas(ctx context.Context) ([]ConversaResumo, error)
 	GetMensagem(ctx context.Context, id MensagemID) (Mensagem, bool, error)
 	GetConversa(ctx context.Context, id ConversaID) (Conversa, bool, error)
 	ConversaPorJID(ctx context.Context, jid JID) (Conversa, bool, error)
+	MarcarRecibo(ctx context.Context, provedorID string, status StatusEnvio) (bool, error)
 }
 
 type MidiaStore interface {

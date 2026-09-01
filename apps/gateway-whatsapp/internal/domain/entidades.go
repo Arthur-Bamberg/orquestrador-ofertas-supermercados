@@ -11,6 +11,7 @@ type TipoConversa string
 const (
 	ConversaDireta TipoConversa = "direta"
 	ConversaGrupo  TipoConversa = "grupo"
+	ConversaStatus TipoConversa = "status"
 )
 
 type Direcao string
@@ -23,9 +24,29 @@ const (
 type StatusEnvio string
 
 const (
-	StatusPendente StatusEnvio = "pendente"
-	StatusEnviado  StatusEnvio = "enviado"
-	StatusFalhou   StatusEnvio = "falhou"
+	StatusPendente    StatusEnvio = "pendente"
+	StatusEnviado     StatusEnvio = "enviado"
+	StatusFalhou      StatusEnvio = "falhou"
+	StatusEntregue    StatusEnvio = "entregue"
+	StatusLido        StatusEnvio = "lido"
+	StatusReproduzido StatusEnvio = "reproduzido"
+)
+
+type TipoMensagem string
+
+const (
+	MensagemTexto        TipoMensagem = "texto"
+	MensagemMidia        TipoMensagem = "midia"
+	MensagemReacao       TipoMensagem = "reacao"
+	MensagemRevogacao    TipoMensagem = "revogacao"
+	MensagemIndecifravel TipoMensagem = "indecifravel"
+)
+
+type OrigemMensagem string
+
+const (
+	OrigemVivo      OrigemMensagem = "vivo"
+	OrigemHistorico OrigemMensagem = "historico"
 )
 
 type TipoMidia string
@@ -39,14 +60,22 @@ const (
 )
 
 type Contato struct {
-	ID  ContatoID
-	JID JID
+	ID     ContatoID
+	JID    JID
+	JIDLID JID
 }
 
 type Conversa struct {
-	ID   ConversaID
-	JID  JID
-	Tipo TipoConversa
+	ID     ConversaID
+	JID    JID
+	JIDLID JID
+	Tipo   TipoConversa
+}
+
+type ConversaResumo struct {
+	Conversa
+	UltimaMensagem *Mensagem
+	TotalMensagens int
 }
 
 type Midia struct {
@@ -66,4 +95,8 @@ type Mensagem struct {
 	ProvedorID string
 	Status     StatusEnvio
 	CriadoEm   time.Time
+	Origem     OrigemMensagem
+	PushName   string
+	Tipo       TipoMensagem
+	Payload    string
 }

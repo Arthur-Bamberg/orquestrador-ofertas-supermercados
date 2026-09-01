@@ -18,18 +18,34 @@ func NovaAllowlist(csv string) Allowlist {
 		if jid == "" {
 			continue
 		}
-		a.jids[jid] = struct{}{}
+		a.add(jid)
 	}
 	return a
 }
 
-func (a Allowlist) PermiteConversa(raw string) bool {
-	jid := NormalizarJID(raw)
-	if jid == "" {
-		return false
+func (a Allowlist) add(jid JID) {
+	a.jids[jid] = struct{}{}
+	for _, v := range variantesBR(jid) {
+		a.jids[v] = struct{}{}
 	}
-	_, ok := a.jids[jid]
-	return ok
+}
+
+func (a Allowlist) PermiteConversa(raws ...string) bool {
+	for _, raw := range raws {
+		jid := NormalizarJID(raw)
+		if jid == "" {
+			continue
+		}
+		if _, ok := a.jids[jid]; ok {
+			return true
+		}
+		for _, v := range variantesBR(jid) {
+			if _, ok := a.jids[v]; ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func NormalizarJID(raw string) JID {
@@ -38,7 +54,20 @@ func NormalizarJID(raw string) JID {
 		return ""
 	}
 	if strings.Contains(s, "@") {
-		return JID(s)
+		user, server, ok := strings.Cut(s, "@")
+		if !ok || server == "" {
+			return ""
+		}
+		if i := strings.IndexByte(user, '.'); i >= 0 {
+			user = user[:i]
+		}
+		if i := strings.IndexByte(user, ':'); i >= 0 {
+			user = user[:i]
+		}
+		if user == "" {
+			return JID(server)
+		}
+		return JID(user + "@" + server)
 	}
 	var digits strings.Builder
 	for _, r := range s {
@@ -50,4 +79,45 @@ func NormalizarJID(raw string) JID {
 		return ""
 	}
 	return JID(digits.String() + "@s.whatsapp.net")
+}
+
+func variantesBR(jid JID) []JID {
+	user, server, ok := strings.Cut(string(jid), "@")
+	if !ok || server != "s.whatsapp.net" || !strings.HasPrefix(user, "55") {
+		return nil
+	}
+	for _, r := range user {
+		if r < '0' || r > '9' {
+			return nil
+		}
+	}
+	switch len(user) {
+	case 12:
+		return []JID{JID(user[:4] + "9" + user[4:] + "@s.whatsapp.net")}
+	case 13:
+		if user[4] == '9' {
+			return []JID{JID(user[:4] + user[5:] + "@s.whatsapp.net")}
+		}
+	}
+	return nil
+}
+
+func Identidade(raw, pn, lid string) (JID, JID) {
+	rawN := NormalizarJID(raw)
+	pnN := NormalizarJID(pn)
+	lidN := NormalizarJID(lid)
+	if pnN == "" && strings.HasSuffix(string(rawN), "@s.whatsapp.net") {
+		pnN = rawN
+	}
+	if lidN == "" && strings.HasSuffix(string(rawN), "@lid") {
+		lidN = rawN
+	}
+	jid := pnN
+	if jid == "" {
+		jid = rawN
+	}
+	if lidN == "" && strings.HasSuffix(string(jid), "@lid") {
+		lidN = jid
+	}
+	return jid, lidN
 }

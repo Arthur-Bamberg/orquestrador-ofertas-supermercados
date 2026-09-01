@@ -12,6 +12,7 @@ type Config struct {
 	HTTPAddr     string
 	CORSOrigin   string
 	ScraperDir   string
+	ScraperBin   string
 	ArtefatoRoot string
 }
 
@@ -22,12 +23,19 @@ func Load() (Config, error) {
 		HTTPAddr:     envOr("HTTP_ADDR", ":8080"),
 		CORSOrigin:   envOr("CORS_ORIGIN", "http://localhost:5173"),
 		ScraperDir:   envOr("SCRAPER_DIR", "../ofertas-scraper"),
+		ScraperBin:   os.Getenv("SCRAPER_BIN"),
 		ArtefatoRoot: envOr("ARTEFATO_ROOT", "../ofertas-scraper/.data/artefatos"),
 	}
 	var err error
 	cfg.ScraperDir, err = filepath.Abs(cfg.ScraperDir)
 	if err != nil {
 		return Config{}, err
+	}
+	if cfg.ScraperBin != "" {
+		cfg.ScraperBin, err = filepath.Abs(cfg.ScraperBin)
+		if err != nil {
+			return Config{}, err
+		}
 	}
 	cfg.ArtefatoRoot, err = filepath.Abs(cfg.ArtefatoRoot)
 	if err != nil {

@@ -13,6 +13,7 @@ func TestLoad_EnvAndDefaults(t *testing.T) {
 	t.Setenv("HTTP_ADDR", ":9090")
 	t.Setenv("CORS_ORIGIN", "http://front.test")
 	t.Setenv("SCRAPER_DIR", dir)
+	t.Setenv("SCRAPER_BIN", filepath.Join(dir, "ofertas-scraper"))
 	t.Setenv("ARTEFATO_ROOT", filepath.Join(dir, "art"))
 
 	cfg, err := Load()
@@ -27,6 +28,9 @@ func TestLoad_EnvAndDefaults(t *testing.T) {
 	}
 	if cfg.ScraperDir != dir {
 		t.Fatalf("scraperDir=%s want %s", cfg.ScraperDir, dir)
+	}
+	if cfg.ScraperBin != filepath.Join(dir, "ofertas-scraper") {
+		t.Fatalf("scraperBin=%s", cfg.ScraperBin)
 	}
 	if cfg.ArtefatoRoot != filepath.Join(dir, "art") {
 		t.Fatalf("artefatoRoot=%s", cfg.ArtefatoRoot)

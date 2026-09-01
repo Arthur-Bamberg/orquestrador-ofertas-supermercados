@@ -61,21 +61,33 @@ func main() {
 	}
 
 	gw := application.New(application.Deps{
-		Allow:    domain.NovaAllowlist(cfg.Allowlist),
-		Repo:     store,
-		Canal:    channel,
-		Midias:   midia.Local{Root: cfg.MidiaRoot},
-		AckTexto: cfg.AckTexto,
-		NewID:    func() string { return uuid.NewString() },
+		Allow:     domain.NovaAllowlist(cfg.Allowlist),
+		Repo:      store,
+		Canal:     channel,
+		Midias:    midia.Local{Root: cfg.MidiaRoot},
+		AckTexto:  cfg.AckTexto,
+		AutoNome:  cfg.AutoNome,
+		AutoTexto: cfg.AutoTexto,
+		NewID:     func() string { return uuid.NewString() },
 	})
 
 	if wa != nil {
 		wa.SetHandler(func(_ context.Context, in application.Entrada) {
 			go func() {
-				if _, err := gw.Receber(context.Background(), in); err != nil {
+				got, err := gw.Receber(context.Background(), in)
+				if err != nil {
 					log.Printf("receber: %v", err)
+					return
+				}
+				if got.Aceita {
+					log.Printf("mensagem id=%s conversa=%s direcao=%s origem=%s duplicada=%v", got.Mensagem.ID, got.Conversa.JID, got.Mensagem.Direcao, got.Mensagem.Origem, got.Duplicada)
 				}
 			}()
+		})
+		wa.SetReciboHandler(func(_ context.Context, provedorID string, st domain.StatusEnvio) {
+			if err := gw.MarcarRecibo(context.Background(), provedorID, st); err != nil {
+				log.Printf("recibo: %v", err)
+			}
 		})
 		if err := wa.Connect(ctx); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -83,7 +95,7 @@ func main() {
 		}
 	}
 
-	server := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.New(gw, cfg.GatewayToken)}
+	server := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.New(gw, cfg.GatewayToken, cfg.CORSOrigin)}
 	go func() {
 		<-ctx.Done()
 		_ = server.Shutdown(context.Background())

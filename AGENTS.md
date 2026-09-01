@@ -23,16 +23,16 @@ Create an app module only when implementing it — do not scaffold empty `apps/`
 |---------|--------|
 | Language | Go (`go.work`, Go 1.24+) |
 | Layout | `apps/<name>` per deployable; `modules/<name>` for shared libs (lazy) |
-| Local infra | Root [`docker-compose.yml`](./docker-compose.yml) |
-| Deploy images | `apps/<name>/Dockerfile` when hosting that app (not required at port time) |
+| Local infra | Root [`docker-compose.yml`](./docker-compose.yml) — Postgres + apps (ADR 0008) |
+| Deploy images | `apps/<name>/Dockerfile` |
 | Shared data | One PostgreSQL instance for all apps (ADR 0006) |
-| Schedule / TZ | Per app (scraper: external cron, `America/Sao_Paulo`) |
+| Schedule / TZ | Per app (scraper: external cron or `docker compose run`, `America/Sao_Paulo`) |
 
 ## Repository layout
 
 ```
 go.work
-docker-compose.yml              # local stack (Postgres today)
+docker-compose.yml              # local stack (Postgres + apps)
 AGENTS.md                       # this file (workspace)
 docs/adr/                       # workspace / platform decisions
 apps/
@@ -68,17 +68,19 @@ Register new modules in root `go.work` (`use ./apps/...` or `./modules/...`).
 - One Postgres for all apps (local via compose; cloud via any `DATABASE_URL`).
 - **Domain tables** (Oferta, Documento, Produto, …): shared contract in `modules/ofertas-store` (scraper ADR 0038). Any app may read/write through that module.
 - **Operational / channel state** (e.g. WhatsApp send tracking): separate tables — do not stuff into Oferta/Documento (workspace ADR 0006).
-- Env: scraper/api/backoffice keep `.env` per app. `gateway-whatsapp` reads the **root** `.env` (same file as compose; it walks up from cwd). Point `DATABASE_URL` at the same Postgres instance.
+- Env: scraper/api/backoffice keep `.env` per app for host-side `go run` / `npm`. `gateway-whatsapp` and Compose read the **root** `.env`. Point host `DATABASE_URL` at `localhost`; containers use hostname `postgres` (ADR 0008).
 
 ## Local environment
 
 ```bash
-cp .env.example .env              # senha local do Postgres (compose) + gateway-whatsapp
-docker compose up                 # from repo root — Postgres
+cp .env.example .env              # senha local do Postgres + canal + extrator
+docker compose up --build         # from repo root — Postgres, API :8080, backoffice :5173, gateway :8090
+docker compose run --rm ofertas-scraper seed
+docker compose run --rm ofertas-scraper run
 ./scripts/install-git-hooks.sh    # once per clone
-cd apps/ofertas-scraper && cp .env.example .env   # if needed
-# run scraper from apps/ofertas-scraper (paths in .env are relative to app cwd)
-# gateway: go run ./apps/gateway-whatsapp/cmd/gateway-whatsapp   # from repo root
+cd apps/ofertas-scraper && cp .env.example .env   # only if you `go run` the CLI on the host
+# host scraper: paths in apps/ofertas-scraper/.env are relative to that cwd
+# host gateway: go run ./apps/gateway-whatsapp/cmd/gateway-whatsapp   # optional; Compose is the default
 ```
 
 ### Git hooks

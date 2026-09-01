@@ -99,37 +99,114 @@ func (s *Store) TruncateAll(ctx context.Context) error {
 }
 
 func (s *Store) UpsertContato(ctx context.Context, c domain.Contato) (domain.Contato, error) {
-	var existing domain.Contato
-	err := s.pool.QueryRow(ctx, `SELECT id, jid FROM whatsapp.contato WHERE jid=$1`, string(c.JID)).Scan(&existing.ID, &existing.JID)
-	if err == nil {
-		return existing, nil
-	}
-	if err != pgx.ErrNoRows {
+	existing, ok, err := s.findContato(ctx, c.JID, c.JIDLID)
+	if err != nil {
 		return domain.Contato{}, err
 	}
-	_, err = s.pool.Exec(ctx, `INSERT INTO whatsapp.contato (id, jid) VALUES ($1, $2)`, string(c.ID), string(c.JID))
+	if ok {
+		return s.mergeContato(ctx, existing, c)
+	}
+	_, err = s.pool.Exec(ctx, `INSERT INTO whatsapp.contato (id, jid, jid_lid) VALUES ($1, $2, $3)`,
+		string(c.ID), string(c.JID), string(c.JIDLID))
 	if err != nil {
 		return domain.Contato{}, err
 	}
 	return c, nil
 }
 
-func (s *Store) UpsertConversa(ctx context.Context, c domain.Conversa) (domain.Conversa, error) {
-	var existing domain.Conversa
-	var tipo string
-	err := s.pool.QueryRow(ctx, `SELECT id, jid, tipo FROM whatsapp.conversa WHERE jid=$1`, string(c.JID)).Scan(&existing.ID, &existing.JID, &tipo)
-	if err == nil {
-		existing.Tipo = domain.TipoConversa(tipo)
+func (s *Store) findContato(ctx context.Context, keys ...domain.JID) (domain.Contato, bool, error) {
+	var c domain.Contato
+	var lid string
+	for _, k := range keys {
+		if k == "" {
+			continue
+		}
+		err := s.pool.QueryRow(ctx, `SELECT id, jid, jid_lid FROM whatsapp.contato WHERE jid=$1 OR jid_lid=$1`, string(k)).Scan(&c.ID, &c.JID, &lid)
+		if err == pgx.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return domain.Contato{}, false, err
+		}
+		c.JIDLID = domain.JID(lid)
+		return c, true, nil
+	}
+	return domain.Contato{}, false, nil
+}
+
+func (s *Store) mergeContato(ctx context.Context, existing, in domain.Contato) (domain.Contato, error) {
+	jid, lid := existing.JID, existing.JIDLID
+	if lid == "" && in.JIDLID != "" {
+		lid = in.JIDLID
+	}
+	if strings.HasSuffix(string(jid), "@lid") && in.JID != "" && !strings.HasSuffix(string(in.JID), "@lid") {
+		jid = in.JID
+	}
+	if jid == existing.JID && lid == existing.JIDLID {
 		return existing, nil
 	}
-	if err != pgx.ErrNoRows {
+	_, err := s.pool.Exec(ctx, `UPDATE whatsapp.contato SET jid=$2, jid_lid=$3 WHERE id=$1`, string(existing.ID), string(jid), string(lid))
+	if err != nil {
+		return domain.Contato{}, err
+	}
+	existing.JID, existing.JIDLID = jid, lid
+	return existing, nil
+}
+
+func (s *Store) UpsertConversa(ctx context.Context, c domain.Conversa) (domain.Conversa, error) {
+	existing, ok, err := s.findConversa(ctx, c.JID, c.JIDLID)
+	if err != nil {
 		return domain.Conversa{}, err
 	}
-	_, err = s.pool.Exec(ctx, `INSERT INTO whatsapp.conversa (id, jid, tipo) VALUES ($1, $2, $3)`, string(c.ID), string(c.JID), string(c.Tipo))
+	if ok {
+		return s.mergeConversa(ctx, existing, c)
+	}
+	_, err = s.pool.Exec(ctx, `INSERT INTO whatsapp.conversa (id, jid, jid_lid, tipo) VALUES ($1, $2, $3, $4)`,
+		string(c.ID), string(c.JID), string(c.JIDLID), string(c.Tipo))
 	if err != nil {
 		return domain.Conversa{}, err
 	}
 	return c, nil
+}
+
+func (s *Store) findConversa(ctx context.Context, keys ...domain.JID) (domain.Conversa, bool, error) {
+	var c domain.Conversa
+	var tipo, lid string
+	for _, k := range keys {
+		if k == "" {
+			continue
+		}
+		err := s.pool.QueryRow(ctx, `SELECT id, jid, jid_lid, tipo FROM whatsapp.conversa WHERE jid=$1 OR jid_lid=$1`, string(k)).Scan(&c.ID, &c.JID, &lid, &tipo)
+		if err == pgx.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return domain.Conversa{}, false, err
+		}
+		c.JIDLID = domain.JID(lid)
+		c.Tipo = domain.TipoConversa(tipo)
+		return c, true, nil
+	}
+	return domain.Conversa{}, false, nil
+}
+
+func (s *Store) mergeConversa(ctx context.Context, existing, in domain.Conversa) (domain.Conversa, error) {
+	jid, lid := existing.JID, existing.JIDLID
+	if lid == "" && in.JIDLID != "" {
+		lid = in.JIDLID
+	}
+	if strings.HasSuffix(string(jid), "@lid") && in.JID != "" && !strings.HasSuffix(string(in.JID), "@lid") {
+		jid = in.JID
+	}
+	if jid == existing.JID && lid == existing.JIDLID {
+		return existing, nil
+	}
+	_, err := s.pool.Exec(ctx, `UPDATE whatsapp.conversa SET jid=$2, jid_lid=$3 WHERE id=$1`, string(existing.ID), string(jid), string(lid))
+	if err != nil {
+		return domain.Conversa{}, err
+	}
+	existing.JID, existing.JIDLID = jid, lid
+	return existing, nil
 }
 
 func (s *Store) SalvarMensagem(ctx context.Context, m domain.Mensagem) error {
@@ -140,11 +217,17 @@ func (s *Store) SalvarMensagem(ctx context.Context, m domain.Mensagem) error {
 		midiaFile = m.Midia.Filename
 		midiaMIME = m.Midia.MIME
 	}
+	origem := string(m.Origem)
+	if origem == "" {
+		origem = string(domain.OrigemVivo)
+	}
+	payload := payloadJSON(m.Payload)
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO whatsapp.mensagem (
 			id, conversa_id, contato_id, direcao, corpo, provedor_id, status,
-			midia_tipo, midia_path, midia_filename, midia_mime, criado_em
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			midia_tipo, midia_path, midia_filename, midia_mime, criado_em,
+			origem, push_name, tipo, payload
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb)
 		ON CONFLICT (id) DO UPDATE SET
 			status = EXCLUDED.status,
 			corpo = EXCLUDED.corpo,
@@ -152,10 +235,22 @@ func (s *Store) SalvarMensagem(ctx context.Context, m domain.Mensagem) error {
 			midia_tipo = EXCLUDED.midia_tipo,
 			midia_path = EXCLUDED.midia_path,
 			midia_filename = EXCLUDED.midia_filename,
-			midia_mime = EXCLUDED.midia_mime
+			midia_mime = EXCLUDED.midia_mime,
+			origem = EXCLUDED.origem,
+			push_name = EXCLUDED.push_name,
+			tipo = EXCLUDED.tipo,
+			payload = EXCLUDED.payload
 	`, string(m.ID), string(m.ConversaID), string(m.ContatoID), string(m.Direcao), m.Corpo, m.ProvedorID, string(m.Status),
-		midiaTipo, midiaPath, midiaFile, midiaMIME, m.CriadoEm)
+		midiaTipo, midiaPath, midiaFile, midiaMIME, m.CriadoEm,
+		origem, m.PushName, string(m.Tipo), payload)
 	return err
+}
+
+func payloadJSON(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return "{}"
+	}
+	return raw
 }
 
 func (s *Store) MensagemPorProvedor(ctx context.Context, provedorID string) (domain.Mensagem, bool, error) {
@@ -183,35 +278,120 @@ func (s *Store) ListarMensagens(ctx context.Context, conversaID domain.ConversaI
 	return out, rows.Err()
 }
 
+func (s *Store) ListarConversas(ctx context.Context) ([]domain.ConversaResumo, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT c.id, c.jid, c.jid_lid, c.tipo,
+			(SELECT count(*) FROM whatsapp.mensagem m WHERE m.conversa_id = c.id),
+			`+msgColsPrefixed("u")+`
+		FROM whatsapp.conversa c
+		LEFT JOIN LATERAL (
+			SELECT `+msgCols+`
+			FROM whatsapp.mensagem
+			WHERE conversa_id = c.id
+			ORDER BY criado_em DESC, id DESC
+			LIMIT 1
+		) u ON true
+		ORDER BY u.criado_em DESC NULLS LAST, c.id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.ConversaResumo
+	for rows.Next() {
+		var r domain.ConversaResumo
+		var tipo, lid string
+		var total int
+		var midiaTipo, midiaPath, midiaFile, midiaMIME, origem, msgTipo *string
+		var payload []byte
+		var msgID, convID, contatoID, direcao, corpo, provedorID, status *string
+		var criadoEm *time.Time
+		var pushName *string
+		err := rows.Scan(
+			&r.ID, &r.JID, &lid, &tipo, &total,
+			&msgID, &convID, &contatoID, &direcao, &corpo, &provedorID, &status,
+			&midiaTipo, &midiaPath, &midiaFile, &midiaMIME, &criadoEm, &origem, &pushName, &msgTipo, &payload,
+		)
+		if err != nil {
+			return nil, err
+		}
+		r.JIDLID = domain.JID(lid)
+		r.Tipo = domain.TipoConversa(tipo)
+		r.TotalMensagens = total
+		if msgID != nil {
+			m := domain.Mensagem{
+				ID:         domain.MensagemID(*msgID),
+				ConversaID: domain.ConversaID(deref(convID)),
+				ContatoID:  domain.ContatoID(deref(contatoID)),
+				Direcao:    domain.Direcao(deref(direcao)),
+				Corpo:      deref(corpo),
+				ProvedorID: deref(provedorID),
+				Status:     domain.StatusEnvio(deref(status)),
+				Origem:     domain.OrigemMensagem(deref(origem)),
+				PushName:   deref(pushName),
+				Tipo:       domain.TipoMensagem(deref(msgTipo)),
+			}
+			if criadoEm != nil {
+				m.CriadoEm = *criadoEm
+			}
+			if deref(midiaTipo) != "" || deref(midiaPath) != "" {
+				m.Midia = &domain.Midia{Tipo: domain.TipoMidia(deref(midiaTipo)), Path: deref(midiaPath), Filename: deref(midiaFile), MIME: deref(midiaMIME)}
+			}
+			m.Payload = strings.TrimSpace(string(payload))
+			if m.Payload == "{}" {
+				m.Payload = ""
+			}
+			r.UltimaMensagem = &m
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func msgColsPrefixed(alias string) string {
+	parts := strings.Split(msgCols, ", ")
+	out := make([]string, len(parts))
+	for i, p := range parts {
+		out[i] = alias + "." + p
+	}
+	return strings.Join(out, ", ")
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 func (s *Store) GetConversa(ctx context.Context, id domain.ConversaID) (domain.Conversa, bool, error) {
 	var c domain.Conversa
-	var tipo string
-	err := s.pool.QueryRow(ctx, `SELECT id, jid, tipo FROM whatsapp.conversa WHERE id=$1`, string(id)).Scan(&c.ID, &c.JID, &tipo)
+	var tipo, lid string
+	err := s.pool.QueryRow(ctx, `SELECT id, jid, jid_lid, tipo FROM whatsapp.conversa WHERE id=$1`, string(id)).Scan(&c.ID, &c.JID, &lid, &tipo)
 	if err == pgx.ErrNoRows {
 		return domain.Conversa{}, false, nil
 	}
 	if err != nil {
 		return domain.Conversa{}, false, err
 	}
+	c.JIDLID = domain.JID(lid)
 	c.Tipo = domain.TipoConversa(tipo)
 	return c, true, nil
 }
 
 func (s *Store) ConversaPorJID(ctx context.Context, jid domain.JID) (domain.Conversa, bool, error) {
-	var c domain.Conversa
-	var tipo string
-	err := s.pool.QueryRow(ctx, `SELECT id, jid, tipo FROM whatsapp.conversa WHERE jid=$1`, string(jid)).Scan(&c.ID, &c.JID, &tipo)
-	if err == pgx.ErrNoRows {
-		return domain.Conversa{}, false, nil
-	}
-	if err != nil {
-		return domain.Conversa{}, false, err
-	}
-	c.Tipo = domain.TipoConversa(tipo)
-	return c, true, nil
+	return s.findConversa(ctx, jid)
 }
 
-const msgCols = `id, conversa_id, contato_id, direcao, corpo, provedor_id, status, midia_tipo, midia_path, midia_filename, midia_mime, criado_em`
+func (s *Store) MarcarRecibo(ctx context.Context, provedorID string, status domain.StatusEnvio) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `UPDATE whatsapp.mensagem SET status=$2 WHERE provedor_id=$1 AND provedor_id <> ''`, provedorID, string(status))
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+const msgCols = `id, conversa_id, contato_id, direcao, corpo, provedor_id, status, midia_tipo, midia_path, midia_filename, midia_mime, criado_em, origem, push_name, tipo, payload`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -230,17 +410,21 @@ func (s *Store) scanOne(ctx context.Context, q string, arg any) (domain.Mensagem
 
 func scanMensagem(row rowScanner) (domain.Mensagem, error) {
 	var m domain.Mensagem
-	var midiaTipo, midiaPath, midiaFile, midiaMIME string
+	var midiaTipo, midiaPath, midiaFile, midiaMIME, origem, tipo string
+	var payload []byte
 	err := row.Scan(&m.ID, &m.ConversaID, &m.ContatoID, &m.Direcao, &m.Corpo, &m.ProvedorID, &m.Status,
-		&midiaTipo, &midiaPath, &midiaFile, &midiaMIME, &m.CriadoEm)
+		&midiaTipo, &midiaPath, &midiaFile, &midiaMIME, &m.CriadoEm, &origem, &m.PushName, &tipo, &payload)
 	if err != nil {
 		return domain.Mensagem{}, err
 	}
 	if midiaTipo != "" || midiaPath != "" {
 		m.Midia = &domain.Midia{Tipo: domain.TipoMidia(midiaTipo), Path: midiaPath, Filename: midiaFile, MIME: midiaMIME}
 	}
-	if m.CriadoEm.IsZero() {
-		m.CriadoEm = time.Time{}
+	m.Origem = domain.OrigemMensagem(origem)
+	m.Tipo = domain.TipoMensagem(tipo)
+	m.Payload = strings.TrimSpace(string(payload))
+	if m.Payload == "{}" {
+		m.Payload = ""
 	}
 	return m, nil
 }

@@ -18,11 +18,11 @@ type Envio struct {
 	Midia   *domain.MidiaBytes
 }
 
-func (s *Stub) Enviar(_ context.Context, destino domain.JID, corpo string, midia *domain.MidiaBytes) error {
+func (s *Stub) Enviar(_ context.Context, destino domain.JID, corpo string, midia *domain.MidiaBytes) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Envios = append(s.Envios, Envio{Destino: destino, Corpo: corpo, Midia: midia})
-	return nil
+	return "stub", nil
 }
 
 func (s *Stub) Conectado() bool { return true }

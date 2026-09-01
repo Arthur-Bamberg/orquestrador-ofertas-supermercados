@@ -185,6 +185,24 @@ func (s *Server) deleteFonte(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listProdutos(w http.ResponseWriter, r *http.Request) {
 	items, err := s.catalog.ListProdutos(r.Context())
+	q := r.URL.Query()
+	if err == nil && q.Get("nome") != "" {
+		nome := q.Get("nome")
+		items = filter(items, func(p store.Produto) bool {
+			return containsFold(p.Nome, nome) || containsFold(p.NomeNorm, nome)
+		})
+	}
+	if err == nil && q.Get("categoria") != "" {
+		cat := q.Get("categoria")
+		items = filter(items, func(p store.Produto) bool {
+			for _, c := range p.Categorias {
+				if containsFold(c, cat) {
+					return true
+				}
+			}
+			return false
+		})
+	}
 	writeResult(w, items, err)
 }
 
@@ -269,6 +287,10 @@ func (s *Server) listDocumentos(w http.ResponseWriter, r *http.Request) {
 	if err == nil && q.Get("estado") != "" {
 		estado := store.EstadoDocumento(q.Get("estado"))
 		items = filter(items, func(d store.Documento) bool { return d.Estado == estado })
+	}
+	if err == nil && q.Get("dia") != "" {
+		dia := q.Get("dia")
+		items = filter(items, func(d store.Documento) bool { return d.Dia == dia })
 	}
 	writeResult(w, items, err)
 }
@@ -376,7 +398,36 @@ func (s *Server) listOfertas(w http.ResponseWriter, r *http.Request) {
 		marcaID := store.MarcaID(q.Get("marcaId"))
 		items = filter(items, func(o store.Oferta) bool { return o.MarcaID != nil && *o.MarcaID == marcaID })
 	}
+	if err == nil && q.Get("texto") != "" {
+		items, err = s.filterOfertasTexto(r, items)
+	}
 	writeResult(w, items, err)
+}
+
+func (s *Server) filterOfertasTexto(r *http.Request, items []store.Oferta) ([]store.Oferta, error) {
+	texto := r.URL.Query().Get("texto")
+	produtos, err := s.catalog.ListProdutos(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	marcas, err := s.catalog.ListMarcas(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	produtoMatch := map[store.ProdutoID]bool{}
+	for _, p := range produtos {
+		produtoMatch[p.ID] = containsFold(p.Nome, texto) || containsFold(p.NomeNorm, texto)
+	}
+	marcaMatch := map[store.MarcaID]bool{}
+	for _, m := range marcas {
+		marcaMatch[m.ID] = containsFold(m.Nome, texto) || containsFold(m.NomeNorm, texto)
+	}
+	return filter(items, func(o store.Oferta) bool {
+		if produtoMatch[o.ProdutoID] {
+			return true
+		}
+		return o.MarcaID != nil && marcaMatch[*o.MarcaID]
+	}), nil
 }
 
 func (s *Server) createOferta(w http.ResponseWriter, r *http.Request) {
@@ -704,6 +755,10 @@ func filter[T any](in []T, keep func(T) bool) []T {
 		}
 	}
 	return out
+}
+
+func containsFold(haystack, needle string) bool {
+	return strings.Contains(strings.ToLower(haystack), strings.ToLower(needle))
 }
 
 func newID() string {

@@ -105,6 +105,40 @@ func TestEntityHTTP_CRUDAndConflicts(t *testing.T) {
 		if len(items) != 1 || items[0].ID != "d2" {
 			t.Fatalf("filtro estado=%v", items)
 		}
+		if res := doJSON(t, h, http.MethodPost, "/api/documentos", `{"id":"d3","fonteId":"f1","mercadoId":"m1","filename":"c.pdf","dia":"2026-08-01","estado":"concluido"}`); res.Code != http.StatusCreated {
+			t.Fatalf("documento3 POST %d %s", res.Code, res.Body.String())
+		}
+		res = doJSON(t, h, http.MethodGet, "/api/documentos?dia=2026-08-01", "")
+		if err := json.NewDecoder(res.Body).Decode(&items); err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 1 || items[0].ID != "d3" {
+			t.Fatalf("filtro dia=%v", items)
+		}
+	})
+
+	t.Run("Produto_filtros", func(t *testing.T) {
+		if res := doJSON(t, h, http.MethodPost, "/api/produtos", `{"id":"p2","nome":"Feijão preto","nomeNorm":"feijao preto","categorias":["mercearia","feijao"]}`); res.Code != http.StatusCreated {
+			t.Fatalf("produto2 POST %d %s", res.Code, res.Body.String())
+		}
+		res := doJSON(t, h, http.MethodGet, "/api/produtos?nome=FEIJ", "")
+		if res.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+		}
+		var items []store.Produto
+		if err := json.NewDecoder(res.Body).Decode(&items); err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 1 || items[0].ID != "p2" {
+			t.Fatalf("filtro nome=%v", items)
+		}
+		res = doJSON(t, h, http.MethodGet, "/api/produtos?categoria=feijao", "")
+		if err := json.NewDecoder(res.Body).Decode(&items); err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 1 || items[0].ID != "p2" {
+			t.Fatalf("filtro categoria=%v", items)
+		}
 	})
 
 	t.Run("Oferta_CRUD_e_filtro", func(t *testing.T) {
@@ -127,6 +161,25 @@ func TestEntityHTTP_CRUDAndConflicts(t *testing.T) {
 		}
 		if len(items) != 1 {
 			t.Fatalf("filtro produtoId=%v", items)
+		}
+		body2 := `{"id":"o-feijao","produtoId":"p2","marcaId":"ma1","mercadoId":"m1","valor":8,"quantidades":[1],"medida":"unidade","dataInicio":"2026-07-21","dataExpiracao":"2026-07-22","documentoIds":["d1"]}`
+		res = doJSON(t, h, http.MethodPost, "/api/ofertas", body2)
+		if res.Code != http.StatusCreated {
+			t.Fatalf("POST oferta feijao %d %s", res.Code, res.Body.String())
+		}
+		res = doJSON(t, h, http.MethodGet, "/api/ofertas?texto=FEIJ", "")
+		if err := json.NewDecoder(res.Body).Decode(&items); err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 1 || items[0].ID != "o-feijao" {
+			t.Fatalf("filtro texto produto=%v", items)
+		}
+		res = doJSON(t, h, http.MethodGet, "/api/ofertas?texto=camil", "")
+		if err := json.NewDecoder(res.Body).Decode(&items); err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 1 || items[0].ID != "o-feijao" {
+			t.Fatalf("filtro texto marca=%v", items)
 		}
 	})
 

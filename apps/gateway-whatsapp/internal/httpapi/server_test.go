@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/application"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/domain"
@@ -18,7 +21,7 @@ import (
 
 func TestHealthReadyEEnvios(t *testing.T) {
 	gw, disconnected := newGW(t, true), newGW(t, false)
-	h := httpapi.New(gw, "secret")
+	h := httpapi.New(gw, "secret", "")
 
 	res := httptest.NewRecorder()
 	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/health", nil))
@@ -27,7 +30,7 @@ func TestHealthReadyEEnvios(t *testing.T) {
 	}
 
 	res = httptest.NewRecorder()
-	httpapi.New(disconnected, "secret").ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/ready", nil))
+	httpapi.New(disconnected, "secret", "").ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/ready", nil))
 	if res.Code != http.StatusServiceUnavailable {
 		t.Fatalf("ready off %d", res.Code)
 	}
@@ -58,6 +61,147 @@ func TestHealthReadyEEnvios(t *testing.T) {
 	}
 	if msg.Corpo != "oi" || msg.Midia == nil || msg.Status != domain.StatusEnviado {
 		t.Fatalf("%+v", msg)
+	}
+}
+
+func TestRastroHTTP_conversasMensagensMidiaCORS(t *testing.T) {
+	gw := newGW(t, true)
+	ctx := context.Background()
+	old := time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC)
+	mid := time.Date(2026, 8, 1, 11, 0, 0, 0, time.UTC)
+	novo := time.Date(2026, 8, 2, 10, 0, 0, 0, time.UTC)
+	primeira, err := gw.Receber(ctx, application.Entrada{
+		ProvedorID:   "wamid.1",
+		ConversaJID:  "5511999999999",
+		RemetenteJID: "5511999999999",
+		Corpo:        "um",
+		PushName:     "Ana",
+		CriadoEm:     old,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gw.Receber(ctx, application.Entrada{
+		ProvedorID:   "wamid.2",
+		ConversaJID:  "5511999999999",
+		RemetenteJID: "5511999999999",
+		Corpo:        "dois",
+		PushName:     "Ana",
+		CriadoEm:     mid,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	comMidia, err := gw.Receber(ctx, application.Entrada{
+		ProvedorID:   "wamid.3",
+		ConversaJID:  "5511999999999",
+		RemetenteJID: "5511999999999",
+		Corpo:        "foto",
+		PushName:     "Ana",
+		CriadoEm:     novo,
+		Midia: &domain.MidiaBytes{
+			Tipo:     domain.MidiaImagem,
+			Filename: "a.jpg",
+			MIME:     "image/jpeg",
+			Conteudo: []byte{1, 2, 3},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gw.Receber(ctx, application.Entrada{
+		ProvedorID:   "wamid.g",
+		ConversaJID:  "120363abc@g.us",
+		RemetenteJID: "5511888888888",
+		Grupo:        true,
+		Corpo:        "grupo",
+		PushName:     "Beto",
+		CriadoEm:     novo.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h := httpapi.New(gw, "secret", "http://localhost:5173")
+	req := httptest.NewRequest(http.MethodGet, "/conversas", nil)
+	res := httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list %d %s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Fatalf("cors=%q", got)
+	}
+	var conversas []map[string]any
+	if err := json.NewDecoder(res.Body).Decode(&conversas); err != nil {
+		t.Fatal(err)
+	}
+	if len(conversas) != 2 {
+		t.Fatalf("conversas=%v", conversas)
+	}
+	if conversas[0]["tipo"] != "grupo" || conversas[0]["permitido"] != false {
+		t.Fatalf("grupo primeiro %+v", conversas[0])
+	}
+	if conversas[1]["permitido"] != true {
+		t.Fatalf("direta permitido %+v", conversas[1])
+	}
+	if _, ok := conversas[0]["jid"]; !ok {
+		t.Fatal("jid camelCase")
+	}
+
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/conversas?tipo=grupo", nil))
+	conversas = nil
+	if err := json.NewDecoder(res.Body).Decode(&conversas); err != nil {
+		t.Fatal(err)
+	}
+	if len(conversas) != 1 || conversas[0]["tipo"] != "grupo" {
+		t.Fatalf("filtro tipo %v", conversas)
+	}
+
+	cid := string(primeira.Conversa.ID)
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/conversas/"+cid, nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("get conversa %d %s", res.Code, res.Body.String())
+	}
+
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/conversas/"+cid+"/mensagens?limit=2", nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("msgs %d %s", res.Code, res.Body.String())
+	}
+	var msgs []map[string]any
+	if err := json.NewDecoder(res.Body).Decode(&msgs); err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 2 || msgs[0]["corpo"] != "dois" || msgs[1]["corpo"] != "foto" {
+		t.Fatalf("pagina recente cronologica %v", msgs)
+	}
+	antes := msgs[0]["criadoEm"].(string)
+	antesID := msgs[0]["id"].(string)
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/conversas/"+cid+"/mensagens?limit=2&antesCriadoEm="+antes+"&antesId="+antesID, nil))
+	msgs = nil
+	if err := json.NewDecoder(res.Body).Decode(&msgs); err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || msgs[0]["corpo"] != "um" {
+		t.Fatalf("cursor anteriores %v", msgs)
+	}
+
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/mensagens/"+string(comMidia.Mensagem.ID)+"/midia", nil))
+	if res.Code != http.StatusOK || res.Header().Get("Content-Type") != "image/jpeg" || res.Body.String() != "\x01\x02\x03" {
+		t.Fatalf("midia %d %q %q", res.Code, res.Header().Get("Content-Type"), res.Body.String())
+	}
+
+	opt := httptest.NewRequest(http.MethodOptions, "/conversas", nil)
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, opt)
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("options %d", res.Code)
+	}
+	if !strings.Contains(res.Header().Get("Access-Control-Allow-Headers"), "Authorization") {
+		t.Fatalf("allow headers %q", res.Header().Get("Access-Control-Allow-Headers"))
 	}
 }
 
@@ -160,7 +304,49 @@ func (m *memRepo) MensagemPorProvedor(_ context.Context, provedorID string) (dom
 }
 
 func (m *memRepo) ListarMensagens(_ context.Context, conversaID domain.ConversaID) ([]domain.Mensagem, error) {
-	return nil, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.Mensagem
+	for _, msg := range m.msgs {
+		if msg.ConversaID == conversaID {
+			out = append(out, msg)
+		}
+	}
+	return out, nil
+}
+
+func (m *memRepo) ListarConversas(_ context.Context) ([]domain.ConversaResumo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]domain.ConversaResumo, 0, len(m.conversas))
+	for _, c := range m.conversas {
+		r := domain.ConversaResumo{Conversa: c}
+		for _, msg := range m.msgs {
+			if msg.ConversaID != c.ID {
+				continue
+			}
+			r.TotalMensagens++
+			cp := msg
+			if r.UltimaMensagem == nil || msg.CriadoEm.After(r.UltimaMensagem.CriadoEm) {
+				r.UltimaMensagem = &cp
+			}
+		}
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		ti, tj := time.Time{}, time.Time{}
+		if out[i].UltimaMensagem != nil {
+			ti = out[i].UltimaMensagem.CriadoEm
+		}
+		if out[j].UltimaMensagem != nil {
+			tj = out[j].UltimaMensagem.CriadoEm
+		}
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		return string(out[i].ID) < string(out[j].ID)
+	})
+	return out, nil
 }
 
 func (m *memRepo) GetMensagem(_ context.Context, id domain.MensagemID) (domain.Mensagem, bool, error) {
@@ -171,9 +357,25 @@ func (m *memRepo) GetMensagem(_ context.Context, id domain.MensagemID) (domain.M
 }
 
 func (m *memRepo) GetConversa(_ context.Context, id domain.ConversaID) (domain.Conversa, bool, error) {
-	return domain.Conversa{}, false, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.conversas[id]
+	return c, ok, nil
 }
 
 func (m *memRepo) ConversaPorJID(_ context.Context, jid domain.JID) (domain.Conversa, bool, error) {
 	return domain.Conversa{}, false, nil
+}
+
+func (m *memRepo) MarcarRecibo(_ context.Context, provedorID string, status domain.StatusEnvio) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	id, ok := m.byProv[provedorID]
+	if !ok {
+		return false, nil
+	}
+	msg := m.msgs[id]
+	msg.Status = status
+	m.msgs[id] = msg
+	return true, nil
 }

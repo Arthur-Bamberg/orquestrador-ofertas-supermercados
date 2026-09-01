@@ -1,0 +1,13 @@
+.git
+.githooks
+.scratch
+.data
+**/.data
+.env
+**/.env
+node_modules
+**/node_modules
+dist
+**/dist
+**/bin
+*.exe

@@ -1,21 +1,106 @@
-# Local stack (workspace ADR 0004 / 0006). Apps use DATABASE_URL → Postgres :5432.
-# Senha: copie `.env.example` na raiz para `.env` (gitignored). docker compose lê POSTGRES_PASSWORD de lá.
+# Local stack (workspace ADR 0004 / 0006 / 0008). Apps and Postgres run in Compose.
+# Senha: copie `.env.example` na raiz para `.env` (gitignored).
+# DATABASE_URL no `.env` aponta a localhost (go run / psql no host). Nos
+# contentores, Compose substitui pelo hostname `postgres`.
+
+x-database-url: &database-url "postgres://${POSTGRES_USER:-ofertas}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ofertas}?sslmode=disable"
+
 services:
   postgres:
     image: postgres:16-alpine
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: ofertas
+      POSTGRES_USER: ${POSTGRES_USER:-ofertas}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy .env.example to .env at repo root}
-      POSTGRES_DB: ofertas
+      POSTGRES_DB: ${POSTGRES_DB:-ofertas}
     volumes:
       - ofertas_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ofertas -d ofertas"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ofertas} -d ${POSTGRES_DB:-ofertas}"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  ofertas-api:
+    build:
+      context: .
+      dockerfile: apps/ofertas-api/Dockerfile
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      DATABASE_URL: *database-url
+      HTTP_ADDR: ":8080"
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      SCRAPER_BIN: /usr/local/bin/ofertas-scraper
+      SCRAPER_DIR: /scraper
+      ARTEFATO_ROOT: /data/artefatos
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - ./apps/ofertas-scraper/.data/artefatos:/data/artefatos
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+
+  ofertas-backoffice:
+    build:
+      context: ./apps/ofertas-backoffice
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8080}
+        VITE_GATEWAY_BASE: ${VITE_GATEWAY_BASE:-http://localhost:8090}
+        VITE_GATEWAY_TOKEN: ${GATEWAY_TOKEN:-}
+    ports:
+      - "5173:80"
+    depends_on:
+      - ofertas-api
+    restart: unless-stopped
+
+  gateway-whatsapp:
+    build:
+      context: ./apps/gateway-whatsapp
+      dockerfile: Dockerfile
+    ports:
+      - "8090:8090"
+    env_file: .env
+    environment:
+      DATABASE_URL: *database-url
+      HTTP_ADDR: ":8090"
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      WHATSAPP_SESSION_PATH: /data/whatsmeow.db
+      MIDIA_ROOT: /data/midia
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - ./.data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    tty: true
+    restart: unless-stopped
+
+  # One-shot CLI (ADR 0005). Not started by `up`.
+  # docker compose run --rm ofertas-scraper seed
+  # docker compose run --rm ofertas-scraper run
+  ofertas-scraper:
+    build:
+      context: .
+      dockerfile: apps/ofertas-scraper/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: *database-url
+      ARTEFATO_ROOT: /data/artefatos
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - ./apps/ofertas-scraper/.data/artefatos:/data/artefatos
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - jobs
 
 volumes:
   ofertas_pg:

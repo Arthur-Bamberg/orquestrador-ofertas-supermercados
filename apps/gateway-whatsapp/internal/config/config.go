@@ -13,9 +13,12 @@ type Config struct {
 	GatewayToken string
 	Allowlist    string
 	AckTexto     string
+	AutoNome     string
+	AutoTexto    string
 	StubCanal    bool
 	SessionPath  string
 	MidiaRoot    string
+	CORSOrigin   string
 }
 
 func Load() (Config, error) {
@@ -26,9 +29,12 @@ func Load() (Config, error) {
 		GatewayToken: os.Getenv("GATEWAY_TOKEN"),
 		Allowlist:    os.Getenv("WHATSAPP_ALLOWLIST"),
 		AckTexto:     envOr("WHATSAPP_ACK_TEXTO", "Recebi. O ajudante de ofertas ainda não está ligado neste canal."),
+		AutoNome:     os.Getenv("WHATSAPP_AUTO_NOME"),
+		AutoTexto:    os.Getenv("WHATSAPP_AUTO_TEXTO"),
 		StubCanal:    truthy(os.Getenv("WHATSAPP_STUB")),
 		SessionPath:  envOr("WHATSAPP_SESSION_PATH", "./.data/whatsmeow.db"),
 		MidiaRoot:    envOr("MIDIA_ROOT", "./.data/midia"),
+		CORSOrigin:   envOr("CORS_ORIGIN", "http://localhost:5173"),
 	}
 	var err error
 	cfg.SessionPath, err = filepath.Abs(cfg.SessionPath)
