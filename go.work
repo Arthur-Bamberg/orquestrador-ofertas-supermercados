@@ -1,6 +1,7 @@
-go 1.24.5
+go 1.26.0
 
 use (
+	./apps/gateway-whatsapp
 	./apps/ofertas-api
 	./apps/ofertas-scraper
 	./modules/ofertas-store

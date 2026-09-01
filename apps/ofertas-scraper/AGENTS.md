@@ -23,9 +23,9 @@ Processing is **sequential** in the MVP (Fonte by Fonte, Documento by Documento)
 |---------|--------|
 | Language | Go (workspace module) |
 | Persistence | PostgreSQL — shared instance with other monorepo apps (`DATABASE_URL`) |
-| Local Postgres | Root `docker-compose.yml` |
+| Local Postgres | Root `docker-compose.yml` (ADR 0008) |
 | Extrator impl | Gemini and/or Cursor (same port; ADR 0023, 0034) |
-| Schedule | External cron/systemd timer; binary is a one-shot CLI |
+| Schedule | External cron/systemd timer or `docker compose run --rm ofertas-scraper`; binary is a one-shot CLI |
 | Timezone | `America/Sao_Paulo` |
 
 ## App layout (Clean Architecture)
@@ -125,9 +125,10 @@ Do not write empty placeholders for steps that never ran. Store via `ArtefatoSto
 
 ## Local environment
 
-- From **monorepo root**: copy `.env.example` → `.env`, then `docker compose up` starts Postgres
-- App env: `apps/ofertas-scraper/.env` (gitignored) + `.env.example` (versioned)
-- Paths in `.env` (`SEED_PATH`, `ARTEFATO_ROOT`, schemas, prompts) are **relative to this app directory** — run the CLI from here
+- From **monorepo root**: copy `.env.example` → `.env`, then `docker compose up --build` starts Postgres and the long-running apps (ADR 0008)
+- Job in Docker: `docker compose run --rm ofertas-scraper seed` / `run` (profile `jobs`)
+- App env on the host: `apps/ofertas-scraper/.env` (gitignored) + `.env.example` (versioned)
+- Paths in `.env` (`SEED_PATH`, `ARTEFATO_ROOT`, schemas, prompts) are **relative to this app directory** — run the host CLI from here
 - Artefatos default: `./.data/artefatos` (gitignored; not ported)
 - Git hooks: install once from monorepo root (`../../scripts/install-git-hooks.sh`) — workspace ADR 0003 (supersedes app ADR 0024 for hook location)
 
@@ -153,7 +154,7 @@ TZ=America/Sao_Paulo
 
 With `EXTRATOR_PROVIDER=auto` (default), Gemini is primary and Cursor is failover on rate-limit (ADR 0037).
 
-CLI (from this directory):
+CLI (from this directory on the host, or `docker compose run --rm ofertas-scraper` from the repo root):
 
 ```bash
 go run ./cmd/ofertas-scraper seed

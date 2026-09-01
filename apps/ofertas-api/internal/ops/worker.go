@@ -65,32 +65,42 @@ func (w *Worker) runOnce(ctx context.Context) error {
 	return nil
 }
 
-func scraperArgs(op store.OperacaoPipeline) ([]string, error) {
-	args := []string{"run", "./cmd/ofertas-scraper"}
+func scraperCLIArgs(op store.OperacaoPipeline) ([]string, error) {
 	switch op.Kind {
 	case store.OperacaoRun:
-		return append(args, "run"), nil
+		return []string{"run"}, nil
 	case store.OperacaoDiscover:
 		if op.FonteID == "" {
 			return nil, fmt.Errorf("fonteId obrigatório")
 		}
-		return append(args, "discover", string(op.FonteID)), nil
+		return []string{"discover", string(op.FonteID)}, nil
 	case store.OperacaoReprocess:
 		if op.DocumentoID == "" {
 			return nil, fmt.Errorf("documentoId obrigatório")
 		}
-		return append(args, "reprocess", string(op.DocumentoID)), nil
+		return []string{"reprocess", string(op.DocumentoID)}, nil
 	default:
 		return nil, fmt.Errorf("op kind desconhecido: %s", op.Kind)
 	}
 }
 
-type goCommandFn func(ctx context.Context, dir string, env []string, args ...string) (string, error)
+func scraperExec(cfg config.Config, op store.OperacaoPipeline) (name, dir string, args []string, err error) {
+	cli, err := scraperCLIArgs(op)
+	if err != nil {
+		return "", "", nil, err
+	}
+	if cfg.ScraperBin != "" {
+		return cfg.ScraperBin, cfg.ScraperDir, cli, nil
+	}
+	return "go", cfg.ScraperDir, append([]string{"run", "./cmd/ofertas-scraper"}, cli...), nil
+}
 
-var runGoCommand goCommandFn = defaultRunGoCommand
+type scraperCommandFn func(ctx context.Context, name, dir string, env []string, args ...string) (string, error)
 
-func defaultRunGoCommand(ctx context.Context, dir string, env []string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "go", args...)
+var runScraperCommand scraperCommandFn = defaultRunScraperCommand
+
+func defaultRunScraperCommand(ctx context.Context, name, dir string, env []string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Env = env
 	raw, err := cmd.CombinedOutput()
@@ -98,7 +108,7 @@ func defaultRunGoCommand(ctx context.Context, dir string, env []string, args ...
 }
 
 func (w *Worker) execScraper(ctx context.Context, op store.OperacaoPipeline) (string, error) {
-	args, err := scraperArgs(op)
+	name, dir, args, err := scraperExec(w.cfg, op)
 	if err != nil {
 		return "", err
 	}
@@ -106,7 +116,7 @@ func (w *Worker) execScraper(ctx context.Context, op store.OperacaoPipeline) (st
 		"DATABASE_URL="+w.cfg.DatabaseURL,
 		"ARTEFATO_ROOT="+w.cfg.ArtefatoRoot,
 	)
-	return runGoCommand(ctx, w.cfg.ScraperDir, env, args...)
+	return runScraperCommand(ctx, name, dir, env, args...)
 }
 
 func tail(s string, max int) string {

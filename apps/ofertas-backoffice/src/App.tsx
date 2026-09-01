@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
+import { ConversasListPage, ConversaDetailPage } from "./pages/ConversasPages";
 import { FalhasExtracaoPage } from "./pages/FalhasExtracaoPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { ResourceDetailPage, ResourceFormPage, ResourceListPage } from "./pages/ResourcePages";
@@ -10,6 +11,8 @@ export function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Navigate to="/mercados" replace />} />
+        <Route path="conversas" element={<ConversasListPage />} />
+        <Route path="conversas/:id" element={<ConversaDetailPage />} />
         <Route path=":resourceSlug" element={<ResourceListPage />} />
         <Route path=":resourceSlug/novo" element={<ResourceFormPage mode="create" />} />
         <Route path=":resourceSlug/:id" element={<ResourceDetailPage />} />

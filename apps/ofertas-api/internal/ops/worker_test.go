@@ -22,20 +22,20 @@ func TestMain(m *testing.M) {
 
 func TestScraperArgs(t *testing.T) {
 	t.Run("run", func(t *testing.T) {
-		got, err := scraperArgs(store.OperacaoPipeline{Kind: store.OperacaoRun})
+		got, err := scraperCLIArgs(store.OperacaoPipeline{Kind: store.OperacaoRun})
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := []string{"run", "./cmd/ofertas-scraper", "run"}
-		if len(got) != len(want) || got[0] != want[0] || got[2] != want[2] {
+		want := []string{"run"}
+		if len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("got=%v want=%v", got, want)
 		}
 	})
 	t.Run("discover_exige_fonteId", func(t *testing.T) {
-		if _, err := scraperArgs(store.OperacaoPipeline{Kind: store.OperacaoDiscover}); err == nil {
+		if _, err := scraperCLIArgs(store.OperacaoPipeline{Kind: store.OperacaoDiscover}); err == nil {
 			t.Fatal("expected error")
 		}
-		got, err := scraperArgs(store.OperacaoPipeline{Kind: store.OperacaoDiscover, FonteID: "f1"})
+		got, err := scraperCLIArgs(store.OperacaoPipeline{Kind: store.OperacaoDiscover, FonteID: "f1"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -44,10 +44,10 @@ func TestScraperArgs(t *testing.T) {
 		}
 	})
 	t.Run("reprocess_exige_documentoId", func(t *testing.T) {
-		if _, err := scraperArgs(store.OperacaoPipeline{Kind: store.OperacaoReprocess}); err == nil {
+		if _, err := scraperCLIArgs(store.OperacaoPipeline{Kind: store.OperacaoReprocess}); err == nil {
 			t.Fatal("expected error")
 		}
-		got, err := scraperArgs(store.OperacaoPipeline{Kind: store.OperacaoReprocess, DocumentoID: "d1"})
+		got, err := scraperCLIArgs(store.OperacaoPipeline{Kind: store.OperacaoReprocess, DocumentoID: "d1"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -57,20 +57,49 @@ func TestScraperArgs(t *testing.T) {
 	})
 }
 
+func TestScraperExec_GoRunVsCompiledBinary(t *testing.T) {
+	op := store.OperacaoPipeline{Kind: store.OperacaoRun}
+	t.Run("sem_binario_usa_go_run", func(t *testing.T) {
+		name, dir, args, err := scraperExec(config.Config{ScraperDir: "/tmp/scraper"}, op)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if name != "go" || dir != "/tmp/scraper" {
+			t.Fatalf("name=%s dir=%s", name, dir)
+		}
+		want := []string{"run", "./cmd/ofertas-scraper", "run"}
+		if len(args) != len(want) || args[0] != want[0] || args[2] != want[2] {
+			t.Fatalf("args=%v want=%v", args, want)
+		}
+	})
+	t.Run("com_binario_chama_cli_direto", func(t *testing.T) {
+		name, dir, args, err := scraperExec(config.Config{ScraperDir: "/scraper", ScraperBin: "/usr/local/bin/ofertas-scraper"}, op)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if name != "/usr/local/bin/ofertas-scraper" || dir != "/scraper" {
+			t.Fatalf("name=%s dir=%s", name, dir)
+		}
+		if len(args) != 1 || args[0] != "run" {
+			t.Fatalf("args=%v", args)
+		}
+	})
+}
+
 func TestRunOnce_PersistsSucceededAndFailed(t *testing.T) {
 	catalog := storetest.New(t)
 	ctx := context.Background()
 	w := NewWorker(catalog, config.Config{ScraperDir: "/tmp/scraper", ArtefatoRoot: "/tmp/art"}, log.New(&bytes.Buffer{}, "", 0))
 
-	t.Cleanup(func() { runGoCommand = defaultRunGoCommand })
+	t.Cleanup(func() { runScraperCommand = defaultRunScraperCommand })
 
 	t.Run("succeeded", func(t *testing.T) {
 		if err := catalog.EnqueueOperacao(ctx, store.OperacaoPipeline{ID: "op-ok", Kind: store.OperacaoRun}); err != nil {
 			t.Fatal(err)
 		}
-		runGoCommand = func(_ context.Context, dir string, _ []string, args ...string) (string, error) {
-			if dir != "/tmp/scraper" {
-				t.Fatalf("dir=%s", dir)
+		runScraperCommand = func(_ context.Context, name, dir string, _ []string, args ...string) (string, error) {
+			if name != "go" || dir != "/tmp/scraper" {
+				t.Fatalf("name=%s dir=%s", name, dir)
 			}
 			if len(args) < 3 || args[2] != "run" {
 				t.Fatalf("args=%v", args)
@@ -93,7 +122,7 @@ func TestRunOnce_PersistsSucceededAndFailed(t *testing.T) {
 		if err := catalog.EnqueueOperacao(ctx, store.OperacaoPipeline{ID: "op-fail", Kind: store.OperacaoRun}); err != nil {
 			t.Fatal(err)
 		}
-		runGoCommand = func(context.Context, string, []string, ...string) (string, error) {
+		runScraperCommand = func(context.Context, string, string, []string, ...string) (string, error) {
 			return "boom\n", errors.New("exit 1")
 		}
 		if err := w.runOnce(ctx); err != nil {
@@ -113,7 +142,7 @@ func TestRunOnce_PersistsSucceededAndFailed(t *testing.T) {
 			t.Fatal(err)
 		}
 		long := strings.Repeat("x", 9000)
-		runGoCommand = func(context.Context, string, []string, ...string) (string, error) {
+		runScraperCommand = func(context.Context, string, string, []string, ...string) (string, error) {
 			return long, nil
 		}
 		if err := w.runOnce(ctx); err != nil {

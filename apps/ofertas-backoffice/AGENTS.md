@@ -4,9 +4,9 @@ Backoffice local em Vite + React + TypeScript para administrar entidades do dom�
 
 ## Escopo
 
-- SPA sem autenticação, consumindo a API REST em `VITE_API_BASE` (padrão `http://localhost:8080`) sob `/api/...`.
-- UI administrativa funcional: tabelas, filtros, formulários, confirmações de exclusão e mensagens claras de erro da API.
-- Use termos do glossário do scraper: Oferta, Fonte, Documento, Mercado, Extrator, Falha de Extração, Artefato, Uso do Extrator e Operação de Pipeline.
+- SPA sem autenticação. Catálogo em `VITE_API_BASE` (padrão `http://localhost:8080`) sob `/api/...`. Canal WhatsApp em `VITE_GATEWAY_BASE` (padrão `http://localhost:8090`) — Conversas, Mensagens e envio de texto (`VITE_GATEWAY_TOKEN` = `GATEWAY_TOKEN`).
+- UI administrativa funcional: tabelas, filtros, formulários, confirmações de exclusão e mensagens claras de erro da API. Conversas são rastro só-leitura com compositor nas allowlisted.
+- Use termos do glossário do scraper para o catálogo; para o canal, use [`../gateway-whatsapp/CONTEXT.md`](../gateway-whatsapp/CONTEXT.md): Contato, Conversa, Mensagem, Mídia, Allowlist.
 
 ## Comandos
 
@@ -16,6 +16,8 @@ npm run dev
 npm run build
 npm test
 ```
+
+No Compose: `docker compose up --build` (ADR 0008) publica o SPA em `http://localhost:5173` (nginx) contra a API em `http://localhost:8080` e o gateway em `http://localhost:8090`. Rebuild do backoffice é necessário se mudar `GATEWAY_TOKEN` (vai para `VITE_GATEWAY_TOKEN` no bundle).
 
 ## Regras locais
 

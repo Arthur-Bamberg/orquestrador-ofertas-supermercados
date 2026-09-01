@@ -1,6 +1,6 @@
 # AGENTS.md — orquestrador-ofertas-supermercados
 
-Instructions for coding agents on this **monorepo / Go workspace**. Domain language for the scraper lives in [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md); workspace ADRs in [`docs/adr/`](./docs/adr/); app ADRs under each `apps/<name>/docs/adr/`.
+Instructions for coding agents on this **monorepo / Go workspace**. Domain language: scraper [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md); WhatsApp channel [`apps/gateway-whatsapp/CONTEXT.md`](./apps/gateway-whatsapp/CONTEXT.md); map [`CONTEXT-MAP.md`](./CONTEXT-MAP.md). Workspace ADRs in [`docs/adr/`](./docs/adr/); app ADRs under each `apps/<name>/docs/adr/`.
 
 ## What this repository is
 
@@ -11,7 +11,7 @@ Workspace for supermarket-offers apps. It is **not** itself an application binar
 | **Current** | `ofertas-scraper` | Daily job: Fontes → Documentos → Extrator → Ofertas |
 | **Current** | `ofertas-api` | Go HTTP API over shared Postgres (CRUD + pipeline ops; ADR 0005 / 0006) |
 | **Current** | `ofertas-backoffice` | Vite/React SPA backoffice (filters + screens; ADR 0005) |
-| **Planned** | `gateway-whatsapp` | WhatsApp channel gateway |
+| **Current** | `gateway-whatsapp` | WhatsApp channel gateway (whatsmeow; ADR 0007) |
 | **Planned** | `agente-ofertas-worker` | Agent/worker over ofertas |
 | **Planned** | `mcp-server-ofertas` | MCP server for ofertas |
 
@@ -23,21 +23,23 @@ Create an app module only when implementing it — do not scaffold empty `apps/`
 |---------|--------|
 | Language | Go (`go.work`, Go 1.24+) |
 | Layout | `apps/<name>` per deployable; `modules/<name>` for shared libs (lazy) |
-| Local infra | Root [`docker-compose.yml`](./docker-compose.yml) |
-| Deploy images | `apps/<name>/Dockerfile` when hosting that app (not required at port time) |
+| Local infra | Root [`docker-compose.yml`](./docker-compose.yml) — Postgres + apps (ADR 0008) |
+| Deploy images | `apps/<name>/Dockerfile` |
 | Shared data | One PostgreSQL instance for all apps (ADR 0006) |
-| Schedule / TZ | Per app (scraper: external cron, `America/Sao_Paulo`) |
+| Schedule / TZ | Per app (scraper: external cron or `docker compose run`, `America/Sao_Paulo`) |
 
 ## Repository layout
 
 ```
 go.work
-docker-compose.yml              # local stack (Postgres today)
+docker-compose.yml              # local stack (Postgres + apps)
 AGENTS.md                       # this file (workspace)
 docs/adr/                       # workspace / platform decisions
 apps/
   ofertas-scraper/              # first app (own go.mod, AGENTS.md, CONTEXT.md, ADRs)
-  # gateway-whatsapp/           # planned
+  ofertas-api/
+  ofertas-backoffice/
+  gateway-whatsapp/             # WhatsApp channel (ADR 0007)
   # agente-ofertas-worker/      # planned
   # mcp-server-ofertas/         # planned
 modules/                        # shared Go modules — create only when extracting
@@ -66,16 +68,19 @@ Register new modules in root `go.work` (`use ./apps/...` or `./modules/...`).
 - One Postgres for all apps (local via compose; cloud via any `DATABASE_URL`).
 - **Domain tables** (Oferta, Documento, Produto, …): shared contract in `modules/ofertas-store` (scraper ADR 0038). Any app may read/write through that module.
 - **Operational / channel state** (e.g. WhatsApp send tracking): separate tables — do not stuff into Oferta/Documento (workspace ADR 0006).
-- Env: each app has its own `.env` (gitignored) + `.env.example` (versioned). Point `DATABASE_URL` at the same instance when sharing data.
+- Env: scraper/api/backoffice keep `.env` per app for host-side `go run` / `npm`. `gateway-whatsapp` and Compose read the **root** `.env`. Point host `DATABASE_URL` at `localhost`; containers use hostname `postgres` (ADR 0008).
 
 ## Local environment
 
 ```bash
-cp .env.example .env              # senha local do Postgres (compose)
-docker compose up                 # from repo root — Postgres
+cp .env.example .env              # senha local do Postgres + canal + extrator
+docker compose up --build         # from repo root — Postgres, API :8080, backoffice :5173, gateway :8090
+docker compose run --rm ofertas-scraper seed
+docker compose run --rm ofertas-scraper run
 ./scripts/install-git-hooks.sh    # once per clone
-cd apps/ofertas-scraper && cp .env.example .env   # if needed
-# run scraper from apps/ofertas-scraper (paths in .env are relative to app cwd)
+cd apps/ofertas-scraper && cp .env.example .env   # only if you `go run` the CLI on the host
+# host scraper: paths in apps/ofertas-scraper/.env are relative to that cwd
+# host gateway: go run ./apps/gateway-whatsapp/cmd/gateway-whatsapp   # optional; Compose is the default
 ```
 
 ### Git hooks
@@ -137,3 +142,4 @@ Default for this repo: work on **`main`**. Do **not** create a feature branch, o
 | ofertas-scraper | [`apps/ofertas-scraper/AGENTS.md`](./apps/ofertas-scraper/AGENTS.md) | [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md) |
 | ofertas-api | [`apps/ofertas-api/AGENTS.md`](./apps/ofertas-api/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0005) |
 | ofertas-backoffice | [`apps/ofertas-backoffice/AGENTS.md`](./apps/ofertas-backoffice/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0005) |
+| gateway-whatsapp | [`apps/gateway-whatsapp/AGENTS.md`](./apps/gateway-whatsapp/AGENTS.md) | [`apps/gateway-whatsapp/CONTEXT.md`](./apps/gateway-whatsapp/CONTEXT.md) |
