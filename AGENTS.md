@@ -9,6 +9,7 @@ Workspace for supermarket-offers apps. It is **not** itself an application binar
 | Status | App | Role |
 |--------|-----|------|
 | **Current** | `ofertas-scraper` | Daily job: Fontes → Documentos → Extrator → Ofertas |
+| **Current** | `ofertas-scraper-v2` | Shopfully listing → page JPEGs of Mercados we already have (ADR 0011) |
 | **Current** | `ofertas-api` | Go HTTP API over shared Postgres (CRUD + pipeline ops; ADR 0005 / 0006) |
 | **Current** | `ofertas-backoffice` | Vite/React SPA backoffice (filters + screens; ADR 0005) |
 | **Current** | `gateway-whatsapp` | WhatsApp channel gateway (whatsmeow; ADR 0007) |
@@ -36,6 +37,7 @@ AGENTS.md                       # this file (workspace)
 docs/adr/                       # workspace / platform decisions
 apps/
   ofertas-scraper/              # first app (own go.mod, AGENTS.md, CONTEXT.md, ADRs)
+  ofertas-scraper-v2/           # Shopfully image job (ADR 0011)
   ofertas-api/
   ofertas-backoffice/
   gateway-whatsapp/             # WhatsApp channel (ADR 0007)
@@ -75,6 +77,8 @@ cp .env.example .env              # senha local do Postgres + canal + extrator
 docker compose up --build         # from repo root — Postgres, API :8080, backoffice :5173, gateway :8090, agente :8091
 docker compose run --rm ofertas-scraper seed
 docker compose run --rm ofertas-scraper run
+docker compose run --rm ofertas-scraper-v2 discover
+docker compose run --rm ofertas-scraper-v2 run
 ./scripts/install-git-hooks.sh    # once per clone
 cd apps/ofertas-scraper && cp .env.example .env   # only if you `go run` the CLI on the host
 # host scraper: paths in apps/ofertas-scraper/.env are relative to that cwd
@@ -138,6 +142,7 @@ Default for this repo: work on **`main`**. Do **not** create a feature branch, o
 | App | Agents | Domain |
 |-----|--------|--------|
 | ofertas-scraper | [`apps/ofertas-scraper/AGENTS.md`](./apps/ofertas-scraper/AGENTS.md) | [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md) |
+| ofertas-scraper-v2 | [`apps/ofertas-scraper-v2/AGENTS.md`](./apps/ofertas-scraper-v2/AGENTS.md) | [`apps/ofertas-scraper-v2/CONTEXT.md`](./apps/ofertas-scraper-v2/CONTEXT.md) |
 | ofertas-api | [`apps/ofertas-api/AGENTS.md`](./apps/ofertas-api/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0005) |
 | ofertas-backoffice | [`apps/ofertas-backoffice/AGENTS.md`](./apps/ofertas-backoffice/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0005) |
 | gateway-whatsapp | [`apps/gateway-whatsapp/AGENTS.md`](./apps/gateway-whatsapp/AGENTS.md) | [`apps/gateway-whatsapp/CONTEXT.md`](./apps/gateway-whatsapp/CONTEXT.md) |

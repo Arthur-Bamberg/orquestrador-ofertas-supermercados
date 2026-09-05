@@ -1,0 +1,16 @@
+{
+  "mercados": [
+    {
+      "id": "mercado-fort",
+      "nome": "Fort Atacadista"
+    },
+    {
+      "id": "mercado-stok",
+      "nome": "Stok Center"
+    },
+    {
+      "id": "mercado-via",
+      "nome": "Via Atacadista"
+    }
+  ]
+}

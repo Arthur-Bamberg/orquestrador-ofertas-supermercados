@@ -3,6 +3,7 @@
 ## Contexts
 
 - [Catálogo de ofertas](./apps/ofertas-scraper/CONTEXT.md) — Oferta, Produto, Mercado, Fonte, Documento, Extrator (scraper, API e backoffice)
+- [Scraper v2 Shopfully](./apps/ofertas-scraper-v2/CONTEXT.md) — Encarte e Página (imagens); Mercado filtrado pelo catálogo que já temos
 - [Canal WhatsApp](./apps/gateway-whatsapp/CONTEXT.md) — Contato, Conversa, Mensagem, Mídia, Canal
 - [Agente de ofertas](./apps/agente-ofertas/CONTEXT.md) — Lista, Item, Resposta (assistente de catálogo é superfície deste contexto, não um quarto)
 

@@ -123,5 +123,21 @@ services:
     profiles:
       - jobs
 
+  # One-shot CLI (workspace ADR 0011). Not started by `up`.
+  # docker compose run --rm ofertas-scraper-v2 discover
+  # docker compose run --rm ofertas-scraper-v2 run
+  ofertas-scraper-v2:
+    build:
+      context: .
+      dockerfile: apps/ofertas-scraper-v2/Dockerfile
+    env_file: .env
+    environment:
+      ARTEFATO_ROOT: /data/artefatos
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - ./apps/ofertas-scraper-v2/.data/artefatos:/data/artefatos
+    profiles:
+      - jobs
+
 volumes:
   ofertas_pg:
