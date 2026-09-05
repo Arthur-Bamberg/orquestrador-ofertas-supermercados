@@ -1,12 +1,45 @@
 [
   {
-    "productName": "Arroz Integral Camil 1kg",
-    "brand": "Camil",
+    "productId": "336408656",
+    "productName": "Kit 2 Biscoito Arroz Integral Camil Com Pimenta 150g",
+    "brand": "Não Informado",
     "items": [
       {
+        "itemId": "336271375",
+        "name": "Kit 2 Biscoito Arroz Integral Camil Com Pimenta 150g",
+        "measurementUnit": "un",
+        "unitMultiplier": 1.0,
         "sellers": [
           {
-            "commertialOffer": { "Price": 9.49, "ListPrice": 11.99 }
+            "sellerId": "38794",
+            "commertialOffer": {
+              "Price": 29.18,
+              "ListPrice": 29.18,
+              "AvailableQuantity": 100
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "productId": "338738143",
+    "productName": "Bolacha De Arroz Integral Name 130g",
+    "brand": "Não Informado",
+    "items": [
+      {
+        "itemId": "338627639",
+        "name": "Bolacha De Arroz Integral Name 130g",
+        "measurementUnit": "un",
+        "unitMultiplier": 1.0,
+        "sellers": [
+          {
+            "sellerId": "41635",
+            "commertialOffer": {
+              "Price": 34.22,
+              "ListPrice": 34.22,
+              "AvailableQuantity": 100
+            }
           }
         ]
       }

@@ -1,14 +1,19 @@
 package domain
 
-import "strings"
+import (
+	"context"
+
+	store "github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store"
+)
 
 // NormalizarRotulo collapses whitespace and lowercases for match-or-create keys.
 func NormalizarRotulo(s string) string {
-	fields := strings.Fields(strings.TrimSpace(s))
-	if len(fields) == 0 {
-		return ""
-	}
-	return strings.ToLower(strings.Join(fields, " "))
+	return store.NormalizarRotulo(s)
+}
+
+// MatchOrCreateMarca returns the Marca for nomeNorm, creating it with newID when missing.
+func MatchOrCreateMarca(ctx context.Context, repo MarcaRepository, nome string, newID MarcaID) (Marca, error) {
+	return store.MatchOrCreateMarca(ctx, repo, nome, newID)
 }
 
 // UnirCategorias merges existing catalog categorias with newly seen ones (ADR 0012).

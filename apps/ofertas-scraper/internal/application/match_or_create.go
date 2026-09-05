@@ -98,21 +98,5 @@ func matchOrCreateProduto(ctx context.Context, repo domain.ProdutoRepository, v 
 }
 
 func matchOrCreateMarca(ctx context.Context, repo domain.MarcaRepository, nome string) (domain.Marca, error) {
-	norm := domain.NormalizarRotulo(nome)
-	existing, ok, err := repo.GetByNomeNorm(ctx, norm)
-	if err != nil {
-		return domain.Marca{}, err
-	}
-	if ok {
-		return existing, nil
-	}
-	m := domain.Marca{
-		ID:       domain.MarcaID(NewID()),
-		Nome:     nome,
-		NomeNorm: norm,
-	}
-	if err := repo.Save(ctx, m); err != nil {
-		return domain.Marca{}, err
-	}
-	return m, nil
+	return domain.MatchOrCreateMarca(ctx, repo, nome, domain.MarcaID(NewID()))
 }

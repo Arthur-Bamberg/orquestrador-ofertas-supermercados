@@ -109,17 +109,5 @@ func coletaDoDia(ctx context.Context, catalog *store.Catalog, produtoID store.Pr
 }
 
 func matchOrCreateMarca(ctx context.Context, repo *store.MarcaRepo, nome string) (store.Marca, error) {
-	norm := domain.NormalizarRotulo(nome)
-	existing, ok, err := repo.GetByNomeNorm(ctx, norm)
-	if err != nil {
-		return store.Marca{}, err
-	}
-	if ok {
-		return existing, nil
-	}
-	m := store.Marca{ID: store.MarcaID(newID()), Nome: nome, NomeNorm: norm}
-	if err := repo.Save(ctx, m); err != nil {
-		return store.Marca{}, err
-	}
-	return m, nil
+	return store.MatchOrCreateMarca(ctx, repo, nome, store.MarcaID(newID()))
 }

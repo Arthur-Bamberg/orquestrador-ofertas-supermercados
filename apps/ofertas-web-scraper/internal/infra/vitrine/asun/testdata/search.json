@@ -1,21 +1,21 @@
 {
   "hits": [
     {
-      "id": "7893717",
-      "name": "Leite UHT Tirol Semi Desnatado com Tampa Rosca 1L",
+      "id": "8174535",
+      "name": "Leite Integral Zero Lactose Tirol 1L",
       "brandName": "Tirol",
       "saleUnit": "UN",
       "pricing": {
-        "price": 4.89,
+        "price": 6.29,
         "promotion": true,
-        "promotionalPrice": 3.89,
-        "discount": 20,
-        "store": 1687
+        "promotionalPrice": 4.89,
+        "discount": 22,
+        "store": 1540
       },
       "quantity": {
         "fraction": 1,
-        "inStock": 999,
-        "max": 9999,
+        "inStock": 19.2,
+        "max": 999,
         "maxCompany": null,
         "maxPromotion": null,
         "maxPersona": null,
@@ -26,21 +26,21 @@
       "promotions": null
     },
     {
-      "id": "8075484",
-      "name": "LEITE SEMIDESN DALIA 1L UHT ZERO LACTOSE",
+      "id": "7719327",
+      "name": "Leite longa vida Dália integral 1l",
       "brandName": "Dalia",
       "saleUnit": "UN",
       "pricing": {
-        "price": 5.48,
+        "price": 4.95,
         "promotion": false,
-        "promotionalPrice": 5.48,
+        "promotionalPrice": 4.95,
         "discount": 0,
-        "store": 1687
+        "store": 1540
       },
       "quantity": {
         "fraction": 1,
-        "inStock": 34,
-        "max": 9999,
+        "inStock": 1534.4,
+        "max": 48,
         "maxCompany": null,
         "maxPromotion": null,
         "maxPersona": null,
@@ -51,5 +51,5 @@
       "promotions": null
     }
   ],
-  "total": 82
+  "total": 24
 }

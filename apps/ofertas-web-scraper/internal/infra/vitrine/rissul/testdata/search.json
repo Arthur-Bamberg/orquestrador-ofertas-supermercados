@@ -1,20 +1,48 @@
-{
-  "items": [
-    {
-      "title": "Arroz Integral Camil 1kg",
-      "marca": "Camil",
-      "precoAtual": 8.9,
-      "precoDe": 10.9,
-      "quantidade": 1000,
-      "medida": "g"
-    },
-    {
-      "title": "Arroz Integral 1kg",
-      "marca": "",
-      "precoAtual": 7.5,
-      "precoDe": null,
-      "quantidade": 1000,
-      "medida": "g"
-    }
-  ]
-}
+[
+  {
+    "productId": "2645346",
+    "productName": "Arroz Integral Vapza 200g",
+    "brand": "VAPZA",
+    "items": [
+      {
+        "itemId": "2645346",
+        "name": "Arroz Integral Vapza 200g",
+        "measurementUnit": "un",
+        "unitMultiplier": 1.0,
+        "sellers": [
+          {
+            "sellerId": "1",
+            "commertialOffer": {
+              "Price": 9.79,
+              "ListPrice": 9.79,
+              "AvailableQuantity": 10
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "productId": "9833227",
+    "productName": "Arroz Integral Ynagi Cateto Japonês 1kg",
+    "brand": "YANAGI",
+    "items": [
+      {
+        "itemId": "9833227",
+        "name": "Arroz Integral Ynagi Cateto Japonês 1kg",
+        "measurementUnit": "un",
+        "unitMultiplier": 1.0,
+        "sellers": [
+          {
+            "sellerId": "1",
+            "commertialOffer": {
+              "Price": 12.95,
+              "ListPrice": 12.95,
+              "AvailableQuantity": 100
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

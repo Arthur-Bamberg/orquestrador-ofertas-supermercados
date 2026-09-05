@@ -102,3 +102,37 @@ func TestColetarProduto_SemCartaoQueCasaFalhaAColeta(t *testing.T) {
 		t.Fatalf("ofertas=%d", len(list))
 	}
 }
+
+func TestColetarProduto_CartaoValidoEIncompletoFicaParcial(t *testing.T) {
+	catalog := storetest.New(t)
+	ctx := context.Background()
+	if err := catalog.SaveMercado(ctx, store.Mercado{ID: "mercado-fort", Nome: "Fort Atacadista"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveProduto(ctx, store.Produto{ID: "p1", Nome: "Arroz integral", NomeNorm: "arroz integral"}); err != nil {
+		t.Fatal(err)
+	}
+	vitrines := map[store.MercadoID]domain.Vitrine{
+		"mercado-fort": fakeVitrine{cartoes: []domain.CartaoVitrine{
+			{Nome: "Arroz Integral Camil 1kg", Marca: "Camil", Valor: 8.9, Quantidades: []float64{1000}, Medida: store.MedidaG},
+			{Nome: "Arroz Integral Tio João 1kg", Marca: "Tio João", Valor: 0, Quantidades: []float64{1000}, Medida: store.MedidaG},
+		}},
+	}
+	if err := application.ColetarProduto(ctx, catalog, vitrines, "p1", "2026-09-05"); err != nil {
+		t.Fatal(err)
+	}
+	coleta, ok, err := catalog.GetColetaByIdentity(ctx, "p1", "mercado-fort", "2026-09-05")
+	if err != nil || !ok {
+		t.Fatalf("coleta ok=%v err=%v", ok, err)
+	}
+	if coleta.Estado != store.EstadoParcial {
+		t.Fatalf("estado=%s", coleta.Estado)
+	}
+	list, err := store.NewOfertaRepo(catalog).ListByColeta(ctx, coleta.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Valor != 8.9 {
+		t.Fatalf("want 1 persisted Oferta, got %#v", list)
+	}
+}

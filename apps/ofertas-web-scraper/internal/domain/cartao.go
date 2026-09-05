@@ -1,14 +1,14 @@
 package domain
 
-import "strings"
+import (
+	"strings"
+
+	store "github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store"
+)
 
 // NormalizarRotulo collapses whitespace and lowercases for catalog matching.
 func NormalizarRotulo(s string) string {
-	fields := strings.Fields(strings.TrimSpace(s))
-	if len(fields) == 0 {
-		return ""
-	}
-	return strings.ToLower(strings.Join(fields, " "))
+	return store.NormalizarRotulo(s)
 }
 
 // CartaoCasaProduto reports whether a vitrine card is the searched sellable type.

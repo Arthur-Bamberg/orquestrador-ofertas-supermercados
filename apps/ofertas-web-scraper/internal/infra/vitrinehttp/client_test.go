@@ -12,15 +12,15 @@ import (
 
 func TestClient_BuscarParseiaCorpo(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("ft") != "arroz" {
+		if r.URL.Query().Get("search") != "arroz" {
 			t.Fatalf("query=%s", r.URL.RawQuery)
 		}
-		_, _ = w.Write([]byte(`{"products":[{"name":"Arroz Integral 1kg","brand":"Camil","price":8.9,"listPrice":8.9,"quantity":1000,"unit":"g"}]}`))
+		_, _ = w.Write([]byte(`{"hits":[{"name":"Arroz Integral 1kg","brandName":"Camil","saleUnit":"UN","pricing":{"price":8.9,"promotion":false,"promotionalPrice":8.9},"quantity":{"fraction":1}}]}`))
 	}))
 	t.Cleanup(srv.Close)
 	c := vitrinehttp.Client{
 		HTTP:  srv.Client(),
-		URL:   func(q string) string { return srv.URL + "?ft=" + q },
+		URL:   func(q string) string { return srv.URL + "?search=" + q },
 		Parse: fort.ParseSearch,
 	}
 	got, err := c.Buscar(context.Background(), "arroz")

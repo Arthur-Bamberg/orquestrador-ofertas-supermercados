@@ -467,6 +467,12 @@ func ofertaTemOrigemTx(ctx context.Context, tx pgx.Tx, id OfertaID) (bool, error
 	return n > 0, err
 }
 
+func ofertaTemDocumentoTx(ctx context.Context, tx pgx.Tx, id OfertaID) (bool, error) {
+	var n int
+	err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM documento_oferta WHERE oferta_id = $1`, id).Scan(&n)
+	return n > 0, err
+}
+
 func (s *Catalog) SaveOferta(ctx context.Context, o Oferta, documentoIDs []DocumentoID) error {
 	if o.ID == "" {
 		return fmt.Errorf("%w: oferta id obrigatório", ErrInvalid)
@@ -751,6 +757,23 @@ func (s *Catalog) SaveOfertasForColeta(ctx context.Context, coletaID ColetaID, o
 		chave := ChaveUnicaOferta(o)
 		existing, err := scanOferta(tx.QueryRow(ctx, ofertaSelect+" WHERE chave_unica = $1", chave))
 		if err == nil {
+			hasDoc, docErr := ofertaTemDocumentoTx(ctx, tx, existing.ID)
+			if docErr != nil {
+				return wrapPG(docErr)
+			}
+			if hasDoc {
+				if !existing.IndicacaoPromocional {
+					existing.IndicacaoPromocional = true
+					if err := upsertOferta(ctx, tx, existing, chave); err != nil {
+						return err
+					}
+				}
+			} else if existing.IndicacaoPromocional != o.IndicacaoPromocional {
+				existing.IndicacaoPromocional = o.IndicacaoPromocional
+				if err := upsertOferta(ctx, tx, existing, chave); err != nil {
+					return err
+				}
+			}
 			o = existing
 		} else if errors.Is(err, pgx.ErrNoRows) {
 			if o.ID == "" {
