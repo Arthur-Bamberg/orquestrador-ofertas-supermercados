@@ -9,7 +9,7 @@ Pessoa no canal, identificada pelo JID canónico de telefone (`…@s.whatsapp.ne
 _Avoid_: usuário, cliente, user, sender (como entidade)
 
 **Conversa**:
-Thread do canal: **direta** (1:1), **grupo** (`…@g.us`) ou **status** (`status@broadcast`). A allowlist vale sobre o JID da Conversa só para **Ack** e `POST /envios`; o rastro persiste em todas. A Resposta automática casa o nome, não a lista.
+Thread do canal: **direta** (1:1), **grupo** (`…@g.us`) ou **status** (`status@broadcast`). A allowlist vale sobre o JID da Conversa só para **Ack** e `POST /envios`; o rastro persiste em todas.
 _Avoid_: chat, sala, thread
 
 **Mensagem**:
@@ -25,13 +25,9 @@ Capacidade de enviar e receber no WhatsApp (whatsmeow em produção; stub nos te
 _Avoid_: bot, Cloud API, webhook (como sinónimo)
 
 **Allowlist**:
-Lista de JIDs de Conversa que recebem Ack e `POST /envios`. Fora dela o gateway **persiste** e **não** envia Ack nem aceita `POST /envios`. A **Resposta automática** pode enviar mesmo assim. O backoffice lista todas; só mostra compositor quando `permitido`.
+Lista de JIDs de Conversa que recebem Ack e `POST /envios`. Fora dela o gateway **persiste** e **não** envia Ack nem aceita `POST /envios`. O backoffice lista todas; só mostra compositor quando `permitido`.
 _Avoid_: whitelist, ACL genérica
 
 **Ack**:
-Texto estático (`WHATSAPP_ACK_TEXTO`) enviado na Conversa da Allowlist após uma Mensagem viva (não FromMe, não Status, não histórico). Prova de canal; não consulta Oferta.
+Texto estático (`WHATSAPP_ACK_TEXTO`) enviado na Conversa da Allowlist após uma Mensagem viva (não FromMe, não Status, não histórico) **quando o Agente não está ligado** ou a Mensagem não vira Lista. Prova de canal; não consulta Oferta. Com Agente, a Resposta do Agente substitui o Ack nessas Mensagens.
 _Avoid_: bot reply, confirmação de leitura
-
-**Resposta automática**:
-Envio por substring no nome da Conversa (`WHATSAPP_AUTO_NOME` / `WHATSAPP_AUTO_TEXTO`; needle vazia = desligada). Na conversa **direta**: casa o `PushName` da Mensagem; no **grupo**: casa o assunto (`ConversaNome` no adapter). Case-insensitive, sem folding de acento. Recorte vivo do Ack, sem reacção / revogação / indecifrável. Substitui o Ack na mesma entrada. Não exige Allowlist.
-_Avoid_: bot, ausência, vacation

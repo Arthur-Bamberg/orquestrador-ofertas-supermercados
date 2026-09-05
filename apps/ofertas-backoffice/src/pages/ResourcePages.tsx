@@ -2,11 +2,13 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { create, get, list, remove, update } from "../api";
+import { AtivaToggle } from "../components/AtivaToggle";
 import { ErrorAlert } from "../components/ErrorAlert";
 import { FormField, fieldValueToString, parseFieldValue } from "../components/FormField";
 import { FormattedValue, formatValue } from "../components/ValueView";
 import { RefSelect } from "../components/RefSelect";
 import type { ColumnFormat } from "../display";
+import { isAtiva } from "../display";
 import type { EntityField, EntityRecord, FilterField, ResourceConfig } from "../domain";
 import { getResource, resources } from "../resources";
 import { useCatalogLookups } from "../useCatalogLookups";
@@ -32,6 +34,8 @@ function formatFromField(field: EntityField): ColumnFormat | undefined {
       return "currency";
     case "ref":
       return "ref";
+    case "boolean":
+      return "boolean";
     default:
       return undefined;
   }
@@ -103,6 +107,15 @@ export function ResourceListPage() {
       queryClient.invalidateQueries({ queryKey: ["catalog"] });
     },
   });
+  const toggleAtivaMutation = useMutation({
+    mutationFn: ({ id, entity }: { id: string; entity: EntityRecord }) =>
+      update(resource.apiPath, id, { ...entity, ativa: !isAtiva(entity.ativa) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["resource-list", resource.slug] });
+      queryClient.invalidateQueries({ queryKey: ["resource-detail", resource.slug] });
+      queryClient.invalidateQueries({ queryKey: ["catalog"] });
+    },
+  });
 
   function submitFilters(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -164,7 +177,7 @@ export function ResourceListPage() {
         </form>
       ) : null}
 
-      <ErrorAlert error={query.error ?? deleteMutation.error} />
+      <ErrorAlert error={query.error ?? deleteMutation.error ?? toggleAtivaMutation.error} />
 
       {query.isLoading ? <p>Carregando {config.plural}...</p> : null}
       {query.data ? (
@@ -186,6 +199,7 @@ export function ResourceListPage() {
               ) : (
                 query.data.map((entity) => {
                   const id = entityId(entity, config);
+                  const ativa = isAtiva(entity.ativa);
 
                   return (
                     <tr key={id || JSON.stringify(entity)}>
@@ -193,6 +207,13 @@ export function ResourceListPage() {
                         <td key={column.name}>
                           {column.name === (config.idField ?? "id") && id ? (
                             <Link to={encodeURIComponent(id)}>{id}</Link>
+                          ) : column.name === "ativa" && config.slug === "fontes" && id ? (
+                            <AtivaToggle
+                              id={`ativa-${id}`}
+                              ativa={ativa}
+                              disabled={toggleAtivaMutation.isPending}
+                              onChange={() => toggleAtivaMutation.mutate({ id, entity })}
+                            />
                           ) : (
                             <FormattedValue
                               value={entity[column.name]}
@@ -251,6 +272,15 @@ export function ResourceDetailPage() {
       navigate(`/${resource.slug}`);
     },
   });
+  const toggleAtivaMutation = useMutation({
+    mutationFn: (entity: EntityRecord) =>
+      update(resource.apiPath, decodedId, { ...entity, ativa: !isAtiva(entity.ativa) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["resource-list", resource.slug] });
+      queryClient.invalidateQueries({ queryKey: ["resource-detail", resource.slug] });
+      queryClient.invalidateQueries({ queryKey: ["catalog"] });
+    },
+  });
 
   function deleteEntity() {
     if (window.confirm(`Apagar ${resource.singular} ${decodedId}?`)) {
@@ -261,6 +291,8 @@ export function ResourceDetailPage() {
   if (!config) {
     return <Navigate to="/mercados" replace />;
   }
+
+  const ativa = isAtiva(query.data?.ativa);
 
   return (
     <section className="page">
@@ -284,7 +316,7 @@ export function ResourceDetailPage() {
         </div>
       </header>
 
-      <ErrorAlert error={query.error ?? deleteMutation.error} />
+      <ErrorAlert error={query.error ?? deleteMutation.error ?? toggleAtivaMutation.error} />
       {query.isLoading ? <p>Carregando detalhe...</p> : null}
       {query.data ? (
         <>
@@ -293,12 +325,21 @@ export function ResourceDetailPage() {
               <div key={field.name}>
                 <dt>{field.label}</dt>
                 <dd>
-                  <FormattedValue
-                    value={query.data?.[field.name]}
-                    format={formatFromField(field)}
-                    refKind={field.ref}
-                    lookups={lookups}
-                  />
+                  {field.name === "ativa" && config.slug === "fontes" ? (
+                    <AtivaToggle
+                      id={`ativa-field-${decodedId}`}
+                      ativa={ativa}
+                      disabled={toggleAtivaMutation.isPending}
+                      onChange={() => toggleAtivaMutation.mutate(query.data)}
+                    />
+                  ) : (
+                    <FormattedValue
+                      value={query.data?.[field.name]}
+                      format={formatFromField(field)}
+                      refKind={field.ref}
+                      lookups={lookups}
+                    />
+                  )}
                 </dd>
               </div>
             ))}
@@ -372,7 +413,11 @@ export function ResourceFormPage({ mode }: { mode: "create" | "edit" }) {
 
   React.useEffect(() => {
     if (mode === "create") {
-      setValues(Object.fromEntries(resource.fields.map((field) => [field.name, ""])));
+      setValues(
+        Object.fromEntries(
+          resource.fields.map((field) => [field.name, field.kind === "boolean" ? "true" : ""]),
+        ),
+      );
       return;
     }
 

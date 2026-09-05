@@ -1,6 +1,7 @@
 import type { ChangeEvent } from "react";
 import type { CatalogLookups } from "../display";
 import type { EntityField, FieldKind } from "../domain";
+import { AtivaToggle } from "./AtivaToggle";
 import { RefSelect } from "./RefSelect";
 
 type FormFieldProps = {
@@ -12,17 +13,25 @@ type FormFieldProps = {
 
 export function fieldValueToString(value: unknown, kind: FieldKind): string {
   if (value === null || value === undefined) {
-    return "";
+    return kind === "boolean" ? "true" : "";
   }
 
   if (kind === "json") {
     return JSON.stringify(value, null, 2);
   }
 
+  if (kind === "boolean") {
+    return value === false || value === "false" ? "false" : "true";
+  }
+
   return String(value);
 }
 
 export function parseFieldValue(field: EntityField, value: string): unknown {
+  if (field.kind === "boolean") {
+    return value !== "false";
+  }
+
   if (value.trim() === "") {
     return undefined;
   }
@@ -133,6 +142,14 @@ function renderInput(
       return <input {...commonProps} type="datetime-local" />;
     case "text":
       return <input {...commonProps} type="text" />;
+    case "boolean":
+      return (
+        <AtivaToggle
+          id={commonProps.id}
+          ativa={value !== "false"}
+          onChange={(next) => onChange(field.name, next ? "true" : "false")}
+        />
+      );
     default: {
       const exhaustive: never = field.kind;
       return exhaustive;

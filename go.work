@@ -1,6 +1,7 @@
 go 1.26.0
 
 use (
+	./apps/agente-ofertas
 	./apps/gateway-whatsapp
 	./apps/ofertas-api
 	./apps/ofertas-scraper

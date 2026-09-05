@@ -56,7 +56,13 @@ describe("constantes de domínio", () => {
 
   it("Fontes e Documentos também resolvem Mercado/Fonte nas listas", () => {
     expect(getResource("fontes")?.columns).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "mercadoId", format: "ref", ref: "mercado" })]),
+      expect.arrayContaining([
+        expect.objectContaining({ name: "mercadoId", format: "ref", ref: "mercado" }),
+        expect.objectContaining({ name: "ativa", format: "boolean" }),
+      ]),
+    );
+    expect(getResource("fontes")?.fields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "ativa", kind: "boolean" })]),
     );
     expect(getResource("documentos")?.columns).toEqual(
       expect.arrayContaining([

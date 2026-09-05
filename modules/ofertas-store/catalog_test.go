@@ -139,8 +139,39 @@ func TestCatalogCRUDRoundTrip(t *testing.T) {
 			t.Fatal(err)
 		}
 		got, ok, err := catalog.GetFonte(ctx, "f1")
-		if err != nil || !ok || got != f {
+		if err != nil || !ok {
 			t.Fatalf("GetFonte ok=%v err=%v got=%+v", ok, err, got)
+		}
+		if got.ID != f.ID || got.MercadoID != f.MercadoID || got.URL != f.URL || got.FiltroNomeDocumento != f.FiltroNomeDocumento {
+			t.Fatalf("GetFonte got=%+v want=%+v", got, f)
+		}
+		if !got.IsAtiva() {
+			t.Fatalf("default ativa: %+v", got)
+		}
+	})
+
+	t.Run("Fonte_AtivaFalse", func(t *testing.T) {
+		f := store.Fonte{
+			ID: "f-off", MercadoID: "m1", URL: "https://off.example",
+			Ativa: store.Bool(false),
+		}
+		if err := catalog.SaveFonte(ctx, f); err != nil {
+			t.Fatal(err)
+		}
+		got, ok, err := catalog.GetFonte(ctx, "f-off")
+		if err != nil || !ok {
+			t.Fatalf("GetFonte ok=%v err=%v", ok, err)
+		}
+		if got.IsAtiva() {
+			t.Fatalf("esperava inativa: %+v", got)
+		}
+		f.Ativa = store.Bool(true)
+		if err := catalog.SaveFonte(ctx, f); err != nil {
+			t.Fatal(err)
+		}
+		got, ok, err = catalog.GetFonte(ctx, "f-off")
+		if err != nil || !ok || !got.IsAtiva() {
+			t.Fatalf("reativar ok=%v err=%v got=%+v", ok, err, got)
 		}
 	})
 

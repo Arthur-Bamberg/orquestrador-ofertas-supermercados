@@ -62,9 +62,27 @@ func TestEntityHTTP_CRUDAndConflicts(t *testing.T) {
 		if res.Code != http.StatusOK {
 			t.Fatalf("GET status=%d body=%s", res.Code, res.Body.String())
 		}
-		res = doJSON(t, h, http.MethodPut, "/api/fontes/f1", `{"mercadoId":"m1","url":"https://other.example"}`)
+		var got store.Fonte
+		if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if !got.IsAtiva() {
+			t.Fatalf("default ativa: %+v", got)
+		}
+		res = doJSON(t, h, http.MethodPut, "/api/fontes/f1", `{"mercadoId":"m1","url":"https://other.example","ativa":false}`)
 		if res.Code != http.StatusOK {
 			t.Fatalf("PUT status=%d body=%s", res.Code, res.Body.String())
+		}
+		res = doJSON(t, h, http.MethodGet, "/api/fontes/f1", "")
+		if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got.IsAtiva() {
+			t.Fatalf("esperava inativa: %+v", got)
+		}
+		res = doJSON(t, h, http.MethodPut, "/api/fontes/f1", `{"mercadoId":"m1","url":"https://other.example","ativa":true}`)
+		if res.Code != http.StatusOK {
+			t.Fatalf("PUT reativar status=%d body=%s", res.Code, res.Body.String())
 		}
 	})
 

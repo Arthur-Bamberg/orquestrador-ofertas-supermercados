@@ -12,26 +12,28 @@ import (
 
 var ErrNaoPermitido = errors.New("conversa fora da allowlist")
 
+type Agente interface {
+	Atender(ctx context.Context, conversaJID, corpo string) error
+}
+
 type Deps struct {
-	Allow     domain.Allowlist
-	Repo      domain.Repositorio
-	Canal     domain.Canal
-	Midias    domain.MidiaStore
-	AckTexto  string
-	AutoNome  string
-	AutoTexto string
-	NewID     func() string
+	Allow    domain.Allowlist
+	Repo     domain.Repositorio
+	Canal    domain.Canal
+	Midias   domain.MidiaStore
+	AckTexto string
+	Agente   Agente
+	NewID    func() string
 }
 
 type Gateway struct {
-	allow     domain.Allowlist
-	repo      domain.Repositorio
-	canal     domain.Canal
-	midias    domain.MidiaStore
-	ackTexto  string
-	autoNome  string
-	autoTexto string
-	newID     func() string
+	allow    domain.Allowlist
+	repo     domain.Repositorio
+	canal    domain.Canal
+	midias   domain.MidiaStore
+	ackTexto string
+	agente   Agente
+	newID    func() string
 }
 
 func New(d Deps) *Gateway {
@@ -40,14 +42,13 @@ func New(d Deps) *Gateway {
 		newID = func() string { return "" }
 	}
 	return &Gateway{
-		allow:     d.Allow,
-		repo:      d.Repo,
-		canal:     d.Canal,
-		midias:    d.Midias,
-		ackTexto:  d.AckTexto,
-		autoNome:  d.AutoNome,
-		autoTexto: d.AutoTexto,
-		newID:     newID,
+		allow:    d.Allow,
+		repo:     d.Repo,
+		canal:    d.Canal,
+		midias:   d.Midias,
+		ackTexto: d.AckTexto,
+		agente:   d.Agente,
+		newID:    newID,
 	}
 }
 
@@ -164,14 +165,32 @@ func (g *Gateway) Receber(ctx context.Context, in Entrada) (ResultadoReceber, er
 		}
 	}
 	if err := g.repo.SalvarMensagem(ctx, msg); err != nil {
+		if errors.Is(err, domain.ErrProvedorDuplicado) && in.ProvedorID != "" {
+			return g.receberDuplicada(ctx, in)
+		}
 		return ResultadoReceber{}, err
 	}
-	if g.deveRespostaAutomatica(in) {
-		_, _ = g.enviarNaConversa(ctx, conversa, contato, g.autoTexto, nil)
+	if g.deveAgente(in) {
+		_ = g.agente.Atender(ctx, string(conversa.JID), in.Corpo)
 	} else if g.deveAck(in) {
 		_, _ = g.enviarNaConversa(ctx, conversa, contato, g.ackTexto, nil)
 	}
 	return ResultadoReceber{Aceita: true, Conversa: conversa, Mensagem: msg}, nil
+}
+
+func (g *Gateway) receberDuplicada(ctx context.Context, in Entrada) (ResultadoReceber, error) {
+	existing, ok, err := g.repo.MensagemPorProvedor(ctx, in.ProvedorID)
+	if err != nil {
+		return ResultadoReceber{}, err
+	}
+	if !ok {
+		return ResultadoReceber{}, domain.ErrProvedorDuplicado
+	}
+	conversa, _, err := g.repo.GetConversa(ctx, existing.ConversaID)
+	if err != nil {
+		return ResultadoReceber{}, err
+	}
+	return ResultadoReceber{Aceita: true, Conversa: conversa, Mensagem: existing, Duplicada: true}, nil
 }
 
 func (g *Gateway) deveAck(in Entrada) bool {
@@ -181,23 +200,18 @@ func (g *Gateway) deveAck(in Entrada) bool {
 	return g.allow.PermiteConversa(in.ConversaJID, in.ConversaPN, in.ConversaLID)
 }
 
-func (g *Gateway) deveRespostaAutomatica(in Entrada) bool {
-	needle := strings.ToLower(strings.TrimSpace(g.autoNome))
-	if needle == "" || strings.TrimSpace(g.autoTexto) == "" {
-		return false
-	}
-	if in.FromMe || in.Status || in.Origem == domain.OrigemHistorico {
+func (g *Gateway) deveAgente(in Entrada) bool {
+	if g.agente == nil || strings.TrimSpace(in.Corpo) == "" {
 		return false
 	}
 	switch in.Tipo {
 	case domain.MensagemReacao, domain.MensagemRevogacao, domain.MensagemIndecifravel:
 		return false
 	}
-	nome := in.PushName
-	if in.Grupo {
-		nome = in.ConversaNome
+	if in.FromMe || in.Status || in.Origem == domain.OrigemHistorico {
+		return false
 	}
-	return strings.Contains(strings.ToLower(nome), needle)
+	return g.allow.PermiteConversa(in.ConversaJID, in.ConversaPN, in.ConversaLID)
 }
 
 func (g *Gateway) Enviar(ctx context.Context, out Saida) (domain.Mensagem, error) {

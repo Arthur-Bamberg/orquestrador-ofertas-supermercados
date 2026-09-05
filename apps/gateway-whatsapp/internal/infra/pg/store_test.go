@@ -72,6 +72,65 @@ func TestStore_receberGrupoEMidiaRoundtrip(t *testing.T) {
 	}
 }
 
+func TestStore_receberConcorrenteMesmoProvedorNaoErro(t *testing.T) {
+	repo := pgtest.New(t)
+	var n atomic.Int64
+	gw := application.New(application.Deps{
+		Allow: domain.NovaAllowlist(""),
+		Repo:  repo,
+		Canal: stubCanal{},
+		NewID: func() string {
+			return t.Name() + "-" + itoa(n.Add(1))
+		},
+	})
+	in := application.Entrada{
+		ProvedorID:   "wamid.race",
+		ConversaJID:  "5511999999999",
+		RemetenteJID: "5511999999999",
+		Corpo:        "oi",
+	}
+	const N = 32
+	errs := make(chan error, N)
+	for i := 0; i < N; i++ {
+		go func() {
+			_, err := gw.Receber(context.Background(), in)
+			errs <- err
+		}()
+	}
+	var failed error
+	for i := 0; i < N; i++ {
+		if err := <-errs; err != nil && failed == nil {
+			failed = err
+		}
+	}
+	if failed != nil {
+		t.Fatalf("receber concorrente: %v", failed)
+	}
+	msgs, err := gw.ListarMensagens(context.Background(), mustConversa(t, gw, "5511999999999"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("mensagens=%d want 1", len(msgs))
+	}
+}
+
+func mustConversa(t *testing.T, gw *application.Gateway, jid string) domain.ConversaID {
+	t.Helper()
+	items, err := gw.ListarConversas(context.Background(), application.FiltroConversas{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := domain.NormalizarJID(jid)
+	for _, c := range items {
+		if c.JID == want {
+			return c.ID
+		}
+	}
+	t.Fatalf("conversa %s não encontrada", jid)
+	return ""
+}
+
 func TestStore_listarConversasOrdenaPelaUltima(t *testing.T) {
 	repo := pgtest.New(t)
 	var n atomic.Int64

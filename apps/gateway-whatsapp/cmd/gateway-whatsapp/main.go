@@ -14,6 +14,7 @@ import (
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/config"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/domain"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/httpapi"
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/infra/agente"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/infra/canal"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/infra/midia"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/infra/pg"
@@ -60,16 +61,19 @@ func main() {
 		defer wa.Disconnect()
 	}
 
-	gw := application.New(application.Deps{
-		Allow:     domain.NovaAllowlist(cfg.Allowlist),
-		Repo:      store,
-		Canal:     channel,
-		Midias:    midia.Local{Root: cfg.MidiaRoot},
-		AckTexto:  cfg.AckTexto,
-		AutoNome:  cfg.AutoNome,
-		AutoTexto: cfg.AutoTexto,
-		NewID:     func() string { return uuid.NewString() },
-	})
+	deps := application.Deps{
+		Allow:    domain.NovaAllowlist(cfg.Allowlist),
+		Repo:     store,
+		Canal:    channel,
+		Midias:   midia.Local{Root: cfg.MidiaRoot},
+		AckTexto: cfg.AckTexto,
+		NewID:    func() string { return uuid.NewString() },
+	}
+	if cfg.AgenteURL != "" {
+		deps.Agente = &agente.Cliente{URL: cfg.AgenteURL, Token: cfg.GatewayToken}
+		log.Printf("agente em %s", cfg.AgenteURL)
+	}
+	gw := application.New(deps)
 
 	if wa != nil {
 		wa.SetHandler(func(_ context.Context, in application.Entrada) {

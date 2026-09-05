@@ -93,26 +93,31 @@ func (s *Catalog) SaveFonte(ctx context.Context, f Fonte) error {
 	if f.ID == "" {
 		return fmt.Errorf("%w: fonte id obrigatório", ErrInvalid)
 	}
-	_, err := s.pool.Exec(ctx, `INSERT INTO fonte (id, mercado_id, url, filtro_nome_documento)
-		VALUES ($1, $2, $3, $4)
+	_, err := s.pool.Exec(ctx, `INSERT INTO fonte (id, mercado_id, url, filtro_nome_documento, ativa)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (id) DO UPDATE SET mercado_id = EXCLUDED.mercado_id, url = EXCLUDED.url,
-			filtro_nome_documento = EXCLUDED.filtro_nome_documento`,
-		f.ID, f.MercadoID, f.URL, f.FiltroNomeDocumento)
+			filtro_nome_documento = EXCLUDED.filtro_nome_documento, ativa = EXCLUDED.ativa`,
+		f.ID, f.MercadoID, f.URL, f.FiltroNomeDocumento, f.IsAtiva())
 	return wrapPG(err)
 }
 
 func (s *Catalog) GetFonte(ctx context.Context, id FonteID) (Fonte, bool, error) {
 	var f Fonte
-	err := s.pool.QueryRow(ctx, `SELECT id, mercado_id, url, filtro_nome_documento FROM fonte WHERE id = $1`, id).
-		Scan(&f.ID, &f.MercadoID, &f.URL, &f.FiltroNomeDocumento)
+	var ativa bool
+	err := s.pool.QueryRow(ctx, `SELECT id, mercado_id, url, filtro_nome_documento, ativa FROM fonte WHERE id = $1`, id).
+		Scan(&f.ID, &f.MercadoID, &f.URL, &f.FiltroNomeDocumento, &ativa)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Fonte{}, false, nil
 	}
-	return f, err == nil, wrapPG(err)
+	if err != nil {
+		return Fonte{}, false, wrapPG(err)
+	}
+	f.Ativa = Bool(ativa)
+	return f, true, nil
 }
 
 func (s *Catalog) ListFontes(ctx context.Context) ([]Fonte, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, mercado_id, url, filtro_nome_documento FROM fonte ORDER BY id`)
+	rows, err := s.pool.Query(ctx, `SELECT id, mercado_id, url, filtro_nome_documento, ativa FROM fonte ORDER BY id`)
 	if err != nil {
 		return nil, wrapPG(err)
 	}
@@ -120,9 +125,11 @@ func (s *Catalog) ListFontes(ctx context.Context) ([]Fonte, error) {
 	out := []Fonte{}
 	for rows.Next() {
 		var f Fonte
-		if err := rows.Scan(&f.ID, &f.MercadoID, &f.URL, &f.FiltroNomeDocumento); err != nil {
+		var ativa bool
+		if err := rows.Scan(&f.ID, &f.MercadoID, &f.URL, &f.FiltroNomeDocumento, &ativa); err != nil {
 			return nil, wrapPG(err)
 		}
+		f.Ativa = Bool(ativa)
 		out = append(out, f)
 	}
 	return out, wrapPG(rows.Err())

@@ -20,7 +20,8 @@ export type FieldKind =
   | "textarea"
   | "select"
   | "json"
-  | "ref";
+  | "ref"
+  | "boolean";
 
 export type EntityField = {
   name: string;

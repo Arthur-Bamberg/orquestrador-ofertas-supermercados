@@ -283,241 +283,60 @@ func TestReceber_persisteMidiaComCaption(t *testing.T) {
 	}
 }
 
-func TestReceber_respostaAutomaticaEmDiretaForaDaAllowlistQuandoPushNameCasa(t *testing.T) {
-	fx := newGWComResposta(t, "5511999999999", "Bruna", "Estou trabalhando, não posso no momento")
-	got, err := fx.gw.Receber(context.Background(), application.Entrada{
-		ProvedorID:   "wamid.bruna",
-		ConversaJID:  "5511888888888",
-		RemetenteJID: "5511888888888",
-		Corpo:        "oi",
-		PushName:     "Bruna Silva",
+func TestReceber_notificaAgenteNoLugarDoAck(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	midias := &memMidia{files: map[string][]byte{}}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:    domain.NovaAllowlist("5511999999999"),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   midias,
+		AckTexto: "ack-teste",
+		Agente:   ag,
+		NewID:    seqIDs(),
+	})
+	got, err := gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.agente",
+		ConversaJID:  "5511999999999",
+		RemetenteJID: "5511999999999",
+		Corpo:        "leite e arroz",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fx.canal.envios) != 1 || fx.canal.envios[0].Corpo != "Estou trabalhando, não posso no momento" {
-		t.Fatalf("envios=%+v", fx.canal.envios)
+	if len(canal.envios) != 0 {
+		t.Fatalf("ack com agente: %+v", canal.envios)
 	}
-	if fx.canal.envios[0].Destino != domain.NormalizarJID("5511888888888") {
-		t.Fatalf("destino=%s", fx.canal.envios[0].Destino)
-	}
-	saidas := 0
-	for _, m := range fx.repo.msgs {
-		if m.Direcao == domain.DirecaoSaida && m.Corpo == "Estou trabalhando, não posso no momento" && m.ConversaID == got.Conversa.ID {
-			saidas++
-		}
-	}
-	if saidas != 1 {
-		t.Fatalf("respostas persistidas=%d", saidas)
+	if len(ag.calls) != 1 || ag.calls[0].jid != string(got.Conversa.JID) || ag.calls[0].corpo != "leite e arroz" {
+		t.Fatalf("%+v conversa=%s", ag.calls, got.Conversa.JID)
 	}
 }
 
-func TestReceber_allowlistComNomeCasaSoRespostaAutomatica(t *testing.T) {
-	fx := newGWComResposta(t, "5511888888888", "Bruna", "Estou trabalhando, não posso no momento")
-	if _, err := fx.gw.Receber(context.Background(), application.Entrada{
-		ProvedorID:   "wamid.ambos",
-		ConversaJID:  "5511888888888",
-		RemetenteJID: "5511888888888",
-		Corpo:        "oi",
-		PushName:     "Bruna",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if len(fx.canal.envios) != 1 || fx.canal.envios[0].Corpo != "Estou trabalhando, não posso no momento" {
-		t.Fatalf("envios=%+v", fx.canal.envios)
-	}
-}
-
-func TestReceber_respostaAutomaticaNoGrupoQuandoAssuntoCasaNaoPushName(t *testing.T) {
-	fx := newGWComResposta(t, "5511999999999", "Bruna", "Estou trabalhando, não posso no momento")
-	got, err := fx.gw.Receber(context.Background(), application.Entrada{
-		ProvedorID:   "wamid.gbruna",
-		ConversaJID:  "120363bruna@g.us",
-		RemetenteJID: "5511777777777",
-		Grupo:        true,
-		Corpo:        "oi",
-		PushName:     "Carlos",
-		ConversaNome: "Bruna e amigos",
+func TestReceber_foraDaAllowlistNaoChamaAgente(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:    domain.NovaAllowlist("5511999999999"),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   &memMidia{files: map[string][]byte{}},
+		AckTexto: "ack-teste",
+		Agente:   ag,
+		NewID:    seqIDs(),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(fx.canal.envios) != 1 || fx.canal.envios[0].Corpo != "Estou trabalhando, não posso no momento" {
-		t.Fatalf("envios=%+v", fx.canal.envios)
-	}
-	if fx.canal.envios[0].Destino != domain.NormalizarJID("120363bruna@g.us") {
-		t.Fatalf("destino=%s", fx.canal.envios[0].Destino)
-	}
-	if got.Conversa.Tipo != domain.ConversaGrupo {
-		t.Fatalf("tipo=%s", got.Conversa.Tipo)
-	}
-}
-
-func TestReceber_grupoComPushNameBrunaSemAssuntoNaoDispara(t *testing.T) {
-	fx := newGWComResposta(t, "5511999999999", "Bruna", "Estou trabalhando, não posso no momento")
-	if _, err := fx.gw.Receber(context.Background(), application.Entrada{
-		ProvedorID:   "wamid.gpush",
-		ConversaJID:  "120363familia@g.us",
-		RemetenteJID: "5511777777777",
-		Grupo:        true,
-		Corpo:        "oi",
-		PushName:     "Bruna Silva",
+	if _, err := gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.fora",
+		ConversaJID:  "5511888888888",
+		RemetenteJID: "5511888888888",
+		Corpo:        "leite",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(fx.canal.envios) != 0 {
-		t.Fatalf("não deveria contagiar o grupo: %+v", fx.canal.envios)
-	}
-}
-
-func TestReceber_respostaAutomaticaNaoDisparaForaDoRecorteVivo(t *testing.T) {
-	cases := []struct {
-		nome string
-		in   application.Entrada
-	}{
-		{
-			nome: "historico",
-			in: application.Entrada{
-				ProvedorID: "wamid.hist-bruna", ConversaJID: "5511888888888", RemetenteJID: "5511888888888",
-				Corpo: "oi", PushName: "Bruna", Origem: domain.OrigemHistorico,
-			},
-		},
-		{
-			nome: "fromMe",
-			in: application.Entrada{
-				ProvedorID: "wamid.me-bruna", ConversaJID: "5511888888888", RemetenteJID: "5511888888888",
-				Corpo: "oi", PushName: "Bruna", FromMe: true,
-			},
-		},
-		{
-			nome: "status",
-			in: application.Entrada{
-				ProvedorID: "wamid.st-bruna", ConversaJID: "status@broadcast", RemetenteJID: "5511888888888",
-				Corpo: "story", PushName: "Bruna", Status: true,
-			},
-		},
-		{
-			nome: "reacao",
-			in: application.Entrada{
-				ProvedorID: "wamid.rx-bruna", ConversaJID: "5511888888888", RemetenteJID: "5511888888888",
-				PushName: "Bruna", Tipo: domain.MensagemReacao, Payload: `{"alvo":"x"}`,
-			},
-		},
-		{
-			nome: "revogacao",
-			in: application.Entrada{
-				ProvedorID: "wamid.rv-bruna", ConversaJID: "5511888888888", RemetenteJID: "5511888888888",
-				PushName: "Bruna", Tipo: domain.MensagemRevogacao,
-			},
-		},
-		{
-			nome: "indecifravel",
-			in: application.Entrada{
-				ProvedorID: "wamid.ud-bruna", ConversaJID: "5511888888888", RemetenteJID: "5511888888888",
-				PushName: "Bruna", Tipo: domain.MensagemIndecifravel,
-			},
-		},
-		{
-			nome: "bruno-nao-e-bruna",
-			in: application.Entrada{
-				ProvedorID: "wamid.bruno", ConversaJID: "5511888888888", RemetenteJID: "5511888888888",
-				Corpo: "oi", PushName: "Bruno",
-			},
-		},
-		{
-			nome: "corpo-nao-e-nome",
-			in: application.Entrada{
-				ProvedorID: "wamid.corpo", ConversaJID: "5511888888888", RemetenteJID: "5511888888888",
-				Corpo: "fala da Bruna", PushName: "Carlos",
-			},
-		},
-		{
-			nome: "acento-nao-fold",
-			in: application.Entrada{
-				ProvedorID: "wamid.accent", ConversaJID: "5511888888888", RemetenteJID: "5511888888888",
-				Corpo: "oi", PushName: "Bruná",
-			},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.nome, func(t *testing.T) {
-			fx := newGWComResposta(t, "5511999999999", "Bruna", "Estou trabalhando, não posso no momento")
-			if _, err := fx.gw.Receber(context.Background(), tc.in); err != nil {
-				t.Fatal(err)
-			}
-			if len(fx.canal.envios) != 0 {
-				t.Fatalf("envios=%+v", fx.canal.envios)
-			}
-		})
-	}
-}
-
-func TestReceber_respostaAutomaticaNaoReenviaQuandoDuplicada(t *testing.T) {
-	fx := newGWComResposta(t, "5511999999999", "Bruna", "Estou trabalhando, não posso no momento")
-	in := application.Entrada{
-		ProvedorID:   "wamid.dup-bruna",
-		ConversaJID:  "5511888888888",
-		RemetenteJID: "5511888888888",
-		Corpo:        "oi",
-		PushName:     "Bruna",
-	}
-	if _, err := fx.gw.Receber(context.Background(), in); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fx.gw.Receber(context.Background(), in); err != nil {
-		t.Fatal(err)
-	}
-	if len(fx.canal.envios) != 1 {
-		t.Fatalf("envios=%d", len(fx.canal.envios))
-	}
-}
-
-func TestReceber_respostaAutomaticaCaseInsensitive(t *testing.T) {
-	fx := newGWComResposta(t, "5511999999999", "bruna", "Estou trabalhando, não posso no momento")
-	if _, err := fx.gw.Receber(context.Background(), application.Entrada{
-		ProvedorID:   "wamid.case",
-		ConversaJID:  "5511888888888",
-		RemetenteJID: "5511888888888",
-		Corpo:        "oi",
-		PushName:     "BRUNA SILVA",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if len(fx.canal.envios) != 1 {
-		t.Fatalf("envios=%+v", fx.canal.envios)
-	}
-}
-
-func TestReceber_respostaAutomaticaEmMidiaViva(t *testing.T) {
-	fx := newGWComResposta(t, "5511999999999", "Bruna", "Estou trabalhando, não posso no momento")
-	if _, err := fx.gw.Receber(context.Background(), application.Entrada{
-		ProvedorID:   "wamid.img-bruna",
-		ConversaJID:  "5511888888888",
-		RemetenteJID: "5511888888888",
-		PushName:     "Bruna",
-		Tipo:         domain.MensagemMidia,
-		Midia:        &domain.MidiaBytes{Tipo: domain.MidiaImagem, Filename: "a.jpg", MIME: "image/jpeg", Conteudo: []byte{1}},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if len(fx.canal.envios) != 1 {
-		t.Fatalf("envios=%+v", fx.canal.envios)
-	}
-}
-
-func TestReceber_respostaAutomaticaDesligadaSemTexto(t *testing.T) {
-	fx := newGWComResposta(t, "5511999999999", "Bruna", "")
-	if _, err := fx.gw.Receber(context.Background(), application.Entrada{
-		ProvedorID:   "wamid.off",
-		ConversaJID:  "5511888888888",
-		RemetenteJID: "5511888888888",
-		Corpo:        "oi",
-		PushName:     "Bruna",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if len(fx.canal.envios) != 0 {
-		t.Fatalf("envios=%+v", fx.canal.envios)
+	if len(ag.calls) != 0 || len(canal.envios) != 0 {
+		t.Fatalf("agente=%+v canal=%+v", ag.calls, canal.envios)
 	}
 }
 
@@ -633,23 +452,16 @@ type fixture struct {
 
 func newGW(t *testing.T, allowCSV string) fixture {
 	t.Helper()
-	return newGWComResposta(t, allowCSV, "", "")
-}
-
-func newGWComResposta(t *testing.T, allowCSV, autoNome, autoTexto string) fixture {
-	t.Helper()
 	repo := newMemRepo()
 	canal := &stubCanal{}
 	midias := &memMidia{files: map[string][]byte{}}
 	gw := application.New(application.Deps{
-		Allow:     domain.NovaAllowlist(allowCSV),
-		Repo:      repo,
-		Canal:     canal,
-		Midias:    midias,
-		AckTexto:  "ack-teste",
-		AutoNome:  autoNome,
-		AutoTexto: autoTexto,
-		NewID:     seqIDs(),
+		Allow:    domain.NovaAllowlist(allowCSV),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   midias,
+		AckTexto: "ack-teste",
+		NewID:    seqIDs(),
 	})
 	return fixture{gw: gw, repo: repo, canal: canal, midias: midias}
 }
@@ -671,6 +483,15 @@ func contarDirecao(repo *memRepo, d domain.Direcao) int {
 		}
 	}
 	return n
+}
+
+type stubAgente struct {
+	calls []struct{ jid, corpo string }
+}
+
+func (s *stubAgente) Atender(_ context.Context, conversaJID, corpo string) error {
+	s.calls = append(s.calls, struct{ jid, corpo string }{conversaJID, corpo})
+	return nil
 }
 
 func seqIDs() func() string {

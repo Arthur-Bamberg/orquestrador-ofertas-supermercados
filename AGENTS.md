@@ -1,6 +1,6 @@
 # AGENTS.md — orquestrador-ofertas-supermercados
 
-Instructions for coding agents on this **monorepo / Go workspace**. Domain language: scraper [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md); WhatsApp channel [`apps/gateway-whatsapp/CONTEXT.md`](./apps/gateway-whatsapp/CONTEXT.md); map [`CONTEXT-MAP.md`](./CONTEXT-MAP.md). Workspace ADRs in [`docs/adr/`](./docs/adr/); app ADRs under each `apps/<name>/docs/adr/`.
+Instructions for coding agents on this **monorepo / Go workspace**. Domain language: scraper [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md); WhatsApp channel [`apps/gateway-whatsapp/CONTEXT.md`](./apps/gateway-whatsapp/CONTEXT.md); Agente [`apps/agente-ofertas/CONTEXT.md`](./apps/agente-ofertas/CONTEXT.md); map [`CONTEXT-MAP.md`](./CONTEXT-MAP.md). Workspace ADRs in [`docs/adr/`](./docs/adr/); app ADRs under each `apps/<name>/docs/adr/`.
 
 ## What this repository is
 
@@ -12,8 +12,7 @@ Workspace for supermarket-offers apps. It is **not** itself an application binar
 | **Current** | `ofertas-api` | Go HTTP API over shared Postgres (CRUD + pipeline ops; ADR 0005 / 0006) |
 | **Current** | `ofertas-backoffice` | Vite/React SPA backoffice (filters + screens; ADR 0005) |
 | **Current** | `gateway-whatsapp` | WhatsApp channel gateway (whatsmeow; ADR 0007) |
-| **Planned** | `agente-ofertas-worker` | Agent/worker over ofertas |
-| **Planned** | `mcp-server-ofertas` | MCP server for ofertas |
+| **Current** | `agente-ofertas` | Interprets Lista, reads Oferta, replies via Canal; catalog assistant is a surface (ADR 0010) |
 
 Create an app module only when implementing it — do not scaffold empty `apps/` directories.
 
@@ -40,8 +39,7 @@ apps/
   ofertas-api/
   ofertas-backoffice/
   gateway-whatsapp/             # WhatsApp channel (ADR 0007)
-  # agente-ofertas-worker/      # planned
-  # mcp-server-ofertas/         # planned
+  agente-ofertas/               # Lista → Oferta → Resposta (ADR 0010)
 modules/                        # shared Go modules — create only when extracting
 .githooks/                      # pre-commit → test every workspace module
 scripts/install-git-hooks.sh
@@ -74,7 +72,7 @@ Register new modules in root `go.work` (`use ./apps/...` or `./modules/...`).
 
 ```bash
 cp .env.example .env              # senha local do Postgres + canal + extrator
-docker compose up --build         # from repo root — Postgres, API :8080, backoffice :5173, gateway :8090
+docker compose up --build         # from repo root — Postgres, API :8080, backoffice :5173, gateway :8090, agente :8091
 docker compose run --rm ofertas-scraper seed
 docker compose run --rm ofertas-scraper run
 ./scripts/install-git-hooks.sh    # once per clone
@@ -143,3 +141,4 @@ Default for this repo: work on **`main`**. Do **not** create a feature branch, o
 | ofertas-api | [`apps/ofertas-api/AGENTS.md`](./apps/ofertas-api/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0005) |
 | ofertas-backoffice | [`apps/ofertas-backoffice/AGENTS.md`](./apps/ofertas-backoffice/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0005) |
 | gateway-whatsapp | [`apps/gateway-whatsapp/AGENTS.md`](./apps/gateway-whatsapp/AGENTS.md) | [`apps/gateway-whatsapp/CONTEXT.md`](./apps/gateway-whatsapp/CONTEXT.md) |
+| agente-ofertas | [`apps/agente-ofertas/AGENTS.md`](./apps/agente-ofertas/AGENTS.md) | [`apps/agente-ofertas/CONTEXT.md`](./apps/agente-ofertas/CONTEXT.md) |

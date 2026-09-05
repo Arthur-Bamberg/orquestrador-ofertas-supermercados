@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCatalogLookups,
+  formatBoolean,
   formatCurrency,
   formatDate,
   formatDateTime,
   formatQuantidades,
+  isAtiva,
   refOptions,
   resolveRef,
 } from "./display";
@@ -36,6 +38,17 @@ describe("formatQuantidades", () => {
   it("mostra lista de tamanhos sem colchetes JSON", () => {
     expect(formatQuantidades([990])).toBe("990");
     expect(formatQuantidades([500, 1000])).toBe("500 / 1.000");
+  });
+});
+
+describe("formatBoolean / isAtiva", () => {
+  it("Fonte ativa omite ou true → Sim; false → Não", () => {
+    expect(formatBoolean(true)).toBe("Sim");
+    expect(formatBoolean(undefined)).toBe("Sim");
+    expect(formatBoolean(false)).toBe("Não");
+    expect(isAtiva(true)).toBe(true);
+    expect(isAtiva(undefined)).toBe(true);
+    expect(isAtiva(false)).toBe(false);
   });
 });
 

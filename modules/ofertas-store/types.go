@@ -25,6 +25,16 @@ type Fonte struct {
 	MercadoID           MercadoID `json:"mercadoId"`
 	URL                 string    `json:"url"`
 	FiltroNomeDocumento string    `json:"filtroNomeDocumento"`
+	// Ativa: nil means active (default). Job diário and discover skip when false.
+	Ativa *bool `json:"ativa,omitempty"`
+}
+
+// Bool returns a *bool for Fonte.Ativa and similar optional flags.
+func Bool(v bool) *bool { return &v }
+
+// IsAtiva reports whether the Fonte participates in discovery/job (default true).
+func (f Fonte) IsAtiva() bool {
+	return f.Ativa == nil || *f.Ativa
 }
 
 type Produto struct {

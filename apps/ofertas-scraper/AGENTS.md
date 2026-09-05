@@ -8,8 +8,8 @@ Module path: `github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/
 
 Daily job (08:00 America/Sao_Paulo) that:
 
-1. Loads **Fontes** from PostgreSQL
-2. GETs each Fonte, discovers `.pdf` names, applies optional per-Fonte filter
+1. Loads **Fontes** from PostgreSQL (skips inactive — ADR 0039)
+2. GETs each active Fonte, discovers `.pdf` names, applies optional per-Fonte filter
 3. Creates **Documentos** (identity: Fonte + filename + discovery day)
 4. Downloads PDF → rasterizes pages → downscales images → sends to **Extrator**
 5. Validates results in **domain** → persists **Ofertas** and **Falhas de Extração**

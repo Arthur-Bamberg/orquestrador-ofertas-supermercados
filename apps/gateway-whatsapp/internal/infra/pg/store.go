@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"sort"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/domain"
@@ -108,10 +110,20 @@ func (s *Store) UpsertContato(ctx context.Context, c domain.Contato) (domain.Con
 	}
 	_, err = s.pool.Exec(ctx, `INSERT INTO whatsapp.contato (id, jid, jid_lid) VALUES ($1, $2, $3)`,
 		string(c.ID), string(c.JID), string(c.JIDLID))
-	if err != nil {
+	if err == nil {
+		return c, nil
+	}
+	if !isUniqueViolation(err) {
 		return domain.Contato{}, err
 	}
-	return c, nil
+	existing, ok, findErr := s.findContato(ctx, c.JID, c.JIDLID)
+	if findErr != nil {
+		return domain.Contato{}, findErr
+	}
+	if !ok {
+		return domain.Contato{}, err
+	}
+	return s.mergeContato(ctx, existing, c)
 }
 
 func (s *Store) findContato(ctx context.Context, keys ...domain.JID) (domain.Contato, bool, error) {
@@ -163,10 +175,20 @@ func (s *Store) UpsertConversa(ctx context.Context, c domain.Conversa) (domain.C
 	}
 	_, err = s.pool.Exec(ctx, `INSERT INTO whatsapp.conversa (id, jid, jid_lid, tipo) VALUES ($1, $2, $3, $4)`,
 		string(c.ID), string(c.JID), string(c.JIDLID), string(c.Tipo))
-	if err != nil {
+	if err == nil {
+		return c, nil
+	}
+	if !isUniqueViolation(err) {
 		return domain.Conversa{}, err
 	}
-	return c, nil
+	existing, ok, findErr := s.findConversa(ctx, c.JID, c.JIDLID)
+	if findErr != nil {
+		return domain.Conversa{}, findErr
+	}
+	if !ok {
+		return domain.Conversa{}, err
+	}
+	return s.mergeConversa(ctx, existing, c)
 }
 
 func (s *Store) findConversa(ctx context.Context, keys ...domain.JID) (domain.Conversa, bool, error) {
@@ -243,7 +265,15 @@ func (s *Store) SalvarMensagem(ctx context.Context, m domain.Mensagem) error {
 	`, string(m.ID), string(m.ConversaID), string(m.ContatoID), string(m.Direcao), m.Corpo, m.ProvedorID, string(m.Status),
 		midiaTipo, midiaPath, midiaFile, midiaMIME, m.CriadoEm,
 		origem, m.PushName, string(m.Tipo), payload)
+	if err != nil && isUniqueViolation(err) && m.ProvedorID != "" {
+		return domain.ErrProvedorDuplicado
+	}
 	return err
+}
+
+func isUniqueViolation(err error) bool {
+	var e *pgconn.PgError
+	return errors.As(err, &e) && e.Code == "23505"
 }
 
 func payloadJSON(raw string) string {

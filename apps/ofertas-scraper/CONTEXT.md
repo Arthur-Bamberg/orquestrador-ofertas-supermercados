@@ -21,7 +21,7 @@ Rótulo taxonômico de um Produto para filtrar e agrupar (ex.: mercearia, grãos
 _Avoid_: tipo, variante, tag solta na Oferta
 
 **Fonte**:
-URL configurada e persistida cuja resposta revela URLs de PDFs (HTML/JS/JSON); o nome do arquivo identifica o Documento e o download usa a URL do link. Pode apontar para página HTML ou endpoint JSON de ofertas. Pertence a um Mercado; pode incluir filtro opcional por regex sobre o nome do Documento. Fallbacks de vigência (filename / primeira descoberta) são sempre ativos — não há flag por Fonte. Se o Extrator envia a data, ela prevalece. Apagar só é permitido quando não há Documentos dessa Fonte; caso contrário a exclusão é rejeitada. Descoberta de PDFs pode ser disparada sob demanda numa Fonte (cria Documentos novos sem processá-los).
+URL configurada e persistida cuja resposta revela URLs de PDFs (HTML/JS/JSON); o nome do arquivo identifica o Documento e o download usa a URL do link. Pode apontar para página HTML ou endpoint JSON de ofertas. Pertence a um Mercado; pode incluir filtro opcional por regex sobre o nome do Documento. Pode estar ativa ou inativa: inativa permanece no catálogo, mas o job diário a ignora e a descoberta sob demanda é rejeitada. Fallbacks de vigência (filename / primeira descoberta) são sempre ativos — não há flag por Fonte. Se o Extrator envia a data, ela prevalece. Apagar só é permitido quando não há Documentos dessa Fonte; caso contrário a exclusão é rejeitada. Descoberta de PDFs pode ser disparada sob demanda numa Fonte ativa (cria Documentos novos sem processá-los).
 _Avoid_: Site, link, URL, origem (como sinônimo de Fonte)
 
 **Mercado**:

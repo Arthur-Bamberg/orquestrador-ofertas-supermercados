@@ -1,6 +1,6 @@
 export type RefKind = "mercado" | "produto" | "marca" | "fonte" | "documento";
 
-export type ColumnFormat = "text" | "date" | "datetime" | "currency" | "ref" | "quantidades";
+export type ColumnFormat = "text" | "date" | "datetime" | "currency" | "ref" | "quantidades" | "boolean";
 
 export type CatalogLookups = Record<RefKind, Map<string, string>>;
 
@@ -126,6 +126,21 @@ export function formatQuantidades(value: unknown): string {
   }
 
   return value.map((item) => new Intl.NumberFormat("pt-BR").format(Number(item))).join(" / ");
+}
+
+export function formatBoolean(value: unknown): string {
+  if (value === false || value === "false") {
+    return "Não";
+  }
+  if (value === true || value === "true" || value === null || value === undefined || value === "") {
+    return "Sim";
+  }
+  return String(value);
+}
+
+/** Fonte.ativa defaults to true when omitted (nil / absent). */
+export function isAtiva(value: unknown): boolean {
+  return value !== false && value !== "false";
 }
 
 export function resolveRef(

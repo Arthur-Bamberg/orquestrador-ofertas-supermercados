@@ -3,6 +3,7 @@ package application_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log"
 	"sync"
 	"testing"
@@ -431,6 +432,80 @@ type countingExtrator struct {
 func (c *countingExtrator) Extract(ctx context.Context, images []domain.PageImage) ([]domain.CandidatoOferta, []byte, *domain.UsoExtrator, error) {
 	*c.n++
 	return c.inner.Extract(ctx, images)
+}
+
+func TestRunDailyJob_SkipsFonteInativa(t *testing.T) {
+	loc, now := jobClock()
+	docs := newMemDocs()
+	calls := 0
+	discoverCalls := 0
+	deps := baseJobDeps(t, loc, now, docs, &countingExtrator{inner: extrator.Stub{Candidatos: []domain.CandidatoOferta{sampleCandidato()}}, n: &calls})
+	httpClient := &memFonteHTTP{
+		pdfs: map[string][]domain.PDFDescoberto{
+			"f-off": {{Filename: "off.pdf", URL: "u-off"}},
+			"f1":    {{Filename: "encarte.pdf", URL: "u"}},
+		},
+		body: []byte("%PDF"),
+	}
+	deps.FonteHTTP = &countingDiscover{inner: httpClient, n: &discoverCalls}
+	deps.Fontes = &memFontes{items: []domain.Fonte{
+		{ID: "f-off", MercadoID: "m1", Ativa: storeBool(false)},
+		{ID: "f1", MercadoID: "m1"},
+	}}
+
+	if err := application.RunDailyJob(context.Background(), deps); err != nil {
+		t.Fatal(err)
+	}
+	if discoverCalls != 1 {
+		t.Fatalf("inativa não deve ir ao FonteHTTP; discovers=%d", discoverCalls)
+	}
+	if _, ok, _ := docs.GetByIdentity(context.Background(), "f-off", "off.pdf", "2026-07-18"); ok {
+		t.Fatal("fonte inativa não deve criar Documento")
+	}
+	if calls != 1 {
+		t.Fatalf("fonte ativa should run; calls=%d", calls)
+	}
+}
+
+func TestDiscoverDocumentos_RejeitaFonteInativa(t *testing.T) {
+	loc, now := jobClock()
+	docs := newMemDocs()
+	deps := application.RunDailyJobDeps{
+		Fontes: &memFontes{items: []domain.Fonte{
+			{ID: "f-off", MercadoID: "m1", Ativa: storeBool(false)},
+		}},
+		Documentos: docs,
+		FonteHTTP: &memFonteHTTP{
+			pdfs: map[string][]domain.PDFDescoberto{"f-off": {{Filename: "off.pdf", URL: "u"}}},
+			body: []byte("%PDF"),
+		},
+		Clock:    fixedClock{t: now},
+		Log:      log.New(&bytes.Buffer{}, "", 0),
+		Location: loc,
+	}
+	err := application.DiscoverDocumentos(context.Background(), deps, "f-off")
+	if !errors.Is(err, domain.ErrFonteInativa) {
+		t.Fatalf("err=%v", err)
+	}
+	if _, ok, _ := docs.GetByIdentity(context.Background(), "f-off", "off.pdf", "2026-07-18"); ok {
+		t.Fatal("não deve criar Documento")
+	}
+}
+
+func storeBool(v bool) *bool { return &v }
+
+type countingDiscover struct {
+	inner domain.FonteClient
+	n     *int
+}
+
+func (c *countingDiscover) DiscoverPDFs(ctx context.Context, fonte domain.Fonte) ([]domain.PDFDescoberto, error) {
+	*c.n++
+	return c.inner.DiscoverPDFs(ctx, fonte)
+}
+
+func (c *countingDiscover) DownloadPDF(ctx context.Context, pdfURL string) ([]byte, error) {
+	return c.inner.DownloadPDF(ctx, pdfURL)
 }
 
 func TestRunDailyJob_OnlyFonteID(t *testing.T) {

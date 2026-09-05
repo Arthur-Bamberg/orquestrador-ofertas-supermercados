@@ -281,6 +281,65 @@ td code {
   min-width: 160px;
 }
 
+.ativa-toggle {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.5rem;
+  user-select: none;
+}
+
+.ativa-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+
+.ativa-toggle-track {
+  background: #c7d0dc;
+  border-radius: 999px;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 1.35rem;
+  padding: 0.15rem;
+  transition: background 0.15s ease;
+  width: 2.4rem;
+}
+
+.ativa-toggle-thumb {
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgb(16 24 40 / 0.2);
+  display: block;
+  height: 1.05rem;
+  transition: transform 0.15s ease;
+  width: 1.05rem;
+}
+
+.ativa-toggle.is-on .ativa-toggle-track {
+  background: #1f7a45;
+}
+
+.ativa-toggle.is-on .ativa-toggle-thumb {
+  transform: translateX(1.05rem);
+}
+
+.ativa-toggle.is-off .ativa-toggle-label {
+  color: #6b7785;
+}
+
+.ativa-toggle:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ativa-toggle:focus-within .ativa-toggle-track {
+  outline: 2px solid #1559b2;
+  outline-offset: 2px;
+}
+
 .detail-list {
   background: #ffffff;
   border: 1px solid #dbe2ea;

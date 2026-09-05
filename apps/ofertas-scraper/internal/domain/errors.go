@@ -11,6 +11,9 @@ var ErrExtratorIndisponivel = errors.New("extrator indisponivel")
 // Composite Extrator failovers; the job must not apply ADR 0022 backoff for this error.
 var ErrExtratorCota = errors.New("extrator cota esgotada")
 
+// ErrFonteInativa signals discover/job refused a Fonte with ativa=false.
+var ErrFonteInativa = errors.New("fonte inativa")
+
 // Extrator adapter names persisted on Uso do Extrator (ADR 0037).
 const (
 	ExtratorProviderGemini = "gemini"

@@ -88,6 +88,10 @@ func RunDailyJob(ctx context.Context, d RunDailyJobDeps) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if !fonte.IsAtiva() {
+			d.Log.Printf("fonte %s skipped (inativa)", fonte.ID)
+			continue
+		}
 		if d.OnlyFonteID != "" && fonte.ID != d.OnlyFonteID {
 			d.Log.Printf("fonte %s skipped (RUN_FONTE_ID=%s)", fonte.ID, d.OnlyFonteID)
 			continue
@@ -149,6 +153,9 @@ func DiscoverDocumentos(ctx context.Context, d RunDailyJobDeps, fonteID domain.F
 	fonte, err := findFonte(ctx, d.Fontes, fonteID)
 	if err != nil {
 		return err
+	}
+	if !fonte.IsAtiva() {
+		return fmt.Errorf("%w: %s", domain.ErrFonteInativa, fonte.ID)
 	}
 	now := d.Clock.Now().In(d.Location)
 	dia := now.Format("2006-01-02")

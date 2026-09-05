@@ -3,6 +3,7 @@ import {
   type CatalogLookups,
   type ColumnFormat,
   type RefKind,
+  formatBoolean,
   formatCurrency,
   formatDate,
   formatDateTime,
@@ -76,6 +77,10 @@ export function FormattedValue({ value, format, refKind, lookups, lookupsLoading
 
   if (format === "quantidades") {
     return <>{formatQuantidades(value)}</>;
+  }
+
+  if (format === "boolean") {
+    return <>{formatBoolean(value)}</>;
   }
 
   return <ValueView value={value} />;
