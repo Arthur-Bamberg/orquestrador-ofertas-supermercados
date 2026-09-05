@@ -1,0 +1,20 @@
+{
+  "products": [
+    {
+      "name": "Arroz Integral Camil 1kg",
+      "brand": "Camil",
+      "price": 8.9,
+      "listPrice": 12.9,
+      "quantity": 1000,
+      "unit": "g"
+    },
+    {
+      "name": "Arroz Integral Tio João 5kg",
+      "brand": "Tio João",
+      "price": 32,
+      "listPrice": 32,
+      "quantity": 5000,
+      "unit": "g"
+    }
+  ]
+}

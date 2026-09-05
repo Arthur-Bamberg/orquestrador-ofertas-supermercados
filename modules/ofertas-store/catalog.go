@@ -372,11 +372,11 @@ func (s *Catalog) DeleteDocumento(ctx context.Context, id DocumentoID) error {
 		return fmt.Errorf("%w: documento %s", ErrNotFound, id)
 	}
 	for _, oid := range ofertaIDs {
-		var n int
-		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM documento_oferta WHERE oferta_id = $1`, oid).Scan(&n); err != nil {
+		ok, err := ofertaTemOrigemTx(ctx, tx, oid)
+		if err != nil {
 			return wrapPG(err)
 		}
-		if n == 0 {
+		if !ok {
 			if _, err := tx.Exec(ctx, `DELETE FROM oferta WHERE id = $1`, oid); err != nil {
 				return wrapPG(err)
 			}
@@ -418,13 +418,63 @@ func (s *Catalog) ListDias(ctx context.Context, fonteID FonteID, filename string
 	return out, wrapPG(rows.Err())
 }
 
+func (s *Catalog) SaveColeta(ctx context.Context, c Coleta) error {
+	if c.ID == "" {
+		return fmt.Errorf("%w: coleta id obrigatório", ErrInvalid)
+	}
+	atualizado := c.Atualizado
+	if atualizado.IsZero() {
+		atualizado = time.Time{}
+	}
+	_, err := s.pool.Exec(ctx, `INSERT INTO coleta (id, produto_id, mercado_id, dia, estado, ultimo_erro, atualizado)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		ON CONFLICT (id) DO UPDATE SET
+			produto_id = EXCLUDED.produto_id, mercado_id = EXCLUDED.mercado_id, dia = EXCLUDED.dia,
+			estado = EXCLUDED.estado, ultimo_erro = EXCLUDED.ultimo_erro, atualizado = EXCLUDED.atualizado`,
+		c.ID, c.ProdutoID, c.MercadoID, c.Dia, string(c.Estado), c.UltimoErro, atualizado)
+	return wrapPG(err)
+}
+
+func (s *Catalog) GetColeta(ctx context.Context, id ColetaID) (Coleta, bool, error) {
+	var c Coleta
+	var estado string
+	err := s.pool.QueryRow(ctx, `SELECT id, produto_id, mercado_id, dia, estado, ultimo_erro, atualizado FROM coleta WHERE id = $1`, id).
+		Scan(&c.ID, &c.ProdutoID, &c.MercadoID, &c.Dia, &estado, &c.UltimoErro, &c.Atualizado)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Coleta{}, false, nil
+	}
+	c.Estado = EstadoDocumento(estado)
+	return c, err == nil, wrapPG(err)
+}
+
+func (s *Catalog) GetColetaByIdentity(ctx context.Context, produtoID ProdutoID, mercadoID MercadoID, dia string) (Coleta, bool, error) {
+	var c Coleta
+	var estado string
+	err := s.pool.QueryRow(ctx, `SELECT id, produto_id, mercado_id, dia, estado, ultimo_erro, atualizado FROM coleta WHERE produto_id = $1 AND mercado_id = $2 AND dia = $3`, produtoID, mercadoID, dia).
+		Scan(&c.ID, &c.ProdutoID, &c.MercadoID, &c.Dia, &estado, &c.UltimoErro, &c.Atualizado)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Coleta{}, false, nil
+	}
+	c.Estado = EstadoDocumento(estado)
+	return c, err == nil, wrapPG(err)
+}
+
+func ofertaTemOrigemTx(ctx context.Context, tx pgx.Tx, id OfertaID) (bool, error) {
+	var n int
+	err := tx.QueryRow(ctx, `SELECT
+		(SELECT COUNT(*) FROM documento_oferta WHERE oferta_id = $1) +
+		(SELECT COUNT(*) FROM coleta_oferta WHERE oferta_id = $1)`, id).Scan(&n)
+	return n > 0, err
+}
+
 func (s *Catalog) SaveOferta(ctx context.Context, o Oferta, documentoIDs []DocumentoID) error {
 	if o.ID == "" {
 		return fmt.Errorf("%w: oferta id obrigatório", ErrInvalid)
 	}
 	if len(documentoIDs) == 0 {
-		return fmt.Errorf("%w: oferta exige ao menos um documento", ErrInvalid)
+		return fmt.Errorf("%w: oferta exige ao menos um documento ou coleta", ErrInvalid)
 	}
+	o.IndicacaoPromocional = true
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return wrapPG(err)
@@ -479,18 +529,19 @@ func upsertOferta(ctx context.Context, tx pgx.Tx, o Oferta, chave string) error 
 	_, err = tx.Exec(ctx, `INSERT INTO oferta (
 			id, produto_id, marca_id, mercado_id, valor, quantidades, medida,
 			data_inicio, data_expiracao, origem_data_inicio, origem_data_expiracao,
-			promocao, comparativo, chave_unica, documento_id)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+			promocao, comparativo, chave_unica, documento_id, indicacao_promocional)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 		ON CONFLICT (id) DO UPDATE SET
 			produto_id = EXCLUDED.produto_id, marca_id = EXCLUDED.marca_id, mercado_id = EXCLUDED.mercado_id,
 			valor = EXCLUDED.valor, quantidades = EXCLUDED.quantidades, medida = EXCLUDED.medida,
 			data_inicio = EXCLUDED.data_inicio, data_expiracao = EXCLUDED.data_expiracao,
 			origem_data_inicio = EXCLUDED.origem_data_inicio, origem_data_expiracao = EXCLUDED.origem_data_expiracao,
 			promocao = EXCLUDED.promocao, comparativo = EXCLUDED.comparativo,
-			chave_unica = EXCLUDED.chave_unica, documento_id = EXCLUDED.documento_id`,
+			chave_unica = EXCLUDED.chave_unica, documento_id = EXCLUDED.documento_id,
+			indicacao_promocional = EXCLUDED.indicacao_promocional`,
 		o.ID, o.ProdutoID, o.MarcaID, o.MercadoID, o.Valor, quants, string(o.Medida),
 		o.DataInicio, o.DataExpiracao, string(o.OrigemDataInicio), string(o.OrigemDataExpiracao),
-		promo, comp, chave, o.DocumentoID)
+		promo, comp, chave, o.DocumentoID, o.IndicacaoPromocional)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "chave_unica") {
@@ -535,14 +586,14 @@ func (s *Catalog) GetOfertaByUniq(ctx context.Context, chave string) (Oferta, bo
 
 const ofertaSelect = `SELECT id, produto_id, marca_id, mercado_id, valor, quantidades, medida,
 	data_inicio, data_expiracao, origem_data_inicio, origem_data_expiracao,
-	promocao, comparativo, documento_id FROM oferta`
+	promocao, comparativo, documento_id, indicacao_promocional FROM oferta`
 
 func scanOferta(row rowScanner) (Oferta, error) {
 	var o Oferta
 	var medida, origemIni, origemFim string
 	var promo, comp []byte
 	err := row.Scan(&o.ID, &o.ProdutoID, &o.MarcaID, &o.MercadoID, &o.Valor, &o.Quantidades, &medida,
-		&o.DataInicio, &o.DataExpiracao, &origemIni, &origemFim, &promo, &comp, &o.DocumentoID)
+		&o.DataInicio, &o.DataExpiracao, &origemIni, &origemFim, &promo, &comp, &o.DocumentoID, &o.IndicacaoPromocional)
 	o.Medida = Medida(medida)
 	o.OrigemDataInicio = OrigemData(origemIni)
 	o.OrigemDataExpiracao = OrigemData(origemFim)
@@ -594,6 +645,9 @@ func (s *Catalog) DeleteOferta(ctx context.Context, id OfertaID) error {
 func (s *Catalog) SaveOfertasForDocumento(ctx context.Context, documentoID DocumentoID, ofertas []Oferta) error {
 	if ofertas == nil {
 		ofertas = []Oferta{}
+	}
+	for i := range ofertas {
+		ofertas[i].IndicacaoPromocional = true
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -651,17 +705,104 @@ func (s *Catalog) SaveOfertasForDocumento(ctx context.Context, documentoID Docum
 		if _, err := tx.Exec(ctx, `DELETE FROM documento_oferta WHERE documento_id = $1 AND oferta_id = $2`, documentoID, id); err != nil {
 			return wrapPG(err)
 		}
-		var n int
-		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM documento_oferta WHERE oferta_id = $1`, id).Scan(&n); err != nil {
+		ok, err := ofertaTemOrigemTx(ctx, tx, id)
+		if err != nil {
 			return wrapPG(err)
 		}
-		if n == 0 {
+		if !ok {
 			if _, err := tx.Exec(ctx, `DELETE FROM oferta WHERE id = $1`, id); err != nil {
 				return wrapPG(err)
 			}
 		}
 	}
 	return wrapPG(tx.Commit(ctx))
+}
+
+func (s *Catalog) SaveOfertasForColeta(ctx context.Context, coletaID ColetaID, ofertas []Oferta) error {
+	if ofertas == nil {
+		ofertas = []Oferta{}
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return wrapPG(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	prevIDs := map[OfertaID]struct{}{}
+	rows, err := tx.Query(ctx, `SELECT oferta_id FROM coleta_oferta WHERE coleta_id = $1`, coletaID)
+	if err != nil {
+		return wrapPG(err)
+	}
+	for rows.Next() {
+		var id OfertaID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return wrapPG(err)
+		}
+		prevIDs[id] = struct{}{}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return wrapPG(err)
+	}
+
+	nextIDs := map[OfertaID]struct{}{}
+	for _, o := range ofertas {
+		chave := ChaveUnicaOferta(o)
+		existing, err := scanOferta(tx.QueryRow(ctx, ofertaSelect+" WHERE chave_unica = $1", chave))
+		if err == nil {
+			o = existing
+		} else if errors.Is(err, pgx.ErrNoRows) {
+			if o.ID == "" {
+				return fmt.Errorf("%w: oferta id obrigatório para criar entidade", ErrInvalid)
+			}
+			if err := upsertOferta(ctx, tx, o, chave); err != nil {
+				return err
+			}
+		} else {
+			return wrapPG(err)
+		}
+		nextIDs[o.ID] = struct{}{}
+		if _, err := tx.Exec(ctx, `INSERT INTO coleta_oferta (coleta_id, oferta_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, coletaID, o.ID); err != nil {
+			return wrapPG(err)
+		}
+	}
+
+	for id := range prevIDs {
+		if _, keep := nextIDs[id]; keep {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM coleta_oferta WHERE coleta_id = $1 AND oferta_id = $2`, coletaID, id); err != nil {
+			return wrapPG(err)
+		}
+		ok, err := ofertaTemOrigemTx(ctx, tx, id)
+		if err != nil {
+			return wrapPG(err)
+		}
+		if !ok {
+			if _, err := tx.Exec(ctx, `DELETE FROM oferta WHERE id = $1`, id); err != nil {
+				return wrapPG(err)
+			}
+		}
+	}
+	return wrapPG(tx.Commit(ctx))
+}
+
+func (s *Catalog) ListOfertasByColeta(ctx context.Context, coletaID ColetaID) ([]Oferta, error) {
+	rows, err := s.pool.Query(ctx, ofertaSelect+` WHERE id IN (SELECT oferta_id FROM coleta_oferta WHERE coleta_id = $1) ORDER BY id`, coletaID)
+	if err != nil {
+		return nil, wrapPG(err)
+	}
+	defer rows.Close()
+	out := []Oferta{}
+	for rows.Next() {
+		o, err := scanOferta(rows)
+		if err != nil {
+			return nil, wrapPG(err)
+		}
+		out = append(out, o)
+	}
+	return out, wrapPG(rows.Err())
 }
 
 func (s *Catalog) ListOfertasByDocumento(ctx context.Context, documentoID DocumentoID) ([]Oferta, error) {
@@ -852,7 +993,7 @@ func (s *Catalog) MarcarEsgotado(ctx context.Context, provider, dia string) erro
 func (s *Catalog) TruncateAll(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, `TRUNCATE
 		extrator_cota, operacao_pipeline, uso_extrator, falha_extracao,
-		documento_oferta, oferta, documento, fonte, produto, marca, mercado
+		coleta_oferta, coleta, documento_oferta, oferta, documento, fonte, produto, marca, mercado
 		RESTART IDENTITY CASCADE`)
 	return wrapPG(err)
 }

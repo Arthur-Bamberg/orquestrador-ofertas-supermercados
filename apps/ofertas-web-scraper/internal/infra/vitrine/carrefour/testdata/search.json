@@ -1,0 +1,15 @@
+[
+  {
+    "productName": "Arroz Integral Camil 1kg",
+    "brand": "Camil",
+    "items": [
+      {
+        "sellers": [
+          {
+            "commertialOffer": { "Price": 9.49, "ListPrice": 11.99 }
+          }
+        ]
+      }
+    ]
+  }
+]

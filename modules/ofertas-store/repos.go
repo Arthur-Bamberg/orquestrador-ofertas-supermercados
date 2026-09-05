@@ -104,12 +104,36 @@ func (r *OfertaRepo) SaveAll(ctx context.Context, documentoID DocumentoID, ofert
 	return r.catalog.SaveOfertasForDocumento(ctx, documentoID, ofertas)
 }
 
+func (r *OfertaRepo) SaveAllForColeta(ctx context.Context, coletaID ColetaID, ofertas []Oferta) error {
+	return r.catalog.SaveOfertasForColeta(ctx, coletaID, ofertas)
+}
+
 func (r *OfertaRepo) ListByDocumento(ctx context.Context, documentoID DocumentoID) ([]Oferta, error) {
 	return r.catalog.ListOfertasByDocumento(ctx, documentoID)
 }
 
+func (r *OfertaRepo) ListByColeta(ctx context.Context, coletaID ColetaID) ([]Oferta, error) {
+	return r.catalog.ListOfertasByColeta(ctx, coletaID)
+}
+
 func (r *OfertaRepo) ListDocumentoIDsByProduto(ctx context.Context, produtoID ProdutoID) ([]DocumentoID, error) {
 	return r.catalog.ListDocumentoIDsByProduto(ctx, produtoID)
+}
+
+type ColetaRepo struct{ catalog *Catalog }
+
+func NewColetaRepo(c *Catalog) *ColetaRepo { return &ColetaRepo{catalog: c} }
+
+func (r *ColetaRepo) Save(ctx context.Context, c Coleta) error {
+	return r.catalog.SaveColeta(ctx, c)
+}
+
+func (r *ColetaRepo) Get(ctx context.Context, id ColetaID) (Coleta, bool, error) {
+	return r.catalog.GetColeta(ctx, id)
+}
+
+func (r *ColetaRepo) GetByIdentity(ctx context.Context, produtoID ProdutoID, mercadoID MercadoID, dia string) (Coleta, bool, error) {
+	return r.catalog.GetColetaByIdentity(ctx, produtoID, mercadoID, dia)
 }
 
 type FalhaRepo struct{ catalog *Catalog }

@@ -11,7 +11,7 @@ describe("constantes de domínio", () => {
   });
 
   it("origensData match vigência origens", () => {
-    expect(origensData).toEqual(["extrator", "filename", "primeiraDescoberta"]);
+    expect(origensData).toEqual(["extrator", "filename", "primeiraDescoberta", "coleta"]);
   });
 
   it("getResource finds Oferta config", () => {

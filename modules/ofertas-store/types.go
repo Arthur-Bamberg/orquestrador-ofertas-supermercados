@@ -13,6 +13,7 @@ type FonteID string
 type ProdutoID string
 type MarcaID string
 type DocumentoID string
+type ColetaID string
 type OfertaID string
 
 type Mercado struct {
@@ -72,12 +73,23 @@ type Documento struct {
 	Atualizado        time.Time       `json:"atualizado"`
 }
 
+type Coleta struct {
+	ID         ColetaID        `json:"id"`
+	ProdutoID  ProdutoID       `json:"produtoId"`
+	MercadoID  MercadoID       `json:"mercadoId"`
+	Dia        string          `json:"dia"`
+	Estado     EstadoDocumento `json:"estado"`
+	UltimoErro string          `json:"ultimoErro,omitempty"`
+	Atualizado time.Time       `json:"atualizado"`
+}
+
 type OrigemData string
 
 const (
 	OrigemExtrator           OrigemData = "extrator"
 	OrigemFilename           OrigemData = "filename"
 	OrigemPrimeiraDescoberta OrigemData = "primeiraDescoberta"
+	OrigemColeta             OrigemData = "coleta"
 )
 
 type Medida string
@@ -103,40 +115,42 @@ type Comparativo struct {
 }
 
 type Oferta struct {
-	ID                  OfertaID     `json:"id"`
-	DocumentoID         DocumentoID  `json:"documentoId,omitempty"`
-	ProdutoID           ProdutoID    `json:"produtoId"`
-	MarcaID             *MarcaID     `json:"marcaId,omitempty"`
-	MercadoID           MercadoID    `json:"mercadoId"`
-	Valor               float64      `json:"valor"`
-	Quantidades         []float64    `json:"quantidades"`
-	Medida              Medida       `json:"medida"`
-	DataInicio          string       `json:"dataInicio"`
-	DataExpiracao       string       `json:"dataExpiracao"`
-	OrigemDataInicio    OrigemData   `json:"origemDataInicio"`
-	OrigemDataExpiracao OrigemData   `json:"origemDataExpiracao"`
-	Promocao            *Promocao    `json:"promocao,omitempty"`
-	Comparativo         *Comparativo `json:"comparativo,omitempty"`
+	ID                   OfertaID     `json:"id"`
+	DocumentoID          DocumentoID  `json:"documentoId,omitempty"`
+	ProdutoID            ProdutoID    `json:"produtoId"`
+	MarcaID              *MarcaID     `json:"marcaId,omitempty"`
+	MercadoID            MercadoID    `json:"mercadoId"`
+	Valor                float64      `json:"valor"`
+	Quantidades          []float64    `json:"quantidades"`
+	Medida               Medida       `json:"medida"`
+	DataInicio           string       `json:"dataInicio"`
+	DataExpiracao        string       `json:"dataExpiracao"`
+	OrigemDataInicio     OrigemData   `json:"origemDataInicio"`
+	OrigemDataExpiracao  OrigemData   `json:"origemDataExpiracao"`
+	Promocao             *Promocao    `json:"promocao,omitempty"`
+	Comparativo          *Comparativo `json:"comparativo,omitempty"`
+	IndicacaoPromocional bool         `json:"indicacaoPromocional"`
 }
 
 // UnmarshalJSON accepts quantidades[] and legacy singular quantidade.
 func (o *Oferta) UnmarshalJSON(data []byte) error {
 	var j struct {
-		ID                  OfertaID     `json:"id"`
-		DocumentoID         DocumentoID  `json:"documentoId"`
-		ProdutoID           ProdutoID    `json:"produtoId"`
-		MarcaID             *MarcaID     `json:"marcaId,omitempty"`
-		MercadoID           MercadoID    `json:"mercadoId"`
-		Valor               float64      `json:"valor"`
-		Quantidades         []float64    `json:"quantidades"`
-		Quantidade          *float64     `json:"quantidade"`
-		Medida              Medida       `json:"medida"`
-		DataInicio          string       `json:"dataInicio"`
-		DataExpiracao       string       `json:"dataExpiracao"`
-		OrigemDataInicio    OrigemData   `json:"origemDataInicio"`
-		OrigemDataExpiracao OrigemData   `json:"origemDataExpiracao"`
-		Promocao            *Promocao    `json:"promocao,omitempty"`
-		Comparativo         *Comparativo `json:"comparativo,omitempty"`
+		ID                   OfertaID     `json:"id"`
+		DocumentoID          DocumentoID  `json:"documentoId"`
+		ProdutoID            ProdutoID    `json:"produtoId"`
+		MarcaID              *MarcaID     `json:"marcaId,omitempty"`
+		MercadoID            MercadoID    `json:"mercadoId"`
+		Valor                float64      `json:"valor"`
+		Quantidades          []float64    `json:"quantidades"`
+		Quantidade           *float64     `json:"quantidade"`
+		Medida               Medida       `json:"medida"`
+		DataInicio           string       `json:"dataInicio"`
+		DataExpiracao        string       `json:"dataExpiracao"`
+		OrigemDataInicio     OrigemData   `json:"origemDataInicio"`
+		OrigemDataExpiracao  OrigemData   `json:"origemDataExpiracao"`
+		Promocao             *Promocao    `json:"promocao,omitempty"`
+		Comparativo          *Comparativo `json:"comparativo,omitempty"`
+		IndicacaoPromocional bool         `json:"indicacaoPromocional"`
 	}
 	if err := json.Unmarshal(data, &j); err != nil {
 		return err
@@ -155,6 +169,7 @@ func (o *Oferta) UnmarshalJSON(data []byte) error {
 	o.OrigemDataExpiracao = j.OrigemDataExpiracao
 	o.Promocao = j.Promocao
 	o.Comparativo = j.Comparativo
+	o.IndicacaoPromocional = j.IndicacaoPromocional
 	return nil
 }
 

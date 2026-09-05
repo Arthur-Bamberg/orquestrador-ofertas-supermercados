@@ -2,7 +2,7 @@ import type { ResourceConfig } from "./domain";
 
 export const documentoEstados = ["processando", "concluido", "parcial", "falhou"];
 export const medidas = ["g", "ml", "unidade"];
-export const origensData = ["extrator", "filename", "primeiraDescoberta"];
+export const origensData = ["extrator", "filename", "primeiraDescoberta", "coleta"];
 
 export const resources: ResourceConfig[] = [
   {
@@ -91,6 +91,7 @@ export const resources: ResourceConfig[] = [
       { name: "medida", label: "Medida" },
       { name: "dataInicio", label: "Início", format: "date" },
       { name: "dataExpiracao", label: "Expiração", format: "date" },
+      { name: "indicacaoPromocional", label: "Indicação Promocional", format: "boolean" },
     ],
     fields: [
       { name: "id", label: "ID", kind: "text", help: "Opcional se a API gerar IDs." },
@@ -105,6 +106,7 @@ export const resources: ResourceConfig[] = [
       { name: "dataExpiracao", label: "Data Expiração", kind: "date", required: true },
       { name: "origemDataInicio", label: "Origem Data Início", kind: "select", options: origensData },
       { name: "origemDataExpiracao", label: "Origem Data Expiração", kind: "select", options: origensData },
+      { name: "indicacaoPromocional", label: "Indicação Promocional", kind: "boolean" },
       { name: "promocao", label: "Promoção", kind: "json" },
       { name: "comparativo", label: "Comparativo", kind: "json" },
     ],

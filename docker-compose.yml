@@ -123,5 +123,23 @@ services:
     profiles:
       - jobs
 
+  # One-shot CLI (ADR 0011). Not started by `up`.
+  # docker compose run --rm ofertas-web-scraper seed
+  # docker compose run --rm ofertas-web-scraper coletar <produtoId>
+  ofertas-web-scraper:
+    build:
+      context: .
+      dockerfile: apps/ofertas-web-scraper/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: *database-url
+      SEED_PATH: /scraper/seed/mercados.json
+      TZ: ${TZ:-America/Sao_Paulo}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - jobs
+
 volumes:
   ofertas_pg:

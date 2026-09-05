@@ -1,0 +1,3 @@
+# Coleta de vitrine é um app; Oferta de site não é Documento
+
+Preço observado no site do Mercado entra no catálogo como Oferta, mas a origem é **Coleta** (Produto + Mercado + dia), não um Documento-fantasma nem uma Fonte. `ofertas-web-scraper` é um CLI one-shot separado: um processo por Produto, um adapter por Mercado (Fort, Carrefour, Asun, Rissul). `ofertas-scraper` continua o job de encarte — o rename do módulo não vale o churn. Vigência da Oferta de Coleta é só o dia da Coleta (`origem` `coleta`). Indicação Promocional é boolean distinto de Promoção: verdadeira em todo encarte; no site sai do cartão. Rejeitado: esticar Documento para HTML, Oferta órfã de site, e misturar o boolean com o objeto Promoção.

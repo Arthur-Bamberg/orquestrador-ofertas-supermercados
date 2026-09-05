@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "title": "Arroz Integral Camil 1kg",
+      "marca": "Camil",
+      "precoAtual": 8.9,
+      "precoDe": 10.9,
+      "quantidade": 1000,
+      "medida": "g"
+    },
+    {
+      "title": "Arroz Integral 1kg",
+      "marca": "",
+      "precoAtual": 7.5,
+      "precoDe": null,
+      "quantidade": 1000,
+      "medida": "g"
+    }
+  ]
+}

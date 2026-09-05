@@ -1,0 +1,8 @@
+{
+  "mercados": [
+    { "id": "mercado-fort", "nome": "Fort Atacadista" },
+    { "id": "mercado-carrefour", "nome": "Carrefour" },
+    { "id": "mercado-asun", "nome": "Asun" },
+    { "id": "mercado-rissul", "nome": "Rissul" }
+  ]
+}

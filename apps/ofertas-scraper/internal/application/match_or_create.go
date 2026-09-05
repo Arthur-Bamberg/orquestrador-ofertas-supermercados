@@ -38,18 +38,19 @@ func PersistirOfertasValidas(
 			marcaID = &id
 		}
 		candidate := domain.Oferta{
-			ProdutoID:           produto.ID,
-			MarcaID:             marcaID,
-			MercadoID:           doc.MercadoID,
-			Valor:               v.Valor,
-			Quantidades:         v.Quantidades,
-			Medida:              v.Medida,
-			DataInicio:          v.DataInicio,
-			DataExpiracao:       v.DataExpiracao,
-			OrigemDataInicio:    v.OrigemDataInicio,
-			OrigemDataExpiracao: v.OrigemDataExpiracao,
-			Promocao:            v.Promocao,
-			Comparativo:         v.Comparativo,
+			ProdutoID:            produto.ID,
+			MarcaID:              marcaID,
+			MercadoID:            doc.MercadoID,
+			Valor:                v.Valor,
+			Quantidades:          v.Quantidades,
+			Medida:               v.Medida,
+			DataInicio:           v.DataInicio,
+			DataExpiracao:        v.DataExpiracao,
+			OrigemDataInicio:     v.OrigemDataInicio,
+			OrigemDataExpiracao:  v.OrigemDataExpiracao,
+			Promocao:             v.Promocao,
+			Comparativo:          v.Comparativo,
+			IndicacaoPromocional: true,
 		}
 		chave := domain.ChaveUnicaOferta(candidate)
 		if ofertasRepo != nil {

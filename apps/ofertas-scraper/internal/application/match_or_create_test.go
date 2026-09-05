@@ -42,6 +42,9 @@ func TestPersistirOfertasValidas_MatchOrCreateAndCategoriasUnion(t *testing.T) {
 	if ofertas[0].Comparativo == nil || ofertas[0].Comparativo.Quantidade != 200 {
 		t.Fatalf("comparativo not persisted: %#v", ofertas[0].Comparativo)
 	}
+	if !ofertas[0].IndicacaoPromocional {
+		t.Fatal("encarte Oferta must have IndicacaoPromocional true")
+	}
 	p := produtos.byNorm["arroz integral"]
 	if len(p.Categorias) != 2 {
 		t.Fatalf("categorias=%v", p.Categorias)
