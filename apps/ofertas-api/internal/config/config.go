@@ -14,6 +14,8 @@ type Config struct {
 	ScraperDir   string
 	ScraperBin   string
 	ArtefatoRoot string
+	ColetaURL    string
+	ColetaToken  string
 }
 
 func Load() (Config, error) {
@@ -25,6 +27,8 @@ func Load() (Config, error) {
 		ScraperDir:   envOr("SCRAPER_DIR", "../ofertas-scraper"),
 		ScraperBin:   os.Getenv("SCRAPER_BIN"),
 		ArtefatoRoot: envOr("ARTEFATO_ROOT", "../ofertas-scraper/.data/artefatos"),
+		ColetaURL:    strings.TrimRight(os.Getenv("COLETA_URL"), "/"),
+		ColetaToken:  os.Getenv("GATEWAY_TOKEN"),
 	}
 	var err error
 	cfg.ScraperDir, err = filepath.Abs(cfg.ScraperDir)

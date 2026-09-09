@@ -5,7 +5,7 @@ use (
 	./apps/gateway-whatsapp
 	./apps/ofertas-api
 	./apps/ofertas-scraper
-	./apps/ofertas-web-scraper
+	./apps/ofertas-scraper-v2
 	./modules/ofertas-store
 )
 

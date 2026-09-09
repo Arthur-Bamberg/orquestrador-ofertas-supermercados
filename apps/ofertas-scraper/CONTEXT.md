@@ -13,7 +13,7 @@ Identidade de catálogo do que está à venda, sem marca (ex.: “Arroz integral
 _Avoid_: Oferta, item, SKU, variante (como substituto de Produto), marca
 
 **Marca**:
-Identidade comercial do fabricante ou rótulo (ex.: Camil, Tio João), independente do Produto e do Mercado. Opcional na Oferta quando o encarte não traz marca. Quando presente, o Extrator a identifica nas imagens e o domain casa ou cria a Marca. Apagar só é permitido quando nenhuma Oferta referencia a Marca; caso contrário a exclusão é rejeitada.
+Identidade comercial do fabricante ou rótulo (ex.: Camil, Tio João), independente do Produto e do Mercado. Opcional na Oferta quando o encarte ou o cartão não traz marca. Quando presente, o Extrator (encarte) ou a Coleta (cartão) a identificam e o domain casa ou cria a Marca. Apagar só é permitido quando nenhuma Oferta referencia a Marca; caso contrário a exclusão é rejeitada.
 _Avoid_: fabricante como texto solto na Oferta, brand
 
 **Categoria**:
@@ -21,8 +21,8 @@ Rótulo taxonômico de um Produto para filtrar e agrupar (ex.: mercearia, grãos
 _Avoid_: tipo, variante, tag solta na Oferta
 
 **Fonte**:
-URL configurada e persistida cuja resposta revela URLs de PDFs (HTML/JS/JSON); o nome do arquivo identifica o Documento e o download usa a URL do link. Pode apontar para página HTML ou endpoint JSON de ofertas. Pertence a um Mercado; pode incluir filtro opcional por regex sobre o nome do Documento. Pode estar ativa ou inativa: inativa permanece no catálogo, mas o job diário a ignora e a descoberta sob demanda é rejeitada. Fallbacks de vigência (filename / primeira descoberta) são sempre ativos — não há flag por Fonte. Se o Extrator envia a data, ela prevalece. Apagar só é permitido quando não há Documentos dessa Fonte; caso contrário a exclusão é rejeitada. Descoberta de PDFs pode ser disparada sob demanda numa Fonte ativa (cria Documentos novos sem processá-los).
-_Avoid_: Site, link, URL, origem (como sinônimo de Fonte)
+URL configurada e persistida cuja resposta revela URLs de PDFs (HTML/JS/JSON); o nome do arquivo identifica o Documento e o download usa a URL do link. Pode apontar para página HTML ou endpoint JSON de ofertas. Pertence a um Mercado; pode incluir filtro opcional por regex sobre o nome do Documento. Carrega `tipo`: `encarte` (default; job diário e descoberta criam Documentos) ou `site` (permanece no catálogo para a Coleta; o job e a descoberta a ignoram). Pode estar ativa ou inativa: inativa permanece no catálogo, mas o job diário a ignora e a descoberta sob demanda é rejeitada. Fallbacks de vigência (filename / primeira descoberta) são sempre ativos — não há flag por Fonte. Se o Extrator envia a data, ela prevalece. Apagar só é permitido quando não há Documentos dessa Fonte; caso contrário a exclusão é rejeitada. Descoberta de PDFs pode ser disparada sob demanda numa Fonte ativa de tipo encarte (cria Documentos novos sem processá-los).
+_Avoid_: Site, link, URL, origem (como sinônimo de Fonte), tipo no Documento
 
 **Mercado**:
 Identidade comercial (rede ou bandeira) à qual uma Fonte pertence; sujeito da comparação de Ofertas e do histórico de preços entre estabelecimentos. Não é extraído das imagens — vem da configuração da Fonte. Apagar só é permitido quando não há Fontes desse Mercado; caso contrário a exclusão é rejeitada.
@@ -33,8 +33,9 @@ PDF identificado em uma Fonte pelo nome do arquivo e pelo dia da descoberta; ras
 _Avoid_: PDF, arquivo, anexo, descoberto (como estado persistido), Coleta
 
 **Coleta**:
-Busca de um Produto no site de um Mercado num dia civil (`America/Sao_Paulo`): pesquisa o nome do Produto e persiste Ofertas só dos cartões que casam o tipo vendável buscado (o nome normalizado do Produto está no rótulo do cartão; marca e tamanho podem variar; não cria Produto novo). Identidade: Produto + Mercado + dia; a Coleta seguinte do mesmo trio substitui as associações Coleta↔Oferta. Não é Documento nem Fonte. Estados persistidos: processando, concluído, parcial, falhou — concluído com ≥1 Oferta e zero cartões descartados por dados incompletos; parcial com Ofertas e descartes; falhou sem Oferta persistida ou em falha dura. Apagar desassocia; Oferta que ficar sem Documento e sem Coleta sai do catálogo.
-_Avoid_: scrape, crawler, Fonte, Documento, validar produto, Vitrine (como entidade), site
+Busca no site de um Mercado num dia civil (`America/Sao_Paulo`) a partir do termo do Item: pesquisa o termo até esgotar os cartões da vitrine e persiste Oferta de cada cartão completo (Produto = tipo vendável sem marca, tamanho na Oferta; Marca via match-or-create; Medida = unidade de venda do cartão mapeada para `g` / `ml` / `unidade`, sem ler tamanho do nome). Relacionados entram no catálogo; a Resposta é que os omite. Identidade: termo + Mercado + dia. Se já existe Coleta desse trio no dia em concluído ou parcial, não volta ao site — o conjunto permanece e a chamada devolve as mesmas Ofertas ao Agente da Lista (não ao Agente de Filtragem). `falhou` e `processando` órfão retentam e aí o conjunto é substituído. Duas chamadas do mesmo trio: `processando` em voo não dispara segunda busca — a segunda espera e recebe o mesmo conjunto; órfão (corrida anterior morreu) é que retenta. Não é Documento nem Fonte. Estados persistidos: processando, concluído, parcial, falhou — concluído com ≥1 Oferta e pesquisa esgotada e zero cartões descartados, **ou** pesquisa esgotada sem nenhum cartão (vitrine vazia para o termo — busca salva do dia); parcial com ≥1 Oferta e (descartes com pesquisa esgotada **ou** pesquisa cortada — página seguinte falhou / busca não terminou a tempo — entregando o que já paginou); falhou sem Oferta persistida quando a tentativa não esgotou a vitrine (queda antes do primeiro cartão, etc.). Pesquisa cortada ou que não termina a tempo com Ofertas já vistas é parcial (busca salva; não retenta no dia). Coleta deste recorte depende do Mercado com adapter de vitrine — não da Fonte; Fonte `tipo=site` só tira o Mercado do job de encarte. Apagar desassocia; Oferta que ficar sem Documento e sem Coleta sai do catálogo.
+_Avoid_: scrape, crawler, Fonte, Documento, validar produto, Vitrine (como entidade), site, filtrar cartão antes de persistir, Coleta chama Filtragem, Coleta lê Fonte
+
 
 **Indicação Promocional**:
 Boolean na Oferta: se a observação é indicada como promocional. Toda Oferta ligada a Documento (encarte) é verdadeira. Oferta ligada só a Coleta averigua o cartão no site (selo, de/por, ou preço de lista maior que o preço atual). Distinta de Promoção (objeto com canal e/ou mecânica).
@@ -45,7 +46,7 @@ Capacidade de obter candidatos a Oferta a partir das imagens de um Documento (r�
 _Avoid_: Gemini, IA, conversor, parser, LLM
 
 **Medida**:
-Unidade compartilhada por todas as `quantidades` de uma Oferta, sempre normalizada para `g`, `ml` ou `unidade` (kg → 1000 g; L → 1000 ml).
+Unidade compartilhada por todas as `quantidades` de uma Oferta, sempre normalizada para `g`, `ml` ou `unidade` (kg → 1000 g; L → 1000 ml). Na Coleta, a unidade de venda do cartão mapeia para essas três: peso → `g`, volume → `ml`; UN e qualquer outra (ou ausente, ex. CX) → `unidade`. Tamanho no nome do Produto não vira Medida.
 _Avoid_: unidade de medida, kg, litro, L
 
 **Promoção**:

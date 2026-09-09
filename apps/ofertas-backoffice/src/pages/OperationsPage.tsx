@@ -1,12 +1,13 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
-import { normalizeList, request } from "../api";
+import { Link, useSearchParams } from "react-router-dom";
+import { list, normalizeList, request } from "../api";
 import { ErrorAlert } from "../components/ErrorAlert";
 import { FormattedValue } from "../components/ValueView";
 import { RefSelect } from "../components/RefSelect";
 import type { ColumnFormat, RefKind } from "../display";
 import type { EntityRecord, OperationStatus } from "../domain";
+import { fonteDoMercado, precisaTermoColeta, rotuloTestar, tipoFonte } from "../testarMercado";
 import { useCatalogLookups } from "../useCatalogLookups";
 
 function pendingStatus(status: OperationStatus | unknown): boolean {
@@ -69,8 +70,18 @@ export function OperationsPage() {
   const [searchParams] = useSearchParams();
   const [fonteId, setFonteId] = React.useState("");
   const [documentoId, setDocumentoId] = React.useState(searchParams.get("documentoId") ?? "");
+  const [mercadoId, setMercadoId] = React.useState(searchParams.get("mercadoId") ?? "");
+  const [termo, setTermo] = React.useState("");
   const { lookups, isLoading: catalogLoading } = useCatalogLookups();
+  const fontesQuery = useQuery({ queryKey: ["catalog", "fontes"], queryFn: () => list("/fontes") });
   const queryClient = useQueryClient();
+
+  React.useEffect(() => {
+    const next = searchParams.get("mercadoId") ?? "";
+    if (next) {
+      setMercadoId(next);
+    }
+  }, [searchParams]);
   const query = useQuery({
     queryKey: ["ops"],
     queryFn: () => request<unknown>("/ops"),
@@ -92,6 +103,19 @@ export function OperationsPage() {
     mutationFn: (id: string) => request<unknown>(`/ops/${encodeURIComponent(id)}/cancel`, { method: "POST", body: {} }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ops"] }),
   });
+  const fonteTeste = fonteDoMercado(fontesQuery.data ?? [], mercadoId);
+  const tipoTeste = fonteTeste ? tipoFonte(fonteTeste.tipo) : undefined;
+  const testarMutation = useMutation({
+    mutationFn: () =>
+      request<{ kind?: string; fonteId?: string; operacao?: EntityRecord; ofertas?: EntityRecord[] }>("/ops/testar", {
+        method: "POST",
+        body: { mercadoId, ...(termo.trim() ? { termo: termo.trim() } : {}) },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ops"] });
+      queryClient.invalidateQueries({ queryKey: ["resource-list"] });
+    },
+  });
   const sections = operationSections(query.data);
 
   function submitDiscover(event: React.FormEvent<HTMLFormElement>) {
@@ -102,6 +126,11 @@ export function OperationsPage() {
   function submitReprocess(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     reprocessMutation.mutate();
+  }
+
+  function submitTestar(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    testarMutation.mutate();
   }
 
   function cancelOperation(operation: EntityRecord) {
@@ -117,11 +146,11 @@ export function OperationsPage() {
       <header className="page-header">
         <div>
           <h2>Operações de Pipeline</h2>
-          <p>Dispare trabalho do scraper e acompanhe fila serial e histórico.</p>
+          <p>Dispare trabalho do scraper e acompanhe fila serial e histórico. Testar um Mercado faz scan de encarte ou scraping de site — sem Extrator.</p>
         </div>
       </header>
 
-      <ErrorAlert error={query.error ?? runMutation.error ?? discoverMutation.error ?? reprocessMutation.error ?? cancelMutation.error} />
+      <ErrorAlert error={query.error ?? runMutation.error ?? discoverMutation.error ?? reprocessMutation.error ?? cancelMutation.error ?? testarMutation.error} />
 
       <section className="operation-actions">
         <article className="card">
@@ -158,6 +187,47 @@ export function OperationsPage() {
               Discover Fonte
             </button>
           </form>
+        </article>
+
+        <article className="card">
+          <h3>Testar Mercado</h3>
+          <p>
+            {!mercadoId
+              ? "Escolha um Mercado. Encarte faz scan de PDFs; site faz scraping — ambos sem Extrator/IA."
+              : tipoTeste === "site"
+                ? "Fonte tipo site: scraping da vitrine (Coleta, sem IA). Informe um termo."
+                : "Fonte tipo encarte: scan dos PDFs (descoberta, sem Extrator)."}
+          </p>
+          <form className="entity-form compact" onSubmit={submitTestar}>
+            <label>
+              <span>Mercado</span>
+              {catalogLoading ? (
+                <select disabled>
+                  <option>Carregando...</option>
+                </select>
+              ) : (
+                <RefSelect
+                  kind="mercado"
+                  lookups={lookups}
+                  required
+                  allowEmpty
+                  emptyLabel="Selecione"
+                  value={mercadoId}
+                  onChange={setMercadoId}
+                />
+              )}
+            </label>
+            {precisaTermoColeta(tipoTeste ?? "encarte") ? (
+              <label>
+                <span>Termo</span>
+                <input value={termo} onChange={(event) => setTermo(event.target.value)} placeholder="ex.: tomate" required />
+              </label>
+            ) : null}
+            <button type="submit" disabled={testarMutation.isPending || !mercadoId}>
+              {rotuloTestar(tipoTeste)}
+            </button>
+          </form>
+          {testarMutation.data ? <TestarResultado data={testarMutation.data} /> : null}
         </article>
 
         <article className="card">
@@ -215,6 +285,30 @@ export function OperationsPage() {
         </>
       ) : null}
     </section>
+  );
+}
+
+function TestarResultado({
+  data,
+}: {
+  data: { kind?: string; fonteId?: string; operacao?: EntityRecord; ofertas?: EntityRecord[] };
+}) {
+  if (data.kind === "coleta") {
+    const total = data.ofertas?.length ?? 0;
+    return (
+      <p>
+        Scraping gravou {total} Oferta{total === 1 ? "" : "s"}.{" "}
+        <Link to="/ofertas">Ver Ofertas</Link>
+      </p>
+    );
+  }
+
+  const operacaoId = String(data.operacao?.id ?? "");
+  return (
+    <p>
+      Scan do encarte enfileirado{operacaoId ? ` (${operacaoId})` : ""}. Os Documentos novos aparecem em{" "}
+      <Link to="/documentos">Documentos</Link> sem passar pelo Extrator.
+    </p>
   );
 }
 

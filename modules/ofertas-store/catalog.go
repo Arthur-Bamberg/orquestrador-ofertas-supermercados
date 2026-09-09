@@ -93,43 +93,47 @@ func (s *Catalog) SaveFonte(ctx context.Context, f Fonte) error {
 	if f.ID == "" {
 		return fmt.Errorf("%w: fonte id obrigatório", ErrInvalid)
 	}
-	_, err := s.pool.Exec(ctx, `INSERT INTO fonte (id, mercado_id, url, filtro_nome_documento, ativa)
-		VALUES ($1, $2, $3, $4, $5)
+	_, err := s.pool.Exec(ctx, `INSERT INTO fonte (id, mercado_id, url, filtro_nome_documento, ativa, tipo)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (id) DO UPDATE SET mercado_id = EXCLUDED.mercado_id, url = EXCLUDED.url,
-			filtro_nome_documento = EXCLUDED.filtro_nome_documento, ativa = EXCLUDED.ativa`,
-		f.ID, f.MercadoID, f.URL, f.FiltroNomeDocumento, f.IsAtiva())
+			filtro_nome_documento = EXCLUDED.filtro_nome_documento, ativa = EXCLUDED.ativa, tipo = EXCLUDED.tipo`,
+		f.ID, f.MercadoID, f.URL, f.FiltroNomeDocumento, f.IsAtiva(), f.TipoOuEncarte())
 	return wrapPG(err)
 }
 
-func (s *Catalog) GetFonte(ctx context.Context, id FonteID) (Fonte, bool, error) {
+func scanFonte(row rowScanner) (Fonte, error) {
 	var f Fonte
 	var ativa bool
-	err := s.pool.QueryRow(ctx, `SELECT id, mercado_id, url, filtro_nome_documento, ativa FROM fonte WHERE id = $1`, id).
-		Scan(&f.ID, &f.MercadoID, &f.URL, &f.FiltroNomeDocumento, &ativa)
+	var tipo string
+	err := row.Scan(&f.ID, &f.MercadoID, &f.URL, &f.FiltroNomeDocumento, &ativa, &tipo)
+	if err != nil {
+		return Fonte{}, err
+	}
+	f.Ativa = Bool(ativa)
+	f.Tipo = TipoFonte(tipo)
+	return f, nil
+}
+
+func (s *Catalog) GetFonte(ctx context.Context, id FonteID) (Fonte, bool, error) {
+	f, err := scanFonte(s.pool.QueryRow(ctx, `SELECT id, mercado_id, url, filtro_nome_documento, ativa, tipo FROM fonte WHERE id = $1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Fonte{}, false, nil
 	}
-	if err != nil {
-		return Fonte{}, false, wrapPG(err)
-	}
-	f.Ativa = Bool(ativa)
-	return f, true, nil
+	return f, err == nil, wrapPG(err)
 }
 
 func (s *Catalog) ListFontes(ctx context.Context) ([]Fonte, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, mercado_id, url, filtro_nome_documento, ativa FROM fonte ORDER BY id`)
+	rows, err := s.pool.Query(ctx, `SELECT id, mercado_id, url, filtro_nome_documento, ativa, tipo FROM fonte ORDER BY id`)
 	if err != nil {
 		return nil, wrapPG(err)
 	}
 	defer rows.Close()
 	out := []Fonte{}
 	for rows.Next() {
-		var f Fonte
-		var ativa bool
-		if err := rows.Scan(&f.ID, &f.MercadoID, &f.URL, &f.FiltroNomeDocumento, &ativa); err != nil {
+		f, err := scanFonte(rows)
+		if err != nil {
 			return nil, wrapPG(err)
 		}
-		f.Ativa = Bool(ativa)
 		out = append(out, f)
 	}
 	return out, wrapPG(rows.Err())
@@ -426,20 +430,20 @@ func (s *Catalog) SaveColeta(ctx context.Context, c Coleta) error {
 	if atualizado.IsZero() {
 		atualizado = time.Time{}
 	}
-	_, err := s.pool.Exec(ctx, `INSERT INTO coleta (id, produto_id, mercado_id, dia, estado, ultimo_erro, atualizado)
+	_, err := s.pool.Exec(ctx, `INSERT INTO coleta (id, termo, mercado_id, dia, estado, ultimo_erro, atualizado)
 		VALUES ($1,$2,$3,$4,$5,$6,$7)
 		ON CONFLICT (id) DO UPDATE SET
-			produto_id = EXCLUDED.produto_id, mercado_id = EXCLUDED.mercado_id, dia = EXCLUDED.dia,
+			termo = EXCLUDED.termo, mercado_id = EXCLUDED.mercado_id, dia = EXCLUDED.dia,
 			estado = EXCLUDED.estado, ultimo_erro = EXCLUDED.ultimo_erro, atualizado = EXCLUDED.atualizado`,
-		c.ID, c.ProdutoID, c.MercadoID, c.Dia, string(c.Estado), c.UltimoErro, atualizado)
+		c.ID, c.Termo, c.MercadoID, c.Dia, string(c.Estado), c.UltimoErro, atualizado)
 	return wrapPG(err)
 }
 
 func (s *Catalog) GetColeta(ctx context.Context, id ColetaID) (Coleta, bool, error) {
 	var c Coleta
 	var estado string
-	err := s.pool.QueryRow(ctx, `SELECT id, produto_id, mercado_id, dia, estado, ultimo_erro, atualizado FROM coleta WHERE id = $1`, id).
-		Scan(&c.ID, &c.ProdutoID, &c.MercadoID, &c.Dia, &estado, &c.UltimoErro, &c.Atualizado)
+	err := s.pool.QueryRow(ctx, `SELECT id, termo, mercado_id, dia, estado, ultimo_erro, atualizado FROM coleta WHERE id = $1`, id).
+		Scan(&c.ID, &c.Termo, &c.MercadoID, &c.Dia, &estado, &c.UltimoErro, &c.Atualizado)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Coleta{}, false, nil
 	}
@@ -447,11 +451,11 @@ func (s *Catalog) GetColeta(ctx context.Context, id ColetaID) (Coleta, bool, err
 	return c, err == nil, wrapPG(err)
 }
 
-func (s *Catalog) GetColetaByIdentity(ctx context.Context, produtoID ProdutoID, mercadoID MercadoID, dia string) (Coleta, bool, error) {
+func (s *Catalog) GetColetaByIdentity(ctx context.Context, termo string, mercadoID MercadoID, dia string) (Coleta, bool, error) {
 	var c Coleta
 	var estado string
-	err := s.pool.QueryRow(ctx, `SELECT id, produto_id, mercado_id, dia, estado, ultimo_erro, atualizado FROM coleta WHERE produto_id = $1 AND mercado_id = $2 AND dia = $3`, produtoID, mercadoID, dia).
-		Scan(&c.ID, &c.ProdutoID, &c.MercadoID, &c.Dia, &estado, &c.UltimoErro, &c.Atualizado)
+	err := s.pool.QueryRow(ctx, `SELECT id, termo, mercado_id, dia, estado, ultimo_erro, atualizado FROM coleta WHERE termo = $1 AND mercado_id = $2 AND dia = $3`, termo, mercadoID, dia).
+		Scan(&c.ID, &c.Termo, &c.MercadoID, &c.Dia, &estado, &c.UltimoErro, &c.Atualizado)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Coleta{}, false, nil
 	}

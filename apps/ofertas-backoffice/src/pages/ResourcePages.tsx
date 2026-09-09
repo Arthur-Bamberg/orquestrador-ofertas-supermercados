@@ -230,6 +230,11 @@ export function ResourceListPage() {
                           <>
                             <Link to={encodeURIComponent(id)}>Detalhe</Link>
                             <Link to={`${encodeURIComponent(id)}/editar`}>Editar</Link>
+                            {config.slug === "fontes" && entity.mercadoId ? (
+                              <Link to={`/operacoes?mercadoId=${encodeURIComponent(String(entity.mercadoId))}`}>
+                                Testar
+                              </Link>
+                            ) : null}
                             <button type="button" onClick={() => deleteEntity(id)} disabled={deleteMutation.isPending}>
                               Apagar
                             </button>
@@ -307,6 +312,11 @@ export function ResourceDetailPage() {
           <Link className="button" to={`/${config.slug}`}>
             Voltar
           </Link>
+          {config.slug === "fontes" && query.data?.mercadoId ? (
+            <Link className="button" to={`/operacoes?mercadoId=${encodeURIComponent(String(query.data.mercadoId))}`}>
+              Testar
+            </Link>
+          ) : null}
           <Link className="button" to="editar">
             Editar
           </Link>

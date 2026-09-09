@@ -14,6 +14,9 @@ var ErrExtratorCota = errors.New("extrator cota esgotada")
 // ErrFonteInativa signals discover/job refused a Fonte with ativa=false.
 var ErrFonteInativa = errors.New("fonte inativa")
 
+// ErrFonteTipoSite signals discover refused a Fonte with tipo=site (Coleta, not encarte).
+var ErrFonteTipoSite = errors.New("fonte tipo site")
+
 // Extrator adapter names persisted on Uso do Extrator (ADR 0037).
 const (
 	ExtratorProviderGemini = "gemini"

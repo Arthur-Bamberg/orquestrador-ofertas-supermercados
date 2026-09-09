@@ -15,6 +15,8 @@ func TestLoad_EnvAndDefaults(t *testing.T) {
 	t.Setenv("SCRAPER_DIR", dir)
 	t.Setenv("SCRAPER_BIN", filepath.Join(dir, "ofertas-scraper"))
 	t.Setenv("ARTEFATO_ROOT", filepath.Join(dir, "art"))
+	t.Setenv("COLETA_URL", "http://localhost:8092/")
+	t.Setenv("GATEWAY_TOKEN", "dev-token")
 
 	cfg, err := Load()
 	if err != nil {
@@ -34,6 +36,9 @@ func TestLoad_EnvAndDefaults(t *testing.T) {
 	}
 	if cfg.ArtefatoRoot != filepath.Join(dir, "art") {
 		t.Fatalf("artefatoRoot=%s", cfg.ArtefatoRoot)
+	}
+	if cfg.ColetaURL != "http://localhost:8092" || cfg.ColetaToken != "dev-token" {
+		t.Fatalf("coleta %+v", cfg)
 	}
 }
 

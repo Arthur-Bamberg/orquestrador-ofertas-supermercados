@@ -148,6 +148,37 @@ func TestCatalogCRUDRoundTrip(t *testing.T) {
 		if !got.IsAtiva() {
 			t.Fatalf("default ativa: %+v", got)
 		}
+		if got.Tipo != store.TipoEncarte {
+			t.Fatalf("default tipo encarte: %+v", got)
+		}
+	})
+
+	t.Run("Fonte_TipoSite", func(t *testing.T) {
+		f := store.Fonte{ID: "f-site", MercadoID: "m1", URL: "https://site.example", Tipo: store.TipoSite}
+		if err := catalog.SaveFonte(ctx, f); err != nil {
+			t.Fatal(err)
+		}
+		got, ok, err := catalog.GetFonte(ctx, "f-site")
+		if err != nil || !ok {
+			t.Fatalf("GetFonte ok=%v err=%v", ok, err)
+		}
+		if got.Tipo != store.TipoSite {
+			t.Fatalf("esperava tipo site: %+v", got)
+		}
+		list, err := catalog.ListFontes(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var listed store.Fonte
+		for _, item := range list {
+			if item.ID == "f-site" {
+				listed = item
+				break
+			}
+		}
+		if listed.Tipo != store.TipoSite {
+			t.Fatalf("ListFontes tipo=%q", listed.Tipo)
+		}
 	})
 
 	t.Run("Fonte_AtivaFalse", func(t *testing.T) {

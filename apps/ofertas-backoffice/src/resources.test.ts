@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { documentoEstados, getResource, medidas, origensData } from "./resources";
+import { documentoEstados, fonteTipos, getResource, medidas, origensData } from "./resources";
 
 describe("constantes de domínio", () => {
   it("documentoEstados match persisted Documento states", () => {
@@ -8,6 +8,10 @@ describe("constantes de domínio", () => {
 
   it("medidas are the normalized Medida set", () => {
     expect(medidas).toEqual(["g", "ml", "unidade"]);
+  });
+
+  it("fonteTipos are encarte and site", () => {
+    expect(fonteTipos).toEqual(["encarte", "site"]);
   });
 
   it("origensData match vigência origens", () => {
@@ -58,11 +62,15 @@ describe("constantes de domínio", () => {
     expect(getResource("fontes")?.columns).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "mercadoId", format: "ref", ref: "mercado" }),
+        expect.objectContaining({ name: "tipo" }),
         expect.objectContaining({ name: "ativa", format: "boolean" }),
       ]),
     );
     expect(getResource("fontes")?.fields).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "ativa", kind: "boolean" })]),
+      expect.arrayContaining([
+        expect.objectContaining({ name: "tipo", kind: "select", options: fonteTipos }),
+        expect.objectContaining({ name: "ativa", kind: "boolean" }),
+      ]),
     );
     expect(getResource("documentos")?.columns).toEqual(
       expect.arrayContaining([

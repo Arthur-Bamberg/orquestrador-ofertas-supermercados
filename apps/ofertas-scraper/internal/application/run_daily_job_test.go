@@ -467,6 +467,39 @@ func TestRunDailyJob_SkipsFonteInativa(t *testing.T) {
 	}
 }
 
+func TestRunDailyJob_SkipsFonteTipoSite(t *testing.T) {
+	loc, now := jobClock()
+	docs := newMemDocs()
+	calls := 0
+	discoverCalls := 0
+	deps := baseJobDeps(t, loc, now, docs, &countingExtrator{inner: extrator.Stub{Candidatos: []domain.CandidatoOferta{sampleCandidato()}}, n: &calls})
+	httpClient := &memFonteHTTP{
+		pdfs: map[string][]domain.PDFDescoberto{
+			"f-site": {{Filename: "site.pdf", URL: "u-site"}},
+			"f1":     {{Filename: "encarte.pdf", URL: "u"}},
+		},
+		body: []byte("%PDF"),
+	}
+	deps.FonteHTTP = &countingDiscover{inner: httpClient, n: &discoverCalls}
+	deps.Fontes = &memFontes{items: []domain.Fonte{
+		{ID: "f-site", MercadoID: "m1", Tipo: domain.TipoSite},
+		{ID: "f1", MercadoID: "m1"},
+	}}
+
+	if err := application.RunDailyJob(context.Background(), deps); err != nil {
+		t.Fatal(err)
+	}
+	if discoverCalls != 1 {
+		t.Fatalf("tipo site não deve ir ao FonteHTTP; discovers=%d", discoverCalls)
+	}
+	if _, ok, _ := docs.GetByIdentity(context.Background(), "f-site", "site.pdf", "2026-07-18"); ok {
+		t.Fatal("fonte tipo site não deve criar Documento")
+	}
+	if calls != 1 {
+		t.Fatalf("fonte encarte should run; calls=%d", calls)
+	}
+}
+
 func TestDiscoverDocumentos_RejeitaFonteInativa(t *testing.T) {
 	loc, now := jobClock()
 	docs := newMemDocs()
@@ -488,6 +521,31 @@ func TestDiscoverDocumentos_RejeitaFonteInativa(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 	if _, ok, _ := docs.GetByIdentity(context.Background(), "f-off", "off.pdf", "2026-07-18"); ok {
+		t.Fatal("não deve criar Documento")
+	}
+}
+
+func TestDiscoverDocumentos_RejeitaFonteTipoSite(t *testing.T) {
+	loc, now := jobClock()
+	docs := newMemDocs()
+	deps := application.RunDailyJobDeps{
+		Fontes: &memFontes{items: []domain.Fonte{
+			{ID: "f-site", MercadoID: "m1", Tipo: domain.TipoSite},
+		}},
+		Documentos: docs,
+		FonteHTTP: &memFonteHTTP{
+			pdfs: map[string][]domain.PDFDescoberto{"f-site": {{Filename: "site.pdf", URL: "u"}}},
+			body: []byte("%PDF"),
+		},
+		Clock:    fixedClock{t: now},
+		Log:      log.New(&bytes.Buffer{}, "", 0),
+		Location: loc,
+	}
+	err := application.DiscoverDocumentos(context.Background(), deps, "f-site")
+	if !errors.Is(err, domain.ErrFonteTipoSite) {
+		t.Fatalf("err=%v", err)
+	}
+	if _, ok, _ := docs.GetByIdentity(context.Background(), "f-site", "site.pdf", "2026-07-18"); ok {
 		t.Fatal("não deve criar Documento")
 	}
 }

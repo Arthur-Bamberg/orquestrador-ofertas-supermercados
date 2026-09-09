@@ -17,6 +17,13 @@ type Mercado = store.Mercado
 
 type Fonte = store.Fonte
 
+type TipoFonte = store.TipoFonte
+
+const (
+	TipoEncarte = store.TipoEncarte
+	TipoSite    = store.TipoSite
+)
+
 type Produto = store.Produto
 
 type Marca = store.Marca

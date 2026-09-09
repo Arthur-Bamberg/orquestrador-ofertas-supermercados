@@ -50,7 +50,7 @@ func TestSaveOfertasForColeta_ReencontroAtualizaIndicacaoDoSite(t *testing.T) {
 	ctx := context.Background()
 	seedOfertaGraph(t, catalog, "d1")
 	if err := catalog.SaveColeta(ctx, store.Coleta{
-		ID: "c1", ProdutoID: "p1", MercadoID: "m1", Dia: "2026-09-05", Estado: store.EstadoProcessando,
+		ID: "c1", Termo: "arroz integral", MercadoID: "m1", Dia: "2026-09-05", Estado: store.EstadoProcessando,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestSaveOfertasForColeta_ColisaoComEncarteMantemIndicacao(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := catalog.SaveColeta(ctx, store.Coleta{
-		ID: "c1", ProdutoID: "p1", MercadoID: "m1", Dia: "2026-09-05", Estado: store.EstadoProcessando,
+		ID: "c1", Termo: "arroz integral", MercadoID: "m1", Dia: "2026-09-05", Estado: store.EstadoProcessando,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestSaveOfertasForColeta_SubstituiEMarcaIndicacaoDoSite(t *testing.T) {
 	ctx := context.Background()
 	seedOfertaGraph(t, catalog, "d1")
 	if err := catalog.SaveColeta(ctx, store.Coleta{
-		ID: "c1", ProdutoID: "p1", MercadoID: "m1", Dia: "2026-09-05", Estado: store.EstadoProcessando,
+		ID: "c1", Termo: "arroz integral", MercadoID: "m1", Dia: "2026-09-05", Estado: store.EstadoProcessando,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -172,6 +172,28 @@ func TestSaveOfertasForColeta_SubstituiEMarcaIndicacaoDoSite(t *testing.T) {
 	}
 }
 
+func TestGetColetaByIdentity_TermoMercadoDia(t *testing.T) {
+	catalog := storetest.New(t)
+	ctx := context.Background()
+	seedOfertaGraph(t, catalog, "d1")
+	if err := catalog.SaveColeta(ctx, store.Coleta{
+		ID: "c-tomate", Termo: "tomate", MercadoID: "m1", Dia: "2026-09-07", Estado: store.EstadoProcessando,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := catalog.GetColetaByIdentity(ctx, "tomate", "m1", "2026-09-07")
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if got.ID != "c-tomate" || got.Termo != "tomate" {
+		t.Fatalf("got %#v", got)
+	}
+	_, other, err := catalog.GetColetaByIdentity(ctx, "molho de tomate", "m1", "2026-09-07")
+	if err != nil || other {
+		t.Fatalf("different termo must be a different Coleta other=%v err=%v", other, err)
+	}
+}
+
 func TestDeleteDocumento_PreservaOfertaComColeta(t *testing.T) {
 	catalog := storetest.New(t)
 	ctx := context.Background()
@@ -185,7 +207,7 @@ func TestDeleteDocumento_PreservaOfertaComColeta(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := catalog.SaveColeta(ctx, store.Coleta{
-		ID: "c1", ProdutoID: "p1", MercadoID: "m1", Dia: "2026-09-05",
+		ID: "c1", Termo: "arroz integral", MercadoID: "m1", Dia: "2026-09-05",
 	}); err != nil {
 		t.Fatal(err)
 	}

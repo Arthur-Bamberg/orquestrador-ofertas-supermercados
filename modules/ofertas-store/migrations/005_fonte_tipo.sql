@@ -1,0 +1,2 @@
+ALTER TABLE fonte
+    ADD COLUMN tipo TEXT NOT NULL DEFAULT 'encarte';

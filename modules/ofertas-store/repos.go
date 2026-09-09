@@ -132,8 +132,8 @@ func (r *ColetaRepo) Get(ctx context.Context, id ColetaID) (Coleta, bool, error)
 	return r.catalog.GetColeta(ctx, id)
 }
 
-func (r *ColetaRepo) GetByIdentity(ctx context.Context, produtoID ProdutoID, mercadoID MercadoID, dia string) (Coleta, bool, error) {
-	return r.catalog.GetColetaByIdentity(ctx, produtoID, mercadoID, dia)
+func (r *ColetaRepo) GetByIdentity(ctx context.Context, termo string, mercadoID MercadoID, dia string) (Coleta, bool, error) {
+	return r.catalog.GetColetaByIdentity(ctx, termo, mercadoID, dia)
 }
 
 type FalhaRepo struct{ catalog *Catalog }

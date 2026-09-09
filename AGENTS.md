@@ -1,6 +1,6 @@
 # AGENTS.md — orquestrador-ofertas-supermercados
 
-Instructions for coding agents on this **monorepo / Go workspace**. Domain language: scraper [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md); WhatsApp channel [`apps/gateway-whatsapp/CONTEXT.md`](./apps/gateway-whatsapp/CONTEXT.md); Agente [`apps/agente-ofertas/CONTEXT.md`](./apps/agente-ofertas/CONTEXT.md); map [`CONTEXT-MAP.md`](./CONTEXT-MAP.md). Workspace ADRs in [`docs/adr/`](./docs/adr/); app ADRs under each `apps/<name>/docs/adr/`.
+Instructions for coding agents on this **monorepo / Go workspace**. Domain language: scraper [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md); WhatsApp channel [`apps/gateway-whatsapp/CONTEXT.md`](./apps/gateway-whatsapp/CONTEXT.md); Agente [`apps/agente-ofertas/CONTEXT.md`](./apps/agente-ofertas/CONTEXT.md); map [`CONTEXT-MAP.md`](./CONTEXT-MAP.md); cadeia Lista→Coleta→Resposta [`docs/arquitetura-agentes-lista-coleta.md`](./docs/arquitetura-agentes-lista-coleta.md). Workspace ADRs in [`docs/adr/`](./docs/adr/); app ADRs under each `apps/<name>/docs/adr/`.
 
 ## What this repository is
 
@@ -9,7 +9,7 @@ Workspace for supermarket-offers apps. It is **not** itself an application binar
 | Status | App | Role |
 |--------|-----|------|
 | **Current** | `ofertas-scraper` | Daily job: Fontes → Documentos → Extrator → Ofertas |
-| **Current** | `ofertas-web-scraper` | CLI: Produto → Coleta nos sites (Fort, Carrefour, Asun, Rissul) → Ofertas (ADR 0011) |
+| **Current** | `ofertas-scraper-v2` | HTTP Coleta de vitrine (Fort; ADR 0012 / 0013) |
 | **Current** | `ofertas-api` | Go HTTP API over shared Postgres (CRUD + pipeline ops; ADR 0005 / 0006) |
 | **Current** | `ofertas-backoffice` | Vite/React SPA backoffice (filters + screens; ADR 0005) |
 | **Current** | `gateway-whatsapp` | WhatsApp channel gateway (whatsmeow; ADR 0007) |
@@ -37,7 +37,7 @@ AGENTS.md                       # this file (workspace)
 docs/adr/                       # workspace / platform decisions
 apps/
   ofertas-scraper/              # first app (own go.mod, AGENTS.md, CONTEXT.md, ADRs)
-  ofertas-web-scraper/          # Coleta nos sites (ADR 0011)
+  ofertas-scraper-v2/           # Coleta de vitrine Fort (ADR 0013)
   ofertas-api/
   ofertas-backoffice/
   gateway-whatsapp/             # WhatsApp channel (ADR 0007)
@@ -74,11 +74,11 @@ Register new modules in root `go.work` (`use ./apps/...` or `./modules/...`).
 
 ```bash
 cp .env.example .env              # senha local do Postgres + canal + extrator
-docker compose up --build         # from repo root — Postgres, API :8080, backoffice :5173, gateway :8090, agente :8091
+docker compose up --build         # from repo root — Postgres, API :8080, backoffice :5173, gateway :8090, agente :8091, scraper-v2 :8092
 docker compose run --rm ofertas-scraper seed
 docker compose run --rm ofertas-scraper run
-docker compose run --rm ofertas-web-scraper seed
-docker compose run --rm ofertas-web-scraper coletar <produtoId>
+docker compose run --rm ofertas-scraper-v2 seed
+docker compose run --rm ofertas-scraper-v2 coletar tomate
 ./scripts/install-git-hooks.sh    # once per clone
 cd apps/ofertas-scraper && cp .env.example .env   # only if you `go run` the CLI on the host
 # host scraper: paths in apps/ofertas-scraper/.env are relative to that cwd
@@ -142,7 +142,7 @@ Default for this repo: work on **`main`**. Do **not** create a feature branch, o
 | App | Agents | Domain |
 |-----|--------|--------|
 | ofertas-scraper | [`apps/ofertas-scraper/AGENTS.md`](./apps/ofertas-scraper/AGENTS.md) | [`apps/ofertas-scraper/CONTEXT.md`](./apps/ofertas-scraper/CONTEXT.md) |
-| ofertas-web-scraper | [`apps/ofertas-web-scraper/AGENTS.md`](./apps/ofertas-web-scraper/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0011) |
+| ofertas-scraper-v2 | [`apps/ofertas-scraper-v2/AGENTS.md`](./apps/ofertas-scraper-v2/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0012 / 0013) |
 | ofertas-api | [`apps/ofertas-api/AGENTS.md`](./apps/ofertas-api/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0005) |
 | ofertas-backoffice | [`apps/ofertas-backoffice/AGENTS.md`](./apps/ofertas-backoffice/AGENTS.md) | Same glossary as scraper (`CONTEXT.md` above; ADR 0005) |
 | gateway-whatsapp | [`apps/gateway-whatsapp/AGENTS.md`](./apps/gateway-whatsapp/AGENTS.md) | [`apps/gateway-whatsapp/CONTEXT.md`](./apps/gateway-whatsapp/CONTEXT.md) |

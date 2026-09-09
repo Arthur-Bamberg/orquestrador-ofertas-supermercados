@@ -3,6 +3,7 @@ import type { ResourceConfig } from "./domain";
 export const documentoEstados = ["processando", "concluido", "parcial", "falhou"];
 export const medidas = ["g", "ml", "unidade"];
 export const origensData = ["extrator", "filename", "primeiraDescoberta", "coleta"];
+export const fonteTipos = ["encarte", "site"];
 
 export const resources: ResourceConfig[] = [
   {
@@ -31,6 +32,7 @@ export const resources: ResourceConfig[] = [
       { name: "mercadoId", label: "Mercado", format: "ref", ref: "mercado" },
       { name: "url", label: "URL" },
       { name: "filtroNomeDocumento", label: "Filtro Documento" },
+      { name: "tipo", label: "Tipo" },
       { name: "ativa", label: "Ativa", format: "boolean" },
     ],
     fields: [
@@ -38,6 +40,7 @@ export const resources: ResourceConfig[] = [
       { name: "mercadoId", label: "Mercado", kind: "ref", ref: "mercado", required: true },
       { name: "url", label: "URL", kind: "url", required: true },
       { name: "filtroNomeDocumento", label: "Filtro Nome Documento", kind: "text" },
+      { name: "tipo", label: "Tipo", kind: "select", options: fonteTipos },
       { name: "ativa", label: "Ativa", kind: "boolean" },
     ],
     filters: [{ name: "mercadoId", label: "Mercado", kind: "ref", ref: "mercado" }],

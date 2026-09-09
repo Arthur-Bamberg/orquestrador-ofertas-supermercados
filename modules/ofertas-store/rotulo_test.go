@@ -34,3 +34,23 @@ func TestMatchOrCreateMarca_ReusaPorNomeNorm(t *testing.T) {
 		t.Fatalf("reuse want marca-1, got %#v", second)
 	}
 }
+
+func TestMatchOrCreateProduto_ReusaPorNomeNorm(t *testing.T) {
+	catalog := storetest.New(t)
+	ctx := context.Background()
+	repo := store.NewProdutoRepo(catalog)
+	first, err := store.MatchOrCreateProduto(ctx, repo, "  Arroz Integral  ", "prod-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ID != "prod-1" || first.NomeNorm != "arroz integral" || first.Nome != "  Arroz Integral  " {
+		t.Fatalf("created %#v", first)
+	}
+	second, err := store.MatchOrCreateProduto(ctx, repo, "ARROZ INTEGRAL", "prod-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != "prod-1" {
+		t.Fatalf("reuse want prod-1, got %#v", second)
+	}
+}

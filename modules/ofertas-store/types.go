@@ -21,6 +21,13 @@ type Mercado struct {
 	Nome string    `json:"nome"`
 }
 
+type TipoFonte string
+
+const (
+	TipoEncarte TipoFonte = "encarte"
+	TipoSite    TipoFonte = "site"
+)
+
 type Fonte struct {
 	ID                  FonteID   `json:"id"`
 	MercadoID           MercadoID `json:"mercadoId"`
@@ -28,6 +35,8 @@ type Fonte struct {
 	FiltroNomeDocumento string    `json:"filtroNomeDocumento"`
 	// Ativa: nil means active (default). Job diário and discover skip when false.
 	Ativa *bool `json:"ativa,omitempty"`
+	// Tipo: empty means encarte (PDF pipeline). site Fontes stay in the catalog for Coleta.
+	Tipo TipoFonte `json:"tipo,omitempty"`
 }
 
 // Bool returns a *bool for Fonte.Ativa and similar optional flags.
@@ -36,6 +45,14 @@ func Bool(v bool) *bool { return &v }
 // IsAtiva reports whether the Fonte participates in discovery/job (default true).
 func (f Fonte) IsAtiva() bool {
 	return f.Ativa == nil || *f.Ativa
+}
+
+// TipoOuEncarte is the persisted collection kind (default encarte).
+func (f Fonte) TipoOuEncarte() TipoFonte {
+	if f.Tipo == "" {
+		return TipoEncarte
+	}
+	return f.Tipo
 }
 
 type Produto struct {
@@ -75,7 +92,7 @@ type Documento struct {
 
 type Coleta struct {
 	ID         ColetaID        `json:"id"`
-	ProdutoID  ProdutoID       `json:"produtoId"`
+	Termo      string          `json:"termo"`
 	MercadoID  MercadoID       `json:"mercadoId"`
 	Dia        string          `json:"dia"`
 	Estado     EstadoDocumento `json:"estado"`

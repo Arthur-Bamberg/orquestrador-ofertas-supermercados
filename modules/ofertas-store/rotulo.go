@@ -35,3 +35,25 @@ func MatchOrCreateMarca(ctx context.Context, repo marcaLookup, nome string, newI
 	}
 	return m, nil
 }
+
+type produtoLookup interface {
+	GetByNomeNorm(ctx context.Context, nomeNorm string) (Produto, bool, error)
+	Save(ctx context.Context, p Produto) error
+}
+
+// MatchOrCreateProduto returns the Produto for nomeNorm, creating it with newID when missing.
+func MatchOrCreateProduto(ctx context.Context, repo produtoLookup, nome string, newID ProdutoID) (Produto, error) {
+	norm := NormalizarRotulo(nome)
+	existing, ok, err := repo.GetByNomeNorm(ctx, norm)
+	if err != nil {
+		return Produto{}, err
+	}
+	if ok {
+		return existing, nil
+	}
+	p := Produto{ID: newID, Nome: nome, NomeNorm: norm}
+	if err := repo.Save(ctx, p); err != nil {
+		return Produto{}, err
+	}
+	return p, nil
+}

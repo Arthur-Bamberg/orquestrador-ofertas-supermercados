@@ -69,7 +69,10 @@ func TestEntityHTTP_CRUDAndConflicts(t *testing.T) {
 		if !got.IsAtiva() {
 			t.Fatalf("default ativa: %+v", got)
 		}
-		res = doJSON(t, h, http.MethodPut, "/api/fontes/f1", `{"mercadoId":"m1","url":"https://other.example","ativa":false}`)
+		if got.Tipo != store.TipoEncarte {
+			t.Fatalf("default tipo: %+v", got)
+		}
+		res = doJSON(t, h, http.MethodPut, "/api/fontes/f1", `{"mercadoId":"m1","url":"https://other.example","ativa":false,"tipo":"site"}`)
 		if res.Code != http.StatusOK {
 			t.Fatalf("PUT status=%d body=%s", res.Code, res.Body.String())
 		}
@@ -79,6 +82,9 @@ func TestEntityHTTP_CRUDAndConflicts(t *testing.T) {
 		}
 		if got.IsAtiva() {
 			t.Fatalf("esperava inativa: %+v", got)
+		}
+		if got.Tipo != store.TipoSite {
+			t.Fatalf("esperava tipo site: %+v", got)
 		}
 		res = doJSON(t, h, http.MethodPut, "/api/fontes/f1", `{"mercadoId":"m1","url":"https://other.example","ativa":true}`)
 		if res.Code != http.StatusOK {
@@ -287,6 +293,116 @@ func TestOperacaoPipelineHTTP(t *testing.T) {
 	if canceled.Status != store.OperacaoCanceled {
 		t.Fatalf("status=%s", canceled.Status)
 	}
+}
+
+func TestTestarMercadoHTTP(t *testing.T) {
+	catalog := storetest.New(t)
+	ctx := t.Context()
+	if err := catalog.SaveMercado(ctx, store.Mercado{ID: "mercado-via", Nome: "Via Atacadista"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveFonte(ctx, store.Fonte{ID: "fonte-via", MercadoID: "mercado-via", URL: "https://via.example", Tipo: store.TipoEncarte}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveMercado(ctx, store.Mercado{ID: "mercado-fort", Nome: "Fort Atacadista"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveFonte(ctx, store.Fonte{
+		ID: "fonte-fort", MercadoID: "mercado-fort", URL: "https://fort.example", Tipo: store.TipoSite,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveMercado(ctx, store.Mercado{ID: "mercado-vazio", Nome: "Sem Fonte"}); err != nil {
+		t.Fatal(err)
+	}
+
+	v2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/coletas" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer secret" {
+			http.Error(w, `{"error":"não autorizado"}`, http.StatusUnauthorized)
+			return
+		}
+		var body struct {
+			Termo     string `json:"termo"`
+			MercadoID string `json:"mercadoId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if body.Termo != "tomate" || body.MercadoID != "mercado-fort" {
+			http.Error(w, `{"error":"coleta inesperada"}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ofertas":[{"id":"o1","mercadoId":"mercado-fort","valor":6.9,"quantidades":[1000],"medida":"g"}]}`))
+	}))
+	t.Cleanup(v2.Close)
+
+	h := New(catalog, config.Config{ColetaURL: v2.URL, ColetaToken: "secret"})
+
+	t.Run("encarte_enfileira_discover", func(t *testing.T) {
+		res := doJSON(t, h, http.MethodPost, "/api/ops/testar", `{"mercadoId":"mercado-via"}`)
+		if res.Code != http.StatusAccepted {
+			t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+		}
+		var out struct {
+			Kind     string                 `json:"kind"`
+			FonteID  string                 `json:"fonteId"`
+			Operacao store.OperacaoPipeline `json:"operacao"`
+		}
+		if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		if out.Kind != "discover" || out.FonteID != "fonte-via" || out.Operacao.Kind != store.OperacaoDiscover {
+			t.Fatalf("got %+v", out)
+		}
+		if out.Operacao.FonteID != "fonte-via" || out.Operacao.Status != store.OperacaoPending {
+			t.Fatalf("operacao %+v", out.Operacao)
+		}
+	})
+
+	t.Run("site_exige_termo", func(t *testing.T) {
+		res := doJSON(t, h, http.MethodPost, "/api/ops/testar", `{"mercadoId":"mercado-fort"}`)
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+		}
+	})
+
+	t.Run("site_chama_coleta", func(t *testing.T) {
+		res := doJSON(t, h, http.MethodPost, "/api/ops/testar", `{"mercadoId":"mercado-fort","termo":"tomate"}`)
+		if res.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+		}
+		var out struct {
+			Kind    string         `json:"kind"`
+			FonteID string         `json:"fonteId"`
+			Ofertas []store.Oferta `json:"ofertas"`
+		}
+		if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		if out.Kind != "coleta" || out.FonteID != "fonte-fort" || len(out.Ofertas) != 1 || out.Ofertas[0].Valor != 6.9 {
+			t.Fatalf("got %+v", out)
+		}
+	})
+
+	t.Run("mercado_sem_fonte", func(t *testing.T) {
+		res := doJSON(t, h, http.MethodPost, "/api/ops/testar", `{"mercadoId":"mercado-vazio"}`)
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+		}
+	})
+
+	t.Run("mercado_ausente", func(t *testing.T) {
+		res := doJSON(t, h, http.MethodPost, "/api/ops/testar", `{"mercadoId":"inexistente"}`)
+		if res.Code != http.StatusNotFound {
+			t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+		}
+	})
 }
 
 func TestArtefatosHTTP(t *testing.T) {

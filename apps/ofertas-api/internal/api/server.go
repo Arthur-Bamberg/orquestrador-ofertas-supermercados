@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -81,6 +83,7 @@ func New(catalog *store.Catalog, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /api/ops/run", s.enqueueRun)
 	mux.HandleFunc("POST /api/ops/discover", s.enqueueDiscover)
 	mux.HandleFunc("POST /api/ops/reprocess", s.enqueueReprocess)
+	mux.HandleFunc("POST /api/ops/testar", s.testarMercado)
 	mux.HandleFunc("GET /api/ops", s.listOps)
 	mux.HandleFunc("GET /api/ops/{id}", s.getOp)
 	mux.HandleFunc("POST /api/ops/{id}/cancel", s.cancelOp)
@@ -502,6 +505,8 @@ func (s *Server) deleteUso(w http.ResponseWriter, r *http.Request) {
 type opRequest struct {
 	FonteID     store.FonteID     `json:"fonteId"`
 	DocumentoID store.DocumentoID `json:"documentoId"`
+	MercadoID   store.MercadoID   `json:"mercadoId"`
+	Termo       string            `json:"termo"`
 }
 
 func (s *Server) enqueueRun(w http.ResponseWriter, r *http.Request) {
@@ -523,6 +528,144 @@ func (s *Server) enqueueReprocess(w http.ResponseWriter, r *http.Request) {
 	}
 	s.enqueueOp(w, r, store.OperacaoPipeline{ID: newID(), Kind: store.OperacaoReprocess, DocumentoID: req.DocumentoID})
 }
+
+type testarResponse struct {
+	Kind      string                  `json:"kind"`
+	MercadoID store.MercadoID         `json:"mercadoId"`
+	FonteID   store.FonteID           `json:"fonteId"`
+	Operacao  *store.OperacaoPipeline `json:"operacao,omitempty"`
+	Ofertas   []store.Oferta          `json:"ofertas,omitempty"`
+}
+
+func (s *Server) testarMercado(w http.ResponseWriter, r *http.Request) {
+	var req opRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if req.MercadoID == "" {
+		writeError(w, fmt.Errorf("%w: mercadoId obrigatório", store.ErrInvalid))
+		return
+	}
+	if _, ok, err := s.catalog.GetMercado(r.Context(), req.MercadoID); err != nil {
+		writeError(w, err)
+		return
+	} else if !ok {
+		writeError(w, fmt.Errorf("%w: mercado %s", store.ErrNotFound, req.MercadoID))
+		return
+	}
+	fonte, err := s.fonteParaTeste(r.Context(), req.MercadoID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if fonte.TipoOuEncarte() == store.TipoSite {
+		s.testarColeta(w, r, fonte, strings.TrimSpace(req.Termo))
+		return
+	}
+	s.testarDiscover(w, r, fonte)
+}
+
+func (s *Server) fonteParaTeste(ctx context.Context, mercadoID store.MercadoID) (store.Fonte, error) {
+	fontes, err := s.catalog.ListFontes(ctx)
+	if err != nil {
+		return store.Fonte{}, err
+	}
+	var doMercado, ativas []store.Fonte
+	for _, f := range fontes {
+		if f.MercadoID != mercadoID {
+			continue
+		}
+		doMercado = append(doMercado, f)
+		if f.IsAtiva() {
+			ativas = append(ativas, f)
+		}
+	}
+	pool := ativas
+	if len(pool) == 0 {
+		pool = doMercado
+	}
+	if len(pool) == 0 {
+		return store.Fonte{}, fmt.Errorf("%w: mercado %s sem Fonte", store.ErrInvalid, mercadoID)
+	}
+	return pool[0], nil
+}
+
+func (s *Server) testarDiscover(w http.ResponseWriter, r *http.Request, fonte store.Fonte) {
+	op := store.OperacaoPipeline{ID: newID(), Kind: store.OperacaoDiscover, FonteID: fonte.ID}
+	if err := s.catalog.EnqueueOperacao(r.Context(), op); err != nil {
+		writeError(w, err)
+		return
+	}
+	got, _, _ := s.catalog.GetOperacao(r.Context(), op.ID)
+	writeJSON(w, http.StatusAccepted, testarResponse{
+		Kind: "discover", MercadoID: fonte.MercadoID, FonteID: fonte.ID, Operacao: &got,
+	})
+}
+
+func (s *Server) testarColeta(w http.ResponseWriter, r *http.Request, fonte store.Fonte, termo string) {
+	if termo == "" {
+		writeError(w, fmt.Errorf("%w: termo obrigatório para Fonte tipo site", store.ErrInvalid))
+		return
+	}
+	if s.cfg.ColetaURL == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "COLETA_URL não configurada"})
+		return
+	}
+	ofertas, err := s.chamarColeta(r, fonte.MercadoID, termo)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, testarResponse{
+		Kind: "coleta", MercadoID: fonte.MercadoID, FonteID: fonte.ID, Ofertas: ofertas,
+	})
+}
+
+func (s *Server) chamarColeta(r *http.Request, mercadoID store.MercadoID, termo string) ([]store.Oferta, error) {
+	payload, err := json.Marshal(map[string]string{"termo": termo, "mercadoId": string(mercadoID)})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, s.cfg.ColetaURL+"/coletas", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if s.cfg.ColetaToken != "" {
+		req.Header.Set("Authorization", "Bearer "+s.cfg.ColetaToken)
+	}
+	res, err := coletaHTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	raw, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(raw))
+		if msg == "" {
+			msg = res.Status
+		}
+		if res.StatusCode == http.StatusBadRequest {
+			return nil, fmt.Errorf("%w: %s", store.ErrInvalid, msg)
+		}
+		return nil, fmt.Errorf("coleta HTTP %d: %s", res.StatusCode, msg)
+	}
+	var out struct {
+		Ofertas []store.Oferta `json:"ofertas"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	if out.Ofertas == nil {
+		out.Ofertas = []store.Oferta{}
+	}
+	return out.Ofertas, nil
+}
+
+var coletaHTTPClient = &http.Client{Timeout: 2 * time.Minute}
 
 func (s *Server) enqueueOp(w http.ResponseWriter, r *http.Request, op store.OperacaoPipeline) {
 	if err := s.catalog.EnqueueOperacao(r.Context(), op); err != nil {

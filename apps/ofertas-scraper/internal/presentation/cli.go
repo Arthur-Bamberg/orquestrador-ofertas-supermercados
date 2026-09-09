@@ -124,7 +124,7 @@ func RunSeed(ctx context.Context, env Env) error {
 		if err := fontes.Save(ctx, f); err != nil {
 			return err
 		}
-		log.Printf("seed fonte %s → %s", f.ID, f.URL)
+		log.Printf("seed fonte %s tipo=%s → %s", f.ID, f.TipoOuEncarte(), f.URL)
 	}
 	return nil
 }
