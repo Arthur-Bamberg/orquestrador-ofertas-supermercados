@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 )
@@ -29,4 +30,42 @@ func ParseLista(texto string) Lista {
 		itens = append(itens, Item{Texto: part})
 	}
 	return Lista{Itens: itens}
+}
+
+var medidaOuNumero = regexp.MustCompile(`^[0-9]+([.,][0-9]+)?(kg|g|ml|un|l)?$`)
+
+var involucro = map[string]struct{}{
+	"comprar": {}, "quero": {}, "preciso": {}, "gostaria": {},
+	"lista": {}, "item": {}, "itens": {},
+	"oi": {}, "ola": {}, "olá": {},
+	"bom": {}, "dia": {}, "boa": {}, "tarde": {}, "noite": {},
+	"por": {}, "favor": {}, "obrigado": {}, "obrigada": {}, "pfv": {}, "pf": {},
+	"de": {}, "da": {}, "do": {}, "das": {}, "dos": {},
+	"um": {}, "uma": {}, "uns": {}, "umas": {},
+	"o": {}, "a": {}, "os": {}, "as": {},
+	"kg": {}, "g": {}, "ml": {}, "un": {}, "unidade": {}, "unidades": {},
+	"litro": {}, "litros": {}, "kilo": {}, "kilos": {}, "grama": {}, "gramas": {},
+	"l": {},
+}
+
+func TermoDoItem(texto string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(texto)) {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte(' ')
+		}
+	}
+	var keep []string
+	for _, tok := range strings.Fields(b.String()) {
+		if _, skip := involucro[tok]; skip {
+			continue
+		}
+		if medidaOuNumero.MatchString(tok) {
+			continue
+		}
+		keep = append(keep, tok)
+	}
+	return strings.Join(keep, " ")
 }

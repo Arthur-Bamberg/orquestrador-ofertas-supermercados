@@ -23,6 +23,10 @@ type Coleta interface {
 	Coletar(ctx context.Context, termo string) ([]store.Oferta, error)
 }
 
+type InterpretadorTermo interface {
+	Termo(ctx context.Context, item string) (string, error)
+}
+
 type Envio interface {
 	Enviar(ctx context.Context, conversaJID, corpo string) error
 }
@@ -30,6 +34,7 @@ type Envio interface {
 type Deps struct {
 	Cat    Catalogo
 	Coleta Coleta
+	Termo  InterpretadorTermo
 	Envio  Envio
 	Hoje   func() time.Time
 }
@@ -37,6 +42,7 @@ type Deps struct {
 type Agente struct {
 	cat    Catalogo
 	coleta Coleta
+	termo  InterpretadorTermo
 	envio  Envio
 	hoje   func() time.Time
 }
@@ -46,13 +52,13 @@ func New(d Deps) *Agente {
 	if hoje == nil {
 		hoje = time.Now
 	}
-	return &Agente{cat: d.Cat, coleta: d.Coleta, envio: d.Envio, hoje: hoje}
+	return &Agente{cat: d.Cat, coleta: d.Coleta, termo: d.Termo, envio: d.Envio, hoje: hoje}
 }
 
 func (a *Agente) Agora() time.Time { return a.hoje() }
 
 func (a *Agente) InterpretarLista(ctx context.Context, texto string) (string, error) {
-	return Interpretar(ctx, domain.ParseLista(texto), a.cat, a.coleta, a.hoje())
+	return Interpretar(ctx, domain.ParseLista(texto), a.cat, a.coleta, a.hoje(), a.termo)
 }
 
 func (a *Agente) Atender(ctx context.Context, conversaJID, corpo string) error {
@@ -60,7 +66,7 @@ func (a *Agente) Atender(ctx context.Context, conversaJID, corpo string) error {
 	if len(lista.Itens) == 0 {
 		return nil
 	}
-	texto, err := Interpretar(ctx, lista, a.cat, a.coleta, a.hoje())
+	texto, err := Interpretar(ctx, lista, a.cat, a.coleta, a.hoje(), a.termo)
 	if err != nil {
 		return err
 	}
@@ -70,8 +76,12 @@ func (a *Agente) Atender(ctx context.Context, conversaJID, corpo string) error {
 	return a.envio.Enviar(ctx, conversaJID, texto)
 }
 
-func Interpretar(ctx context.Context, lista domain.Lista, cat Catalogo, coleta Coleta, agora time.Time) (string, error) {
-	consultados := coletarItens(ctx, lista, coleta)
+func Interpretar(ctx context.Context, lista domain.Lista, cat Catalogo, coleta Coleta, agora time.Time, interp InterpretadorTermo) (string, error) {
+	termos := make([]string, len(lista.Itens))
+	for i, item := range lista.Itens {
+		termos[i] = resolverTermo(ctx, item.Texto, interp)
+	}
+	consultados := coletarItens(ctx, termos, coleta)
 	produtos, err := cat.ListarProdutos(ctx)
 	if err != nil {
 		return "", err
@@ -91,13 +101,26 @@ func Interpretar(ctx context.Context, lista domain.Lista, cat Catalogo, coleta C
 	hoje := agora.In(loc).Format("2006-01-02")
 	blocos := make([]string, 0, len(lista.Itens))
 	for i, item := range lista.Itens {
-		bloco, err := interpretarItem(ctx, item, produtos, marcas, ofertas, consultados[i], cat, hoje)
+		bloco, err := interpretarItem(ctx, termos[i], produtos, marcas, ofertas, consultados[i], cat, hoje)
 		if err != nil {
 			return "", err
 		}
 		blocos = append(blocos, "*"+item.Texto+"*\n"+bloco)
 	}
 	return strings.Join(blocos, "\n\n"), nil
+}
+
+func resolverTermo(ctx context.Context, item string, interp InterpretadorTermo) string {
+	if interp != nil {
+		t, err := interp.Termo(ctx, item)
+		if err == nil {
+			t = strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(t))), " ")
+			if t != "" {
+				return t
+			}
+		}
+	}
+	return domain.TermoDoItem(item)
 }
 
 func fundirConsultadoEEncarte(consultado, encarte []store.Oferta, hoje string) []store.Oferta {
@@ -137,13 +160,16 @@ func vigenteHoje(o store.Oferta, hoje string) bool {
 	return o.DataInicio <= hoje && hoje <= o.DataExpiracao
 }
 
-func coletarItens(ctx context.Context, lista domain.Lista, coleta Coleta) [][]store.Oferta {
-	out := make([][]store.Oferta, len(lista.Itens))
+func coletarItens(ctx context.Context, termos []string, coleta Coleta) [][]store.Oferta {
+	out := make([][]store.Oferta, len(termos))
 	if coleta == nil {
 		return out
 	}
 	var wg sync.WaitGroup
-	for i, item := range lista.Itens {
+	for i, termo := range termos {
+		if termo == "" {
+			continue
+		}
 		wg.Add(1)
 		go func(i int, termo string) {
 			defer wg.Done()
@@ -152,14 +178,17 @@ func coletarItens(ctx context.Context, lista domain.Lista, coleta Coleta) [][]st
 				return
 			}
 			out[i] = of
-		}(i, item.Texto)
+		}(i, termo)
 	}
 	wg.Wait()
 	return out
 }
 
-func interpretarItem(ctx context.Context, item domain.Item, produtos []store.Produto, marcas []store.Marca, ofertas, consultado []store.Oferta, cat Catalogo, hoje string) (string, error) {
-	resto, marca, temMarca := separarMarca(normalizar(item.Texto), marcas)
+func interpretarItem(ctx context.Context, termo string, produtos []store.Produto, marcas []store.Marca, ofertas, consultado []store.Oferta, cat Catalogo, hoje string) (string, error) {
+	if termo == "" {
+		return "Não achei.", nil
+	}
+	resto, marca, temMarca := separarMarca(normalizar(termo), marcas)
 	encarte := encarteCasado(ofertas, produtos, resto)
 	merged := fundirConsultadoEEncarte(consultado, encarte, hoje)
 	porProduto := map[store.ProdutoID][]store.Oferta{}
@@ -194,6 +223,7 @@ func interpretarItem(ctx context.Context, item domain.Item, produtos []store.Pro
 	if len(tipos) == 0 {
 		return "Não achei.", nil
 	}
+	tipos = escolherProdutos(resto, tipos, porProduto)
 	sort.Slice(tipos, func(i, j int) bool { return tipos[i].Nome < tipos[j].Nome })
 	var blocos []string
 	for _, p := range tipos {
@@ -219,6 +249,49 @@ func interpretarItem(ctx context.Context, item domain.Item, produtos []store.Pro
 		blocos = append(blocos, bloco)
 	}
 	return strings.Join(blocos, "\n\n"), nil
+}
+
+func escolherProdutos(termo string, tipos []store.Produto, porProduto map[store.ProdutoID][]store.Oferta) []store.Produto {
+	minEx := extrasAlem(termo, tipos[0].NomeNorm)
+	for _, p := range tipos[1:] {
+		if e := extrasAlem(termo, p.NomeNorm); e < minEx {
+			minEx = e
+		}
+	}
+	var candidatos []store.Produto
+	for _, p := range tipos {
+		if extrasAlem(termo, p.NomeNorm) == minEx {
+			candidatos = append(candidatos, p)
+		}
+	}
+	if len(candidatos) == 1 {
+		return candidatos
+	}
+	minPreco := menorPreco(porProduto[candidatos[0].ID])
+	for _, p := range candidatos[1:] {
+		if v := menorPreco(porProduto[p.ID]); v < minPreco {
+			minPreco = v
+		}
+	}
+	var out []store.Produto
+	for _, p := range candidatos {
+		if menorPreco(porProduto[p.ID]) == minPreco {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func extrasAlem(termo, nomeNorm string) int {
+	return len(strings.Fields(nomeNorm)) - len(strings.Fields(termo))
+}
+
+func menorPreco(ofertas []store.Oferta) float64 {
+	baratas := soMaisBaratas(ofertas)
+	if len(baratas) == 0 {
+		return 0
+	}
+	return precoEfetivo(baratas[0])
 }
 
 func soMaisBaratas(ofertas []store.Oferta) []store.Oferta {

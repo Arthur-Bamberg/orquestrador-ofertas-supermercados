@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -13,7 +14,7 @@ import (
 
 func TestInterpretar_disparaColetaComTermoDeCadaItem(t *testing.T) {
 	c := &stubColeta{}
-	_, err := application.Interpretar(context.Background(), domain.ParseLista("leite, tomate"), catalogoLeite(), c, dia())
+	_, err := application.Interpretar(context.Background(), domain.ParseLista("leite, tomate"), catalogoLeite(), c, dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,6 +24,38 @@ func TestInterpretar_disparaColetaComTermoDeCadaItem(t *testing.T) {
 	}
 	if seen["leite"] != 1 || seen["tomate"] != 1 || len(c.termos) != 2 {
 		t.Fatalf("termos=%q", c.termos)
+	}
+}
+
+func TestInterpretar_coletaUsaTermoNaoTextoCruDoItem(t *testing.T) {
+	c := &stubColeta{}
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("Comprar: cenoura, abobrinha"), catalogoVazio(), c, dia(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]int{}
+	for _, t := range c.termos {
+		seen[t]++
+	}
+	if seen["cenoura"] != 1 || seen["abobrinha"] != 1 || len(c.termos) != 2 {
+		t.Fatalf("termos=%q", c.termos)
+	}
+	if !strings.HasPrefix(got, "*Comprar: cenoura*\n") {
+		t.Fatalf("título do Item cru:\n%s", got)
+	}
+}
+
+func TestInterpretar_termoVazioNaoDisparaColeta(t *testing.T) {
+	c := &stubColeta{}
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("Comprar:"), catalogoVazio(), c, dia(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.termos) != 0 {
+		t.Fatalf("termos=%q", c.termos)
+	}
+	if got != "*Comprar:*\nNão achei." {
+		t.Fatalf("%q", got)
 	}
 }
 
@@ -36,7 +69,7 @@ func TestInterpretar_coletaDoDiaEntraNaResposta(t *testing.T) {
 	}}
 	cat := catalogoLeite()
 	cat.ofertas = nil
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), cat, c, dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), cat, c, dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +93,7 @@ func TestInterpretar_coletaDoDiaPrevaleceNoMesmoProdutoEMercado(t *testing.T) {
 		Valor: 3.99, Quantidades: []float64{1000}, Medida: store.MedidaML,
 		DataInicio: "2026-09-01", DataExpiracao: "2026-09-10",
 	}}
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), cat, c, dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), cat, c, dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +118,7 @@ func TestInterpretar_encarteCompletaMercadoSemColetaDoProduto(t *testing.T) {
 		DataInicio: "2026-09-01", DataExpiracao: "2026-09-10",
 	}}
 	cat.mercados["carrefour"] = store.Mercado{ID: "carrefour", Nome: "Carrefour"}
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), cat, c, dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), cat, c, dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +142,7 @@ func TestInterpretar_naoUsaOfertaSoDeColetaAntiga(t *testing.T) {
 			DataInicio: "2026-09-01", DataExpiracao: "2026-09-10",
 		},
 	}
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), cat, coletaVazia(), dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), cat, coletaVazia(), dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +174,7 @@ func TestInterpretar_descartaRelacionado(t *testing.T) {
 		},
 		mercados: map[store.MercadoID]store.Mercado{"fort": {ID: "fort", Nome: "Fort"}},
 	}
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("tomate"), cat, c, dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("tomate"), cat, c, dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,11 +207,11 @@ func TestInterpretar_variosTiposQueValemSubBlocoPorTipo(t *testing.T) {
 			"asun": {ID: "asun", Nome: "Asun"},
 		},
 	}
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("tomate"), cat, c, dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("tomate"), cat, c, dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "*tomate*\nTomate\n- Fort — R$ 3,99 / 1000 g\n\nTomate italiano\n- Asun — R$ 4,00 / 500 g"
+	want := "*tomate*\nTomate\n- Fort — R$ 3,99 / 1000 g"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
@@ -186,7 +219,7 @@ func TestInterpretar_variosTiposQueValemSubBlocoPorTipo(t *testing.T) {
 
 func TestInterpretar_coletaFalhouAindaUsaEncarte(t *testing.T) {
 	c := &stubColeta{err: context.DeadlineExceeded}
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), catalogoLeite(), c, dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), catalogoLeite(), c, dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +230,7 @@ func TestInterpretar_coletaFalhouAindaUsaEncarte(t *testing.T) {
 }
 
 func TestInterpretar_itemSemProduto(t *testing.T) {
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("xyzabc"), catalogoVazio(), coletaVazia(), dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("xyzabc"), catalogoVazio(), coletaVazia(), dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +240,7 @@ func TestInterpretar_itemSemProduto(t *testing.T) {
 }
 
 func TestInterpretar_variosProdutosListaCandidatos(t *testing.T) {
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("arroz"), catalogoArroz(), coletaVazia(), dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("arroz"), catalogoArroz(), coletaVazia(), dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +250,7 @@ func TestInterpretar_variosProdutosListaCandidatos(t *testing.T) {
 }
 
 func TestInterpretar_umProdutoListaSoMercadoMaisBarato(t *testing.T) {
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), catalogoLeite(), coletaVazia(), dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), catalogoLeite(), coletaVazia(), dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +261,7 @@ func TestInterpretar_umProdutoListaSoMercadoMaisBarato(t *testing.T) {
 }
 
 func TestInterpretar_empateNoMenorPrecoListaTodosOsMercados(t *testing.T) {
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), catalogoLeiteEmpate(), coletaVazia(), dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite"), catalogoLeiteEmpate(), coletaVazia(), dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +272,7 @@ func TestInterpretar_empateNoMenorPrecoListaTodosOsMercados(t *testing.T) {
 }
 
 func TestInterpretar_variosItensRespostaEmLista(t *testing.T) {
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite, café"), catalogoLeiteECafe(), coletaVazia(), dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite, café"), catalogoLeiteECafe(), coletaVazia(), dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +283,7 @@ func TestInterpretar_variosItensRespostaEmLista(t *testing.T) {
 }
 
 func TestInterpretar_marcaNoItemFiltraOfertas(t *testing.T) {
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite Italac"), catalogoLeite(), coletaVazia(), dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite Italac"), catalogoLeite(), coletaVazia(), dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +294,7 @@ func TestInterpretar_marcaNoItemFiltraOfertas(t *testing.T) {
 }
 
 func TestInterpretar_marcaSemOfertaVigenteNaoCompletaComOutras(t *testing.T) {
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite Piracanjuba"), catalogoLeite(), coletaVazia(), dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("leite Piracanjuba"), catalogoLeite(), coletaVazia(), dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,12 +304,154 @@ func TestInterpretar_marcaSemOfertaVigenteNaoCompletaComOutras(t *testing.T) {
 }
 
 func TestInterpretar_ofertaExpiradaFicaDeFora(t *testing.T) {
-	got, err := application.Interpretar(context.Background(), domain.ParseLista("café"), catalogoCafeExpirado(), coletaVazia(), dia())
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("café"), catalogoCafeExpirado(), coletaVazia(), dia(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != "*café*\nNão achei." {
 		t.Fatalf("%q", got)
+	}
+}
+
+func TestInterpretar_umProdutoMenosExtrasNoNome(t *testing.T) {
+	c := &stubColeta{porTermo: map[string][]store.Oferta{
+		"abobrinha": {
+			{
+				ID: "c1", ProdutoID: "italiana", MercadoID: "fort",
+				Valor: 6.78, Quantidades: []float64{1000}, Medida: store.MedidaG,
+				DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+			},
+			{
+				ID: "c2", ProdutoID: "espaguete", MercadoID: "zaffari",
+				Valor: 11.9, Quantidades: []float64{1}, Medida: store.MedidaUnidade,
+				DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+			},
+			{
+				ID: "c3", ProdutoID: "organica", MercadoID: "zaffari",
+				Valor: 11.9, Quantidades: []float64{1}, Medida: store.MedidaUnidade,
+				DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+			},
+		},
+	}}
+	cat := memCat{
+		produtos: []store.Produto{
+			{ID: "italiana", Nome: "Abobrinha Italiana", NomeNorm: "abobrinha italiana"},
+			{ID: "espaguete", Nome: "Abobrinha Espaguete Higienizada 150g", NomeNorm: "abobrinha espaguete higienizada 150g"},
+			{ID: "organica", Nome: "Abobrinha Orgânica 500g", NomeNorm: "abobrinha orgânica 500g"},
+		},
+		mercados: map[store.MercadoID]store.Mercado{
+			"fort":    {ID: "fort", Nome: "Fort Atacadista"},
+			"zaffari": {ID: "zaffari", Nome: "Bourbon Zaffari"},
+		},
+	}
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("abobrinha"), cat, c, dia(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "*abobrinha*\nAbobrinha Italiana\n- Fort Atacadista — R$ 6,78 / 1000 g"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestInterpretar_termoAdicionalRestringeOProduto(t *testing.T) {
+	c := &stubColeta{porTermo: map[string][]store.Oferta{
+		"abobrinha orgânica": {
+			{
+				ID: "c1", ProdutoID: "italiana", MercadoID: "fort",
+				Valor: 6.78, Quantidades: []float64{1000}, Medida: store.MedidaG,
+				DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+			},
+			{
+				ID: "c2", ProdutoID: "organica", MercadoID: "zaffari",
+				Valor: 11.9, Quantidades: []float64{1}, Medida: store.MedidaUnidade,
+				DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+			},
+		},
+	}}
+	cat := memCat{
+		produtos: []store.Produto{
+			{ID: "italiana", Nome: "Abobrinha Italiana", NomeNorm: "abobrinha italiana"},
+			{ID: "organica", Nome: "Abobrinha Orgânica 500g", NomeNorm: "abobrinha orgânica 500g"},
+		},
+		mercados: map[store.MercadoID]store.Mercado{
+			"fort":    {ID: "fort", Nome: "Fort Atacadista"},
+			"zaffari": {ID: "zaffari", Nome: "Bourbon Zaffari"},
+		},
+	}
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("abobrinha orgânica"), cat, c, dia(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "*abobrinha orgânica*\nAbobrinha Orgânica 500g\n- Bourbon Zaffari — R$ 11,90 / 1 unidade"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestInterpretar_empateDeExtrasFicaOMaisBarato(t *testing.T) {
+	cat := memCat{
+		produtos: []store.Produto{
+			{ID: "italiana", Nome: "Abobrinha Italiana", NomeNorm: "abobrinha italiana"},
+			{ID: "organica", Nome: "Abobrinha Orgânica", NomeNorm: "abobrinha orgânica"},
+		},
+		ofertas: []store.Oferta{
+			{
+				ID: "e1", ProdutoID: "italiana", MercadoID: "fort", DocumentoID: "d1",
+				Valor: 6.78, Quantidades: []float64{1000}, Medida: store.MedidaG,
+				DataInicio: "2026-09-01", DataExpiracao: "2026-09-10",
+			},
+			{
+				ID: "e2", ProdutoID: "organica", MercadoID: "zaffari", DocumentoID: "d1",
+				Valor: 11.9, Quantidades: []float64{1}, Medida: store.MedidaUnidade,
+				DataInicio: "2026-09-01", DataExpiracao: "2026-09-10",
+			},
+		},
+		mercados: map[store.MercadoID]store.Mercado{
+			"fort":    {ID: "fort", Nome: "Fort Atacadista"},
+			"zaffari": {ID: "zaffari", Nome: "Bourbon Zaffari"},
+		},
+	}
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("abobrinha"), cat, coletaVazia(), dia(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "*abobrinha*\nAbobrinha Italiana\n- Fort Atacadista — R$ 6,78 / 1000 g"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestInterpretar_empateDeExtrasEPrecoListaOsProdutos(t *testing.T) {
+	cat := memCat{
+		produtos: []store.Produto{
+			{ID: "amarela", Nome: "Moranga Amarela", NomeNorm: "moranga amarela"},
+			{ID: "cabotia", Nome: "Moranga Cabotiá", NomeNorm: "moranga cabotiá"},
+		},
+		ofertas: []store.Oferta{
+			{
+				ID: "e1", ProdutoID: "amarela", MercadoID: "stok", DocumentoID: "d1",
+				Valor: 4.15, Quantidades: []float64{1000}, Medida: store.MedidaG,
+				DataInicio: "2026-09-01", DataExpiracao: "2026-09-10",
+			},
+			{
+				ID: "e2", ProdutoID: "cabotia", MercadoID: "fort", DocumentoID: "d1",
+				Valor: 4.15, Quantidades: []float64{1000}, Medida: store.MedidaG,
+				DataInicio: "2026-09-01", DataExpiracao: "2026-09-10",
+			},
+		},
+		mercados: map[store.MercadoID]store.Mercado{
+			"fort": {ID: "fort", Nome: "Fort Atacadista"},
+			"stok": {ID: "stok", Nome: "Stok Center"},
+		},
+	}
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("moranga"), cat, coletaVazia(), dia(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "*moranga*\nMoranga Amarela\n- Stok Center — R$ 4,15 / 1000 g\n\nMoranga Cabotiá\n- Fort Atacadista — R$ 4,15 / 1000 g"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -307,6 +482,54 @@ func TestAtender_listaVaziaNaoEnvia(t *testing.T) {
 	}
 	if len(envio.calls) != 0 {
 		t.Fatalf("%+v", envio.calls)
+	}
+}
+
+type stubTermo struct {
+	porItem map[string]string
+	err     error
+}
+
+func (s *stubTermo) Termo(_ context.Context, item string) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
+	return s.porItem[item], nil
+}
+
+func TestInterpretar_usaTermoDaInterpretacaoNaColeta(t *testing.T) {
+	c := &stubColeta{}
+	interp := &stubTermo{porItem: map[string]string{"xpto cenoura": "cenoura"}}
+	_, err := application.Interpretar(context.Background(), domain.ParseLista("xpto cenoura"), catalogoVazio(), c, dia(), interp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.termos) != 1 || c.termos[0] != "cenoura" {
+		t.Fatalf("termos=%q", c.termos)
+	}
+}
+
+func TestInterpretar_interpretacaoFalhouCaiNoInvólucro(t *testing.T) {
+	c := &stubColeta{}
+	interp := &stubTermo{err: context.DeadlineExceeded}
+	_, err := application.Interpretar(context.Background(), domain.ParseLista("Comprar: cenoura"), catalogoVazio(), c, dia(), interp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.termos) != 1 || c.termos[0] != "cenoura" {
+		t.Fatalf("termos=%q", c.termos)
+	}
+}
+
+func TestInterpretar_interpretacaoVaziaCaiNoInvólucro(t *testing.T) {
+	c := &stubColeta{}
+	interp := &stubTermo{porItem: map[string]string{"Comprar: cenoura": ""}}
+	_, err := application.Interpretar(context.Background(), domain.ParseLista("Comprar: cenoura"), catalogoVazio(), c, dia(), interp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.termos) != 1 || c.termos[0] != "cenoura" {
+		t.Fatalf("termos=%q", c.termos)
 	}
 }
 

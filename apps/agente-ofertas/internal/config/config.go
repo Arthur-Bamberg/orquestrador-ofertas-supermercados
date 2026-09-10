@@ -13,6 +13,8 @@ type Config struct {
 	GatewayURL   string
 	GatewayToken string
 	ColetaURL    string
+	GeminiAPIKey string
+	GeminiModel  string
 }
 
 func Load() (Config, error) {
@@ -23,6 +25,8 @@ func Load() (Config, error) {
 		GatewayURL:   envOr("GATEWAY_URL", "http://localhost:8090"),
 		GatewayToken: os.Getenv("GATEWAY_TOKEN"),
 		ColetaURL:    strings.TrimRight(os.Getenv("COLETA_URL"), "/"),
+		GeminiAPIKey: os.Getenv("GEMINI_API_KEY"),
+		GeminiModel:  envOr("GEMINI_MODEL", "gemini-3-flash-preview"),
 	}, nil
 }
 

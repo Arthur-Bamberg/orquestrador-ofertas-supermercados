@@ -1,0 +1,3 @@
+# Resposta: um Produto por Item (menos extras no nome); empate de preço lista
+
+Entre os tipos que valem no Termo, a Resposta fica com o Produto cujo nome tem menos tokens a mais. Empate nesse número: o de menor preço efetivo; empate desse preço lista esses Produtos. No Produto escolhido, só a(s) Oferta(s) de menor preço efetivo — empate de preço lista todas (Mercado em ordem de nome). Extra dito no Termo (`orgânica`, Marca) restringe o que vale. Substitui “vários tipos que valem → um sub-bloco por Produto” do [ADR 0002](./0002-resposta-so-mais-barato.md). Mantém: relacionados fora, Marca no Termo restringe, sem mínimo entre tipos que **não** empatam em extras.

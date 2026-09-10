@@ -14,6 +14,7 @@ import (
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/agente-ofertas/internal/infra/catalog"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/agente-ofertas/internal/infra/coleta"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/agente-ofertas/internal/infra/envio"
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/agente-ofertas/internal/infra/termo"
 	store "github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store"
 )
 
@@ -46,11 +47,15 @@ func main() {
 	}
 	defer c.Close()
 
-	ag := application.New(application.Deps{
+	deps := application.Deps{
 		Cat:    catalog.Store{C: c},
 		Coleta: coleta.Cliente{Base: cfg.ColetaURL, Token: cfg.GatewayToken},
 		Envio:  envio.Gateway{Base: cfg.GatewayURL, Token: cfg.GatewayToken},
-	})
+	}
+	if cfg.GeminiAPIKey != "" {
+		deps.Termo = termo.Gemini{Key: cfg.GeminiAPIKey, Model: cfg.GeminiModel}
+	}
+	ag := application.New(deps)
 
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.New(ag, cfg.GatewayToken)}
 	go func() {
