@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/agente-ofertas/internal/application"
-	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/agente-ofertas/internal/domain"
 )
 
 type Server struct {
@@ -70,7 +69,7 @@ func (s *Server) interpretar(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "json inválido"})
 		return
 	}
-	texto, err := application.Interpretar(r.Context(), domain.ParseLista(body.Texto), s.ag.Catalogo(), s.ag.Agora())
+	texto, err := s.ag.InterpretarLista(r.Context(), body.Texto)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -112,7 +111,7 @@ func (s *Server) mcp(w http.ResponseWriter, r *http.Request) {
 			"result": map[string]any{
 				"tools": []map[string]any{{
 					"name":        "interpretar_lista",
-					"description": "Interpreta uma Lista contra Ofertas vigentes e devolve a Resposta.",
+					"description": "Interpreta uma Lista: Coleta nos sites e encarte vigente, devolve a Resposta.",
 					"inputSchema": map[string]any{
 						"type":       "object",
 						"properties": map[string]any{"texto": map[string]string{"type": "string"}},
@@ -128,7 +127,7 @@ func (s *Server) mcp(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.Unmarshal(req.Params, &p)
 		texto, _ := p.Arguments["texto"].(string)
-		corpo, err := application.Interpretar(r.Context(), domain.ParseLista(texto), s.ag.Catalogo(), s.ag.Agora())
+		corpo, err := s.ag.InterpretarLista(r.Context(), texto)
 		if err != nil {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"jsonrpc": "2.0", "id": req.ID,

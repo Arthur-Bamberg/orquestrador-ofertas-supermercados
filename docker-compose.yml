@@ -99,10 +99,13 @@ services:
       DATABASE_URL: *database-url
       HTTP_ADDR: ":8091"
       GATEWAY_URL: http://gateway-whatsapp:8090
+      COLETA_URL: http://ofertas-scraper-v2:8092
       TZ: ${TZ:-America/Sao_Paulo}
     depends_on:
       postgres:
         condition: service_healthy
+      ofertas-scraper-v2:
+        condition: service_started
     init: true
     restart: unless-stopped
 

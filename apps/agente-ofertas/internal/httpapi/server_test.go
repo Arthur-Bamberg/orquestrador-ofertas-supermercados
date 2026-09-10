@@ -16,7 +16,7 @@ import (
 
 func TestHTTP_healthListasInterpretarEMCP(t *testing.T) {
 	envio := &stubEnvio{}
-	ag := application.New(application.Deps{Cat: catLeite(), Envio: envio, Hoje: hoje})
+	ag := application.New(application.Deps{Cat: catLeite(), Coleta: coletaNop{}, Envio: envio, Hoje: hoje})
 	h := httpapi.New(ag, "secret")
 
 	res := httptest.NewRecorder()
@@ -54,7 +54,7 @@ func TestHTTP_healthListasInterpretarEMCP(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
-	if out["resposta"] != "*xyzabc*\nNão encontrei no catálogo." {
+	if out["resposta"] != "*xyzabc*\nNão achei." {
 		t.Fatalf("%q", out["resposta"])
 	}
 
@@ -68,7 +68,7 @@ func TestHTTP_healthListasInterpretarEMCP(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"interpretar_lista","arguments":{"texto":"xyzabc"}}}`))
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
-	if res.Code != http.StatusOK || !bytes.Contains(res.Body.Bytes(), []byte("Não encontrei")) {
+	if res.Code != http.StatusOK || !bytes.Contains(res.Body.Bytes(), []byte("Não achei")) {
 		t.Fatalf("mcp call %d %s", res.Code, res.Body.String())
 	}
 }
@@ -97,11 +97,15 @@ func (m memCat) GetMercado(_ context.Context, id store.MercadoID) (store.Mercado
 	return x, ok, nil
 }
 
+type coletaNop struct{}
+
+func (coletaNop) Coletar(context.Context, string) ([]store.Oferta, error) { return nil, nil }
+
 func catLeite() memCat {
 	return memCat{
 		produtos: []store.Produto{{ID: "leite", Nome: "Leite integral", NomeNorm: "leite integral"}},
 		ofertas: []store.Oferta{{
-			ID: "o1", ProdutoID: "leite", MercadoID: "fort",
+			ID: "o1", ProdutoID: "leite", MercadoID: "fort", DocumentoID: "d1",
 			Valor: 5.9, Quantidades: []float64{1000}, Medida: store.MedidaML,
 			DataInicio: "2026-09-01", DataExpiracao: "2026-09-10",
 		}},

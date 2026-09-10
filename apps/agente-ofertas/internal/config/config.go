@@ -12,6 +12,7 @@ type Config struct {
 	HTTPAddr     string
 	GatewayURL   string
 	GatewayToken string
+	ColetaURL    string
 }
 
 func Load() (Config, error) {
@@ -21,6 +22,7 @@ func Load() (Config, error) {
 		HTTPAddr:     envOr("HTTP_ADDR", ":8091"),
 		GatewayURL:   envOr("GATEWAY_URL", "http://localhost:8090"),
 		GatewayToken: os.Getenv("GATEWAY_TOKEN"),
+		ColetaURL:    strings.TrimRight(os.Getenv("COLETA_URL"), "/"),
 	}, nil
 }
 

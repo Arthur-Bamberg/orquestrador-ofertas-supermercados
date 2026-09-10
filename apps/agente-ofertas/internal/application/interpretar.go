@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/agente-ofertas/internal/domain"
@@ -18,20 +19,26 @@ type Catalogo interface {
 	GetMercado(ctx context.Context, id store.MercadoID) (store.Mercado, bool, error)
 }
 
+type Coleta interface {
+	Coletar(ctx context.Context, termo string) ([]store.Oferta, error)
+}
+
 type Envio interface {
 	Enviar(ctx context.Context, conversaJID, corpo string) error
 }
 
 type Deps struct {
-	Cat   Catalogo
-	Envio Envio
-	Hoje  func() time.Time
+	Cat    Catalogo
+	Coleta Coleta
+	Envio  Envio
+	Hoje   func() time.Time
 }
 
 type Agente struct {
-	cat   Catalogo
-	envio Envio
-	hoje  func() time.Time
+	cat    Catalogo
+	coleta Coleta
+	envio  Envio
+	hoje   func() time.Time
 }
 
 func New(d Deps) *Agente {
@@ -39,19 +46,21 @@ func New(d Deps) *Agente {
 	if hoje == nil {
 		hoje = time.Now
 	}
-	return &Agente{cat: d.Cat, envio: d.Envio, hoje: hoje}
+	return &Agente{cat: d.Cat, coleta: d.Coleta, envio: d.Envio, hoje: hoje}
 }
 
-func (a *Agente) Catalogo() Catalogo { return a.cat }
-
 func (a *Agente) Agora() time.Time { return a.hoje() }
+
+func (a *Agente) InterpretarLista(ctx context.Context, texto string) (string, error) {
+	return Interpretar(ctx, domain.ParseLista(texto), a.cat, a.coleta, a.hoje())
+}
 
 func (a *Agente) Atender(ctx context.Context, conversaJID, corpo string) error {
 	lista := domain.ParseLista(corpo)
 	if len(lista.Itens) == 0 {
 		return nil
 	}
-	texto, err := Interpretar(ctx, lista, a.cat, a.hoje())
+	texto, err := Interpretar(ctx, lista, a.cat, a.coleta, a.hoje())
 	if err != nil {
 		return err
 	}
@@ -61,7 +70,8 @@ func (a *Agente) Atender(ctx context.Context, conversaJID, corpo string) error {
 	return a.envio.Enviar(ctx, conversaJID, texto)
 }
 
-func Interpretar(ctx context.Context, lista domain.Lista, cat Catalogo, agora time.Time) (string, error) {
+func Interpretar(ctx context.Context, lista domain.Lista, cat Catalogo, coleta Coleta, agora time.Time) (string, error) {
+	consultados := coletarItens(ctx, lista, coleta)
 	produtos, err := cat.ListarProdutos(ctx)
 	if err != nil {
 		return "", err
@@ -80,8 +90,8 @@ func Interpretar(ctx context.Context, lista domain.Lista, cat Catalogo, agora ti
 	}
 	hoje := agora.In(loc).Format("2006-01-02")
 	blocos := make([]string, 0, len(lista.Itens))
-	for _, item := range lista.Itens {
-		bloco, err := interpretarItem(ctx, item, produtos, marcas, ofertas, cat, hoje)
+	for i, item := range lista.Itens {
+		bloco, err := interpretarItem(ctx, item, produtos, marcas, ofertas, consultados[i], cat, hoje)
 		if err != nil {
 			return "", err
 		}
@@ -90,61 +100,125 @@ func Interpretar(ctx context.Context, lista domain.Lista, cat Catalogo, agora ti
 	return strings.Join(blocos, "\n\n"), nil
 }
 
-func interpretarItem(ctx context.Context, item domain.Item, produtos []store.Produto, marcas []store.Marca, ofertas []store.Oferta, cat Catalogo, hoje string) (string, error) {
-	resto, marca, temMarca := separarMarca(normalizar(item.Texto), marcas)
-	achados := casarProdutos(resto, produtos)
-	if len(achados) == 0 {
-		return "Não encontrei no catálogo.", nil
+func fundirConsultadoEEncarte(consultado, encarte []store.Oferta, hoje string) []store.Oferta {
+	type chave struct {
+		p store.ProdutoID
+		m store.MercadoID
 	}
-	if len(achados) > 1 {
-		nomes := make([]string, len(achados))
-		for i, p := range achados {
-			nomes[i] = p.Nome
-		}
-		sort.Strings(nomes)
-		return "Vários produtos: " + strings.Join(nomes, ", ") + ". Manda o nome mais específico.", nil
-	}
-	p := achados[0]
-	var vigentes []store.Oferta
-	for _, o := range ofertas {
-		if o.ProdutoID != p.ID {
+	trazido := map[chave]struct{}{}
+	var out []store.Oferta
+	for _, o := range consultado {
+		if !vigenteHoje(o, hoje) {
 			continue
 		}
+		trazido[chave{o.ProdutoID, o.MercadoID}] = struct{}{}
+		out = append(out, o)
+	}
+	var soEncarte []store.Oferta
+	for _, o := range encarte {
+		if o.DocumentoID == "" {
+			continue
+		}
+		soEncarte = append(soEncarte, o)
+	}
+	for _, o := range soEncarte {
+		if !vigenteHoje(o, hoje) {
+			continue
+		}
+		if _, ok := trazido[chave{o.ProdutoID, o.MercadoID}]; ok {
+			continue
+		}
+		out = append(out, o)
+	}
+	return out
+}
+
+func vigenteHoje(o store.Oferta, hoje string) bool {
+	return o.DataInicio <= hoje && hoje <= o.DataExpiracao
+}
+
+func coletarItens(ctx context.Context, lista domain.Lista, coleta Coleta) [][]store.Oferta {
+	out := make([][]store.Oferta, len(lista.Itens))
+	if coleta == nil {
+		return out
+	}
+	var wg sync.WaitGroup
+	for i, item := range lista.Itens {
+		wg.Add(1)
+		go func(i int, termo string) {
+			defer wg.Done()
+			of, err := coleta.Coletar(ctx, termo)
+			if err != nil {
+				return
+			}
+			out[i] = of
+		}(i, item.Texto)
+	}
+	wg.Wait()
+	return out
+}
+
+func interpretarItem(ctx context.Context, item domain.Item, produtos []store.Produto, marcas []store.Marca, ofertas, consultado []store.Oferta, cat Catalogo, hoje string) (string, error) {
+	resto, marca, temMarca := separarMarca(normalizar(item.Texto), marcas)
+	encarte := encarteCasado(ofertas, produtos, resto)
+	merged := fundirConsultadoEEncarte(consultado, encarte, hoje)
+	porProduto := map[store.ProdutoID][]store.Oferta{}
+	for _, o := range merged {
 		if temMarca {
 			if o.MarcaID == nil || *o.MarcaID != marca.ID {
 				continue
 			}
 		}
-		if o.DataInicio <= hoje && hoje <= o.DataExpiracao {
-			vigentes = append(vigentes, o)
+		porProduto[o.ProdutoID] = append(porProduto[o.ProdutoID], o)
+	}
+	prodByID := map[store.ProdutoID]store.Produto{}
+	for _, p := range produtos {
+		prodByID[p.ID] = p
+	}
+	var tipos []store.Produto
+	seen := map[store.ProdutoID]struct{}{}
+	for id, ofs := range porProduto {
+		if len(ofs) == 0 {
+			continue
 		}
-	}
-	if len(vigentes) == 0 {
-		return p.Nome + " — nenhuma Oferta vigente hoje.", nil
-	}
-	baratas := soMaisBaratas(vigentes)
-	type linha struct {
-		nome  string
-		texto string
-	}
-	var linhas []linha
-	for _, o := range baratas {
-		mercado, ok, err := cat.GetMercado(ctx, o.MercadoID)
-		if err != nil {
-			return "", err
+		p, ok := prodByID[id]
+		if !ok || !tipoVale(resto, p.NomeNorm) {
+			continue
 		}
-		nome := string(o.MercadoID)
-		if ok {
-			nome = mercado.Nome
+		if _, dup := seen[id]; dup {
+			continue
 		}
-		linhas = append(linhas, linha{nome: nome, texto: formatarOferta(nome, o)})
+		seen[id] = struct{}{}
+		tipos = append(tipos, p)
 	}
-	sort.Slice(linhas, func(i, j int) bool { return linhas[i].nome < linhas[j].nome })
-	out := p.Nome
-	for _, l := range linhas {
-		out += "\n- " + l.texto
+	if len(tipos) == 0 {
+		return "Não achei.", nil
 	}
-	return out, nil
+	sort.Slice(tipos, func(i, j int) bool { return tipos[i].Nome < tipos[j].Nome })
+	var blocos []string
+	for _, p := range tipos {
+		baratas := soMaisBaratas(porProduto[p.ID])
+		bloco := p.Nome
+		type linha struct{ nome, texto string }
+		var linhas []linha
+		for _, o := range baratas {
+			mercado, ok, err := cat.GetMercado(ctx, o.MercadoID)
+			if err != nil {
+				return "", err
+			}
+			nome := string(o.MercadoID)
+			if ok {
+				nome = mercado.Nome
+			}
+			linhas = append(linhas, linha{nome: nome, texto: formatarOferta(nome, o, marcas)})
+		}
+		sort.Slice(linhas, func(i, j int) bool { return linhas[i].nome < linhas[j].nome })
+		for _, l := range linhas {
+			bloco += "\n- " + l.texto
+		}
+		blocos = append(blocos, bloco)
+	}
+	return strings.Join(blocos, "\n\n"), nil
 }
 
 func soMaisBaratas(ofertas []store.Oferta) []store.Oferta {
@@ -173,16 +247,32 @@ func precoEfetivo(o store.Oferta) float64 {
 	return o.Valor
 }
 
-func formatarOferta(mercado string, o store.Oferta) string {
+func formatarOferta(mercado string, o store.Oferta, marcas []store.Marca) string {
 	qtds := make([]string, 0, len(o.Quantidades))
 	for _, q := range o.Quantidades {
 		qtds = append(qtds, formatarQtd(q, o.Medida))
 	}
-	s := mercado + " — " + reais(o.Valor) + " / " + strings.Join(qtds, ", ")
+	s := mercado
+	if m := nomeMarca(o, marcas); m != "" {
+		s += " — " + m
+	}
+	s += " — " + reais(o.Valor) + " / " + strings.Join(qtds, ", ")
 	if o.Promocao != nil {
 		s += " (promoção " + reais(o.Promocao.ValorPromocional) + ")"
 	}
 	return s
+}
+
+func nomeMarca(o store.Oferta, marcas []store.Marca) string {
+	if o.MarcaID == nil {
+		return ""
+	}
+	for _, m := range marcas {
+		if m.ID == *o.MarcaID {
+			return m.Nome
+		}
+	}
+	return ""
 }
 
 func formatarQtd(q float64, m store.Medida) string {
@@ -221,6 +311,42 @@ func separarMarca(norm string, marcas []store.Marca) (string, store.Marca, bool)
 
 func contemToken(hay, needle string) bool {
 	return strings.Contains(" "+hay+" ", " "+needle+" ")
+}
+
+func tipoVale(item, nomeNorm string) bool {
+	if item == "" || nomeNorm == "" {
+		return false
+	}
+	if nomeNorm == item {
+		return true
+	}
+	itemToks := strings.Fields(item)
+	nomeToks := strings.Fields(nomeNorm)
+	if len(nomeToks) < len(itemToks) {
+		return false
+	}
+	for i, t := range itemToks {
+		if nomeToks[i] != t {
+			return false
+		}
+	}
+	return true
+}
+
+func encarteCasado(ofertas []store.Oferta, produtos []store.Produto, resto string) []store.Oferta {
+	achados := casarProdutos(resto, produtos)
+	ids := map[store.ProdutoID]struct{}{}
+	for _, p := range achados {
+		ids[p.ID] = struct{}{}
+	}
+	var out []store.Oferta
+	for _, o := range ofertas {
+		if _, ok := ids[o.ProdutoID]; !ok {
+			continue
+		}
+		out = append(out, o)
+	}
+	return out
 }
 
 func casarProdutos(needle string, produtos []store.Produto) []store.Produto {

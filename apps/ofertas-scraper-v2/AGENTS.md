@@ -14,7 +14,7 @@ HTTP (and one-shot CLI). Unit of work is **one Item term** (`POST /coletas` or `
 4. Same-day Coleta: reuse `concluido`/`parcial` (return persisted Ofertas to Agente da Lista, no site hit); retry `falhou` and orphan `processando` (then replace the set). In-flight `processando`: wait and share the same set — do not start a second Fort search. Happy path: search until the vitrine has no more cards. Cut-off / search that does not finish in time: persist what was already paged, mark `parcial`, return that set (saved — no same-day retry). Unmapped sale unit → `unidade`.
 5. `POST /coletas` body: `{ "termo", "mercadoId"? }` — omit `mercadoId` to search every vitrine adapter; set it to restrict to one Mercado.
 
-Does **not** filter related products (that's Filtragem / Resposta). Does **not** run the Extrator. Shopfully is out of this app.
+Does **not** filter related products (that's Agente de Resposta). Does **not** run the Extrator. Shopfully is out of this app.
 
 ## Stack
 

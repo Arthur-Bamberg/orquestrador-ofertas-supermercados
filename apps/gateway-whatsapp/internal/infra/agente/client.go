@@ -19,7 +19,7 @@ type Cliente struct {
 func (c *Cliente) Atender(ctx context.Context, conversaJID, corpo string) error {
 	httpClient := c.Client
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 45 * time.Second}
+		httpClient = &http.Client{Timeout: 5 * time.Minute}
 	}
 	body, err := json.Marshal(map[string]string{"conversaJid": conversaJID, "corpo": corpo})
 	if err != nil {
