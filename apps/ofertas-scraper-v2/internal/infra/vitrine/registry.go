@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper-v2/internal/domain"
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper-v2/internal/infra/vitrine/bourbon"
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper-v2/internal/infra/vitrine/carrefour"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper-v2/internal/infra/vitrine/fort"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper-v2/internal/infra/vitrine/osuper"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper-v2/internal/infra/vitrine/stok"
@@ -13,6 +15,8 @@ import (
 
 const MercadoFort store.MercadoID = "mercado-fort"
 const MercadoStok store.MercadoID = "mercado-stok"
+const MercadoBourbon store.MercadoID = "mercado-bourbon"
+const MercadoCarrefour store.MercadoID = "mercado-carrefour"
 
 func Defaults(httpClient *http.Client) map[store.MercadoID]domain.Vitrine {
 	if httpClient == nil {
@@ -34,6 +38,18 @@ func Defaults(httpClient *http.Client) map[store.MercadoID]domain.Vitrine {
 			Parse:    stok.ParseSearch,
 			PageSize: stok.PageSize,
 			Headers:  stokTokens.Header,
+		},
+		MercadoBourbon: vitrinehttp.Client{
+			HTTP:     httpClient,
+			URL:      bourbon.SearchURL,
+			Parse:    bourbon.ParseSearch,
+			PageSize: bourbon.PageSize,
+		},
+		MercadoCarrefour: vitrinehttp.Client{
+			HTTP:     httpClient,
+			URL:      carrefour.SearchURL,
+			Parse:    carrefour.ParseSearch,
+			PageSize: carrefour.PageSize,
 		},
 	}
 }

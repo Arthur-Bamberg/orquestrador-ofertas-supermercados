@@ -1,6 +1,8 @@
 {
   "mercados": [
     { "id": "mercado-fort", "nome": "Fort Atacadista" },
-    { "id": "mercado-stok", "nome": "Stok Center" }
+    { "id": "mercado-stok", "nome": "Stok Center" },
+    { "id": "mercado-bourbon", "nome": "Bourbon Zaffari" },
+    { "id": "mercado-carrefour", "nome": "Carrefour" }
   ]
 }

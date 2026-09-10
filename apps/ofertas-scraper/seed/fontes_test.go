@@ -8,7 +8,7 @@ import (
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-scraper/internal/domain"
 )
 
-func TestFontesSeed_FortEStokSaoSiteViaEEncarte(t *testing.T) {
+func TestFontesSeed_FortStokBourbonSaoSiteViaEEncarte(t *testing.T) {
 	raw, err := os.ReadFile("fontes.json")
 	if err != nil {
 		t.Fatal(err)
@@ -28,9 +28,11 @@ func TestFontesSeed_FortEStokSaoSiteViaEEncarte(t *testing.T) {
 		filtros[f.ID] = f.FiltroNomeDocumento
 	}
 	want := map[domain.FonteID]domain.TipoFonte{
-		"fonte-fort": domain.TipoSite,
-		"fonte-stok": domain.TipoSite,
-		"fonte-via":  domain.TipoEncarte,
+		"fonte-fort":      domain.TipoSite,
+		"fonte-stok":      domain.TipoSite,
+		"fonte-bourbon":   domain.TipoSite,
+		"fonte-carrefour": domain.TipoSite,
+		"fonte-via":       domain.TipoEncarte,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("fontes=%v", got)
@@ -45,6 +47,12 @@ func TestFontesSeed_FortEStokSaoSiteViaEEncarte(t *testing.T) {
 	}
 	if urls["fonte-stok"] != "https://www.stokonline.com.br/" {
 		t.Fatalf("fonte-stok url=%q", urls["fonte-stok"])
+	}
+	if urls["fonte-bourbon"] != "https://www.zaffari.com.br/" {
+		t.Fatalf("fonte-bourbon url=%q", urls["fonte-bourbon"])
+	}
+	if urls["fonte-carrefour"] != "https://mercado.carrefour.com.br/" {
+		t.Fatalf("fonte-carrefour url=%q", urls["fonte-carrefour"])
 	}
 	if filtros["fonte-fort"] != "" {
 		t.Fatalf("fonte-fort filtroNomeDocumento=%q", filtros["fonte-fort"])

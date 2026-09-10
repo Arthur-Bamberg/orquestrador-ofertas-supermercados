@@ -1,0 +1,84 @@
+{
+  "products": [
+    {
+      "productName": "Tomate Italiano Carrefour Aprox. 200g",
+      "brand": "Carrefour",
+      "items": [
+        {
+          "measurementUnit": "kg",
+          "unitMultiplier": 0.2,
+          "sellers": [
+            {
+              "sellerId": "1",
+              "sellerName": "Carrefour",
+              "commertialOffer": {
+                "Price": 13.99,
+                "ListPrice": 13.99,
+                "PriceWithoutDiscount": 13.99,
+                "spotPrice": 2.79,
+                "AvailableQuantity": 10000
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "productName": "Tomate Grape Ferrara 180 g",
+      "brand": "Ferrara",
+      "items": [
+        {
+          "measurementUnit": "un",
+          "unitMultiplier": 1,
+          "sellers": [
+            {
+              "sellerId": "1",
+              "sellerName": "Carrefour",
+              "commertialOffer": {
+                "Price": 5.99,
+                "ListPrice": 5.99,
+                "PriceWithoutDiscount": 5.99,
+                "spotPrice": 5.99,
+                "AvailableQuantity": 10000
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "productName": "Snack Mucilon Tomate 35g",
+      "brand": "Mucilon",
+      "items": [
+        {
+          "measurementUnit": "un",
+          "unitMultiplier": 1,
+          "sellers": [
+            {
+              "sellerId": "1",
+              "sellerName": "Carrefour",
+              "commertialOffer": {
+                "Price": 5.89,
+                "ListPrice": 5.89,
+                "PriceWithoutDiscount": 5.89,
+                "spotPrice": 5.89,
+                "AvailableQuantity": 10000
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "recordsFiltered": 13,
+  "pagination": {
+    "count": 1,
+    "current": {
+      "index": 1
+    },
+    "next": {
+      "index": 0
+    },
+    "perPage": 15
+  }
+}

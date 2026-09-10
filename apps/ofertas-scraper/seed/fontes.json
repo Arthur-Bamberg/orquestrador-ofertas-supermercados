@@ -9,8 +9,16 @@
       "nome": "Stok Center"
     },
     {
+      "id": "mercado-bourbon",
+      "nome": "Bourbon Zaffari"
+    },
+    {
       "id": "mercado-via",
       "nome": "Via Atacadista"
+    },
+    {
+      "id": "mercado-carrefour",
+      "nome": "Carrefour"
     }
   ],
   "fontes": [
@@ -29,11 +37,25 @@
       "tipo": "site"
     },
     {
+      "id": "fonte-bourbon",
+      "mercadoId": "mercado-bourbon",
+      "url": "https://www.zaffari.com.br/",
+      "filtroNomeDocumento": "",
+      "tipo": "site"
+    },
+    {
       "id": "fonte-via",
       "mercadoId": "mercado-via",
       "url": "https://grupopassarela.com/via-atacadista/api/ofertas?loja=990e4aca-8576-4f2d-bdde-ca6916177e9b",
       "filtroNomeDocumento": "",
       "tipo": "encarte"
+    },
+    {
+      "id": "fonte-carrefour",
+      "mercadoId": "mercado-carrefour",
+      "url": "https://mercado.carrefour.com.br/",
+      "filtroNomeDocumento": "",
+      "tipo": "site"
     }
   ]
 }

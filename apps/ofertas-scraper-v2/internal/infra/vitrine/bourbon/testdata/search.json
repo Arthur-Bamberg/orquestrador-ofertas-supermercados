@@ -1,0 +1,89 @@
+{
+  "products": [
+    {
+      "productName": "Tomate Italiano",
+      "brand": "Hortifrutigranjeiros",
+      "items": [
+        {
+          "measurementUnit": "kg",
+          "unitMultiplier": 0.165,
+          "sellers": [
+            {
+              "sellerId": "1",
+              "sellerName": "Zaffari.com.br",
+              "commertialOffer": {
+                "Price": 14.9,
+                "ListPrice": 14.9,
+                "PriceWithoutDiscount": 14.9,
+                "spotPrice": 2.47,
+                "AvailableQuantity": 10000
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "productName": "Tomate Grape Doce 180g",
+      "brand": "Hortifrutigranjeiros",
+      "items": [
+        {
+          "measurementUnit": "un",
+          "unitMultiplier": 1,
+          "sellers": [
+            {
+              "sellerId": "1",
+              "sellerName": "Zaffari.com.br",
+              "commertialOffer": {
+                "Price": 6.49,
+                "ListPrice": 6.49,
+                "PriceWithoutDiscount": 6.49,
+                "spotPrice": 6.49,
+                "AvailableQuantity": 10000
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "productName": "Tomate Gaúcho 700g",
+      "brand": "Hortifrutigranjeiros",
+      "items": [
+        {
+          "measurementUnit": "un",
+          "unitMultiplier": 1,
+          "sellers": [
+            {
+              "sellerId": "1",
+              "sellerName": "Zaffari.com.br",
+              "commertialOffer": {
+                "Price": 16.9,
+                "ListPrice": 16.9,
+                "PriceWithoutDiscount": 16.9,
+                "spotPrice": 16.9,
+                "AvailableQuantity": 10000
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "recordsFiltered": 24,
+  "pagination": {
+    "count": 2,
+    "current": {
+      "index": 1
+    },
+    "next": {
+      "index": 2
+    },
+    "after": [
+      {
+        "index": 2
+      }
+    ],
+    "perPage": 12
+  }
+}
