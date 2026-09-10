@@ -43,6 +43,9 @@ func TestFontesSeed_FortEStokSaoSiteViaEEncarte(t *testing.T) {
 	if urls["fonte-fort"] != "https://www.fortatacadista.com.br/" {
 		t.Fatalf("fonte-fort url=%q", urls["fonte-fort"])
 	}
+	if urls["fonte-stok"] != "https://www.stokonline.com.br/" {
+		t.Fatalf("fonte-stok url=%q", urls["fonte-stok"])
+	}
 	if filtros["fonte-fort"] != "" {
 		t.Fatalf("fonte-fort filtroNomeDocumento=%q", filtros["fonte-fort"])
 	}
