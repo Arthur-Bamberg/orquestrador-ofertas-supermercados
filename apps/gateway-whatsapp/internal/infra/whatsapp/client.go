@@ -85,7 +85,9 @@ func (c *Cliente) carregarAssuntos() {
 		if g == nil {
 			continue
 		}
-		c.assuntos.lembrar(jidChave(g.JID), g.Name)
+		chave := jidChave(g.JID)
+		c.assuntos.lembrar(chave, g.Name)
+		log.Printf("whatsapp grupo disponível: jid=%s nome=%q", chave, g.Name)
 	}
 }
 
@@ -264,11 +266,15 @@ func (c *Cliente) onEvent(raw any) {
 		c.handleHistory(v)
 	case *events.JoinedGroup:
 		if v != nil {
-			c.assuntos.lembrar(jidChave(v.JID), v.Name)
+			chave := jidChave(v.JID)
+			c.assuntos.lembrar(chave, v.Name)
+			log.Printf("whatsapp entrou no grupo: jid=%s nome=%q", chave, v.Name)
 		}
 	case *events.GroupInfo:
 		if v != nil && v.Name != nil {
-			c.assuntos.lembrar(jidChave(v.JID), v.Name.Name)
+			chave := jidChave(v.JID)
+			c.assuntos.lembrar(chave, v.Name.Name)
+			log.Printf("whatsapp info de grupo atualizada: jid=%s nome=%q", chave, v.Name.Name)
 		}
 	case *events.UndecryptableMessage:
 		c.handleUndecryptable(v)
@@ -368,6 +374,10 @@ func (c *Cliente) dispatchMessage(v *events.Message, origem domain.OrigemMensage
 	if v == nil {
 		return
 	}
+	if v.Message == nil && v.RawMessage != nil {
+		v.Message = v.RawMessage
+	}
+	v.Message = UnwrapMessage(v.Message)
 	chatPN, chatLID := splitPNLID(v.Info.Chat, v.Info.RecipientAlt)
 	sendPN, sendLID := splitPNLID(v.Info.Sender, v.Info.SenderAlt)
 	tipo, texto, payload := tipoETexto(v)
@@ -390,6 +400,8 @@ func (c *Cliente) dispatchMessage(v *events.Message, origem domain.OrigemMensage
 		Payload:      payload,
 		Status:       v.Info.Chat.Server == types.BroadcastServer,
 	}
+	log.Printf("whatsapp mensagem recebida: chat=%s remetente=%s grupo=%v fromMe=%v tipo=%s texto=%q provedor=%s",
+		in.ChatJID, in.SenderJID, in.Grupo, in.FromMe, in.Tipo, in.Texto, in.ProvedorID)
 	if midia, _ := c.downloadMidia(v); midia != nil {
 		in.Midia = midia
 		if in.Tipo == "" || in.Tipo == domain.MensagemTexto {
@@ -432,61 +444,125 @@ func splitPNLID(primary, alt types.JID) (pn, lid string) {
 	return
 }
 
+// UnwrapMessage unwraps nested message containers until reaching the inner message.
+func UnwrapMessage(m *waE2E.Message) *waE2E.Message {
+	if m == nil {
+		return nil
+	}
+	for {
+		switch {
+		case m.GetEphemeralMessage().GetMessage() != nil:
+			m = m.GetEphemeralMessage().GetMessage()
+		case m.GetDeviceSentMessage().GetMessage() != nil:
+			m = m.GetDeviceSentMessage().GetMessage()
+		case m.GetViewOnceMessage().GetMessage() != nil:
+			m = m.GetViewOnceMessage().GetMessage()
+		case m.GetViewOnceMessageV2().GetMessage() != nil:
+			m = m.GetViewOnceMessageV2().GetMessage()
+		case m.GetViewOnceMessageV2Extension().GetMessage() != nil:
+			m = m.GetViewOnceMessageV2Extension().GetMessage()
+		case m.GetDocumentWithCaptionMessage().GetMessage() != nil:
+			m = m.GetDocumentWithCaptionMessage().GetMessage()
+		case m.GetGroupMentionedMessage().GetMessage() != nil:
+			m = m.GetGroupMentionedMessage().GetMessage()
+		case m.GetBotInvokeMessage().GetMessage() != nil:
+			m = m.GetBotInvokeMessage().GetMessage()
+		case m.GetEditedMessage().GetMessage() != nil:
+			m = m.GetEditedMessage().GetMessage()
+		default:
+			return m
+		}
+	}
+}
+
 func tipoETexto(v *events.Message) (domain.TipoMensagem, string, string) {
-	if v.Message == nil {
+	m := UnwrapMessage(v.Message)
+	if m == nil {
 		return "", "", ""
 	}
-	if r := v.Message.GetReactionMessage(); r != nil {
+	if r := m.GetReactionMessage(); r != nil {
 		alvo := ""
 		if r.GetKey() != nil {
 			alvo = r.GetKey().GetID()
 		}
 		return domain.MensagemReacao, r.GetText(), payloadJSON(map[string]string{"alvo": alvo})
 	}
-	if p := v.Message.GetProtocolMessage(); p != nil && p.GetType() == waE2E.ProtocolMessage_REVOKE {
+	if p := m.GetProtocolMessage(); p != nil && p.GetType() == waE2E.ProtocolMessage_REVOKE {
 		alvo := ""
 		if p.GetKey() != nil {
 			alvo = p.GetKey().GetID()
 		}
 		return domain.MensagemRevogacao, "", payloadJSON(map[string]string{"alvo": alvo})
 	}
-	texto := textoDe(v)
+	texto := TextoDe(m)
 	if v.IsEdit {
 		return domain.MensagemTexto, texto, payloadJSON(map[string]bool{"edit": true})
 	}
 	return domain.MensagemTexto, texto, ""
 }
 
-func textoDe(v *events.Message) string {
-	if v.Message == nil {
+// TextoDe extracts the textual content from an unwrapped or wrapped WhatsApp message.
+func TextoDe(m *waE2E.Message) string {
+	m = UnwrapMessage(m)
+	if m == nil {
 		return ""
 	}
-	if t := v.Message.GetConversation(); t != "" {
+	if t := m.GetConversation(); t != "" {
 		return t
 	}
-	if t := v.Message.GetExtendedTextMessage().GetText(); t != "" {
+	if t := m.GetExtendedTextMessage().GetText(); t != "" {
 		return t
 	}
-	if t := v.Message.GetImageMessage().GetCaption(); t != "" {
+	if t := m.GetImageMessage().GetCaption(); t != "" {
 		return t
 	}
-	if t := v.Message.GetVideoMessage().GetCaption(); t != "" {
+	if t := m.GetVideoMessage().GetCaption(); t != "" {
 		return t
 	}
-	if t := v.Message.GetDocumentMessage().GetCaption(); t != "" {
+	if t := m.GetDocumentMessage().GetCaption(); t != "" {
 		return t
+	}
+	if b := m.GetButtonsResponseMessage(); b != nil {
+		if t := b.GetSelectedDisplayText(); t != "" {
+			return t
+		}
+		if t := b.GetSelectedButtonID(); t != "" {
+			return t
+		}
+	}
+	if l := m.GetListResponseMessage(); l != nil {
+		if t := l.GetTitle(); t != "" {
+			return t
+		}
+	}
+	if t := m.GetTemplateButtonReplyMessage().GetSelectedDisplayText(); t != "" {
+		return t
+	}
+	if ir := m.GetInteractiveResponseMessage(); ir != nil {
+		if b := ir.GetBody(); b != nil && b.GetText() != "" {
+			return b.GetText()
+		}
+		if nf := ir.GetNativeFlowResponseMessage(); nf != nil && nf.GetParamsJSON() != "" {
+			return nf.GetParamsJSON()
+		}
+	}
+	if im := m.GetInteractiveMessage(); im != nil {
+		if b := im.GetBody(); b != nil && b.GetText() != "" {
+			return b.GetText()
+		}
 	}
 	return ""
 }
 
 func (c *Cliente) downloadMidia(v *events.Message) (*domain.MidiaBytes, error) {
-	if v.Message == nil {
+	m := UnwrapMessage(v.Message)
+	if m == nil {
 		return nil, nil
 	}
 	ctx := context.Background()
 	switch {
-	case v.Message.GetImageMessage() != nil:
-		img := v.Message.GetImageMessage()
+	case m.GetImageMessage() != nil:
+		img := m.GetImageMessage()
 		stub := &domain.MidiaBytes{Tipo: domain.MidiaImagem, MIME: img.GetMimetype(), Filename: "imagem"}
 		b, err := c.client.Download(ctx, img)
 		if err != nil {
@@ -494,8 +570,8 @@ func (c *Cliente) downloadMidia(v *events.Message) (*domain.MidiaBytes, error) {
 		}
 		stub.Conteudo = b
 		return stub, nil
-	case v.Message.GetAudioMessage() != nil:
-		a := v.Message.GetAudioMessage()
+	case m.GetAudioMessage() != nil:
+		a := m.GetAudioMessage()
 		stub := &domain.MidiaBytes{Tipo: domain.MidiaAudio, MIME: a.GetMimetype(), Filename: "audio"}
 		b, err := c.client.Download(ctx, a)
 		if err != nil {
@@ -503,8 +579,8 @@ func (c *Cliente) downloadMidia(v *events.Message) (*domain.MidiaBytes, error) {
 		}
 		stub.Conteudo = b
 		return stub, nil
-	case v.Message.GetVideoMessage() != nil:
-		vid := v.Message.GetVideoMessage()
+	case m.GetVideoMessage() != nil:
+		vid := m.GetVideoMessage()
 		stub := &domain.MidiaBytes{Tipo: domain.MidiaVideo, MIME: vid.GetMimetype(), Filename: "video"}
 		b, err := c.client.Download(ctx, vid)
 		if err != nil {
@@ -512,8 +588,8 @@ func (c *Cliente) downloadMidia(v *events.Message) (*domain.MidiaBytes, error) {
 		}
 		stub.Conteudo = b
 		return stub, nil
-	case v.Message.GetDocumentMessage() != nil:
-		d := v.Message.GetDocumentMessage()
+	case m.GetDocumentMessage() != nil:
+		d := m.GetDocumentMessage()
 		name := d.GetFileName()
 		if name == "" {
 			name = "documento"
@@ -525,9 +601,9 @@ func (c *Cliente) downloadMidia(v *events.Message) (*domain.MidiaBytes, error) {
 		}
 		stub.Conteudo = b
 		return stub, nil
-	case v.Message.GetStickerMessage() != nil:
+	case m.GetStickerMessage() != nil:
 		stub := &domain.MidiaBytes{Tipo: domain.MidiaFigurinha, Filename: "figurinha"}
-		b, err := c.client.Download(ctx, v.Message.GetStickerMessage())
+		b, err := c.client.Download(ctx, m.GetStickerMessage())
 		if err != nil {
 			return stub, err
 		}

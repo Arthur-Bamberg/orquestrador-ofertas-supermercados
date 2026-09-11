@@ -3,8 +3,10 @@ package application
 import (
 	"context"
 	"errors"
+	"log"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/domain"
@@ -34,6 +36,8 @@ type Gateway struct {
 	ackTexto string
 	agente   Agente
 	newID    func() string
+	mu       sync.Mutex
+	enviadas map[string]time.Time
 }
 
 func New(d Deps) *Gateway {
@@ -49,6 +53,7 @@ func New(d Deps) *Gateway {
 		ackTexto: d.AckTexto,
 		agente:   d.Agente,
 		newID:    newID,
+		enviadas: make(map[string]time.Time),
 	}
 }
 
@@ -96,6 +101,7 @@ func (g *Gateway) Receber(ctx context.Context, in Entrada) (ResultadoReceber, er
 				return ResultadoReceber{}, err
 			}
 			changed := false
+			eraVazio := strings.TrimSpace(existing.Corpo) == ""
 			if in.Corpo != existing.Corpo {
 				existing.Corpo = in.Corpo
 				changed = true
@@ -111,6 +117,12 @@ func (g *Gateway) Receber(ctx context.Context, in Entrada) (ResultadoReceber, er
 			if changed {
 				if err := g.repo.SalvarMensagem(ctx, existing); err != nil {
 					return ResultadoReceber{}, err
+				}
+			}
+			if eraVazio && strings.TrimSpace(in.Corpo) != "" && g.deveAgente(in) {
+				log.Printf("whatsapp agente atender (corpo atualizado) conversa=%s corpo=%q", conversa.JID, in.Corpo)
+				if err := g.agente.Atender(ctx, string(conversa.JID), in.Corpo); err != nil {
+					log.Printf("whatsapp agente atender falhou: %v", err)
 				}
 			}
 			return ResultadoReceber{Aceita: true, Conversa: conversa, Mensagem: existing, Duplicada: true}, nil
@@ -170,12 +182,50 @@ func (g *Gateway) Receber(ctx context.Context, in Entrada) (ResultadoReceber, er
 		}
 		return ResultadoReceber{}, err
 	}
+	if in.Grupo && !g.allow.PermiteConversa(in.ConversaJID, in.ConversaPN, in.ConversaLID) {
+		log.Printf("whatsapp grupo fora da allowlist: jid=%s nome=%q (adicione à WHATSAPP_ALLOWLIST para responder)", in.ConversaJID, in.ConversaNome)
+	}
 	if g.deveAgente(in) {
-		_ = g.agente.Atender(ctx, string(conversa.JID), in.Corpo)
+		log.Printf("whatsapp agente atender conversa=%s corpo=%q", conversa.JID, in.Corpo)
+		if err := g.agente.Atender(ctx, string(conversa.JID), in.Corpo); err != nil {
+			log.Printf("whatsapp agente atender falhou: %v", err)
+		}
 	} else if g.deveAck(in) {
+		log.Printf("whatsapp ack enviado conversa=%s", conversa.JID)
 		_, _ = g.enviarNaConversa(ctx, conversa, contato, g.ackTexto, nil)
 	}
 	return ResultadoReceber{Aceita: true, Conversa: conversa, Mensagem: msg}, nil
+}
+
+func (g *Gateway) registrarEnviada(provedorID string) {
+	if provedorID == "" {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.enviadas == nil {
+		g.enviadas = make(map[string]time.Time)
+	}
+	agora := time.Now()
+	g.enviadas[provedorID] = agora
+	for id, t := range g.enviadas {
+		if agora.Sub(t) > 10*time.Minute {
+			delete(g.enviadas, id)
+		}
+	}
+}
+
+func (g *Gateway) foiEnviada(provedorID string) bool {
+	if provedorID == "" {
+		return false
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.enviadas == nil {
+		return false
+	}
+	_, ok := g.enviadas[provedorID]
+	return ok
 }
 
 func (g *Gateway) receberDuplicada(ctx context.Context, in Entrada) (ResultadoReceber, error) {
@@ -194,8 +244,20 @@ func (g *Gateway) receberDuplicada(ctx context.Context, in Entrada) (ResultadoRe
 }
 
 func (g *Gateway) deveAck(in Entrada) bool {
-	if g.ackTexto == "" || in.FromMe || in.Status || in.Origem == domain.OrigemHistorico {
+	if g.agente != nil || g.ackTexto == "" || in.Status || in.Origem == domain.OrigemHistorico {
 		return false
+	}
+	switch in.Tipo {
+	case domain.MensagemReacao, domain.MensagemRevogacao, domain.MensagemIndecifravel:
+		return false
+	}
+	if strings.TrimSpace(in.Corpo) == "" {
+		return false
+	}
+	if in.FromMe {
+		if !in.Grupo || g.foiEnviada(in.ProvedorID) {
+			return false
+		}
 	}
 	return g.allow.PermiteConversa(in.ConversaJID, in.ConversaPN, in.ConversaLID)
 }
@@ -208,8 +270,13 @@ func (g *Gateway) deveAgente(in Entrada) bool {
 	case domain.MensagemReacao, domain.MensagemRevogacao, domain.MensagemIndecifravel:
 		return false
 	}
-	if in.FromMe || in.Status || in.Origem == domain.OrigemHistorico {
+	if in.Status || in.Origem == domain.OrigemHistorico {
 		return false
+	}
+	if in.FromMe {
+		if !in.Grupo || g.foiEnviada(in.ProvedorID) {
+			return false
+		}
 	}
 	return g.allow.PermiteConversa(in.ConversaJID, in.ConversaPN, in.ConversaLID)
 }
@@ -266,6 +333,7 @@ func (g *Gateway) enviarNaConversa(ctx context.Context, conversa domain.Conversa
 		}
 		if id != "" {
 			msg.ProvedorID = id
+			g.registrarEnviada(id)
 		}
 	}
 	msg.Status = domain.StatusEnviado

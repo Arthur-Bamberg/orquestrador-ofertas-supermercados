@@ -20,6 +20,13 @@ func TestEntrada_fromMeComTexto(t *testing.T) {
 	}
 }
 
+func TestEntrada_fromMeSemTextoIgnora(t *testing.T) {
+	if _, ok := whatsapp.Entrada(whatsapp.Inbound{FromMe: true, Texto: "", ChatJID: "a", SenderJID: "a", ProvedorID: "1"}); ok {
+		t.Fatal("fromMe sem texto nem midia deve ser ignorada")
+	}
+}
+
+
 func TestEntrada_reacaoSemTextoAindaEntra(t *testing.T) {
 	got, ok := whatsapp.Entrada(whatsapp.Inbound{
 		ProvedorID: "id1",

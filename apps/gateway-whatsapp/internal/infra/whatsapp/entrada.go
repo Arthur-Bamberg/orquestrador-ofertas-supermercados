@@ -62,7 +62,7 @@ func Entrada(in Inbound) (application.Entrada, bool) {
 }
 
 func temConteudo(in Inbound) bool {
-	if in.Texto != "" {
+	if strings.TrimSpace(in.Texto) != "" {
 		return true
 	}
 	if in.Midia != nil && (len(in.Midia.Conteudo) > 0 || in.Midia.Tipo != "") {
@@ -72,7 +72,7 @@ func temConteudo(in Inbound) bool {
 	case domain.MensagemReacao, domain.MensagemRevogacao, domain.MensagemIndecifravel:
 		return true
 	}
-	return in.FromMe && in.ProvedorID != ""
+	return false
 }
 
 func payloadJSON(v any) string {

@@ -157,6 +157,35 @@ func TestReceber_fromMePersisteComoSaidaSemCanalNemAck(t *testing.T) {
 	}
 }
 
+func TestReceber_fromMeDiretoNaoDisparaAgente(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:    domain.NovaAllowlist("5511999999999"),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   &memMidia{files: map[string][]byte{}},
+		AckTexto: "ack-teste",
+		Agente:   ag,
+		NewID:    seqIDs(),
+	})
+	_, err := gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.me.direto",
+		ConversaJID:  "5511999999999",
+		RemetenteJID: "5511999999999",
+		FromMe:       true,
+		Grupo:        false,
+		Corpo:        "tomate",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ag.calls) != 0 || len(canal.envios) != 0 {
+		t.Fatalf("fromMe direto não deve acionar agente nem canal: ag=%+v canal=%+v", ag.calls, canal.envios)
+	}
+}
+
 func TestReceber_persisteTextoDeConversaNaAllowlist(t *testing.T) {
 	fx := newGW(t, "5511999999999")
 	got, err := fx.gw.Receber(context.Background(), application.Entrada{
@@ -314,6 +343,90 @@ func TestReceber_notificaAgenteNoLugarDoAck(t *testing.T) {
 	}
 }
 
+func TestReceber_comAgenteNuncaEnviaAckMesmoComCorpoVazio(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:    domain.NovaAllowlist("120363abc@g.us"),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   &memMidia{files: map[string][]byte{}},
+		AckTexto: "ack-teste",
+		Agente:   ag,
+		NewID:    seqIDs(),
+	})
+	_, err := gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.vazio",
+		ConversaJID:  "120363abc@g.us",
+		RemetenteJID: "5511999999999",
+		Grupo:        true,
+		FromMe:       true,
+		Corpo:        "",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(canal.envios) != 0 {
+		t.Fatalf("com agente configurado nunca deve enviar ack: %+v", canal.envios)
+	}
+	if len(ag.calls) != 0 {
+		t.Fatalf("não deve chamar agente para corpo vazio: %+v", ag.calls)
+	}
+}
+
+func TestReceber_duplicadaAtualizaCorpoVazioEDisparaAgente(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:    domain.NovaAllowlist("120363abc@g.us"),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   &memMidia{files: map[string][]byte{}},
+		AckTexto: "ack-teste",
+		Agente:   ag,
+		NewID:    seqIDs(),
+	})
+	_, err := gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.duplicada.retry",
+		ConversaJID:  "120363abc@g.us",
+		RemetenteJID: "5511999999999",
+		Grupo:        true,
+		FromMe:       true,
+		Corpo:        "",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ag.calls) != 0 {
+		t.Fatalf("não deveria chamar agente para corpo vazio: %+v", ag.calls)
+	}
+
+	got2, err := gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.duplicada.retry",
+		ConversaJID:  "120363abc@g.us",
+		RemetenteJID: "5511999999999",
+		Grupo:        true,
+		FromMe:       true,
+		Corpo:        "cenoura e abobrinha",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got2.Duplicada {
+		t.Fatal("esperava mensagem marcada como duplicada")
+	}
+	if got2.Mensagem.Corpo != "cenoura e abobrinha" {
+		t.Fatalf("esperava corpo atualizado, obteve %q", got2.Mensagem.Corpo)
+	}
+	if len(ag.calls) != 1 || ag.calls[0].corpo != "cenoura e abobrinha" {
+		t.Fatalf("esperava agente disparado na atualização do corpo: %+v", ag.calls)
+	}
+}
+
+
+
 func TestReceber_foraDaAllowlistNaoChamaAgente(t *testing.T) {
 	repo := newMemRepo()
 	canal := &stubCanal{}
@@ -337,6 +450,129 @@ func TestReceber_foraDaAllowlistNaoChamaAgente(t *testing.T) {
 	}
 	if len(ag.calls) != 0 || len(canal.envios) != 0 {
 		t.Fatalf("agente=%+v canal=%+v", ag.calls, canal.envios)
+	}
+}
+
+func TestReceber_fromMeEmGrupoNaAllowlistDisparaAgente(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:    domain.NovaAllowlist("120363abc@g.us"),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   &memMidia{files: map[string][]byte{}},
+		AckTexto: "ack-teste",
+		Agente:   ag,
+		NewID:    seqIDs(),
+	})
+	got, err := gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.fromme.grupo",
+		ConversaJID:  "120363abc@g.us",
+		RemetenteJID: "5511999999999",
+		Grupo:        true,
+		FromMe:       true,
+		Corpo:        "tomate e banana",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ag.calls) != 1 || ag.calls[0].jid != string(got.Conversa.JID) || ag.calls[0].corpo != "tomate e banana" {
+		t.Fatalf("agente não disparou para fromMe em grupo permitido: %+v", ag.calls)
+	}
+}
+
+func TestReceber_fromMeEmGrupoSemAgenteEnviaAck(t *testing.T) {
+	fx := newGW(t, "120363abc@g.us")
+	got, err := fx.gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.fromme.ack",
+		ConversaJID:  "120363abc@g.us",
+		RemetenteJID: "5511999999999",
+		Grupo:        true,
+		FromMe:       true,
+		Corpo:        "oi grupo meu texto",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fx.canal.envios) != 1 || fx.canal.envios[0].Corpo != "ack-teste" {
+		t.Fatalf("esperava ack para fromMe em grupo permitido sem agente: %+v", fx.canal.envios)
+	}
+	if fx.canal.envios[0].Destino != domain.NormalizarJID(string(got.Conversa.JID)) {
+		t.Fatalf("destino incorreto: %s", fx.canal.envios[0].Destino)
+	}
+}
+
+func TestReceber_fromMeEmGrupoForaDaAllowlistNaoDispara(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:    domain.NovaAllowlist("120363outro@g.us"),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   &memMidia{files: map[string][]byte{}},
+		AckTexto: "ack-teste",
+		Agente:   ag,
+		NewID:    seqIDs(),
+	})
+	_, err := gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.fromme.fora",
+		ConversaJID:  "120363abc@g.us",
+		RemetenteJID: "5511999999999",
+		Grupo:        true,
+		FromMe:       true,
+		Corpo:        "tomate e arroz",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ag.calls) != 0 || len(canal.envios) != 0 {
+		t.Fatalf("não deveria disparar fora da allowlist: ag=%+v canal=%+v", ag.calls, canal.envios)
+	}
+}
+
+func TestReceber_mensagemEnviadaPeloGatewayNaoGeraLoop(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:    domain.NovaAllowlist("120363abc@g.us"),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   &memMidia{files: map[string][]byte{}},
+		AckTexto: "ack-teste",
+		Agente:   ag,
+		NewID:    seqIDs(),
+	})
+	// 1. O gateway envia uma resposta no grupo
+	msg, err := gw.Enviar(context.Background(), application.Saida{
+		ConversaJID: "120363abc@g.us",
+		Corpo:       "Tomate: R$ 5,99",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg.ProvedorID == "" {
+		t.Fatal("esperava ProvedorID preenchido após envio")
+	}
+
+	// 2. O WhatsApp ecoa a mensagem enviada de volta para o gateway
+	_, err = gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   msg.ProvedorID,
+		ConversaJID:  "120363abc@g.us",
+		RemetenteJID: "5511999999999",
+		Grupo:        true,
+		FromMe:       true,
+		Corpo:        "Tomate: R$ 5,99",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 3. Garante que o eco não re-dispara o Agente (prevenção de loop infinito)
+	if len(ag.calls) != 0 {
+		t.Fatalf("eco da mensagem do próprio bot disparou agente: %+v", ag.calls)
 	}
 }
 
