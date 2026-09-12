@@ -4,9 +4,9 @@ Backoffice local em Vite + React + TypeScript para administrar entidades do dom�
 
 ## Escopo
 
-- SPA sem autenticação. Catálogo em `VITE_API_BASE` (padrão `http://localhost:8080`) sob `/api/...`. Canal WhatsApp em `VITE_GATEWAY_BASE` (padrão `http://localhost:8090`) — Conversas, Mensagens e envio de texto (`VITE_GATEWAY_TOKEN` = `GATEWAY_TOKEN`).
-- UI administrativa funcional: tabelas, filtros, formulários, confirmações de exclusão e mensagens claras de erro da API. Conversas são rastro só-leitura com compositor nas allowlisted. Operações: Testar Mercado faz scan de encarte ou scraping de site (sem Extrator).
-- Use termos do glossário do scraper para o catálogo; para o canal, use [`../gateway-whatsapp/CONTEXT.md`](../gateway-whatsapp/CONTEXT.md): Contato, Conversa, Mensagem, Mídia, Allowlist.
+- SPA sem autenticação. Catálogo em `VITE_API_BASE` (padrão `http://localhost:8080`) sob `/api/...`. Canal WhatsApp em `VITE_GATEWAY_BASE` (padrão `http://localhost:8090`) — estado/Pareamento (`GET /canal`, `POST /canal/desparear`), Conversas, Mensagens e envio de texto (`VITE_GATEWAY_TOKEN` = `GATEWAY_TOKEN`).
+- UI administrativa funcional: tabelas, filtros, formulários, confirmações de exclusão e mensagens claras de erro da API. Superfície **Canal**: QR quando pendente, JID quando há Pareamento, Desparear com confirmação. Conversas são rastro só-leitura com compositor nas allowlisted. Operações: Testar Mercado faz scan de encarte ou scraping de site (sem Extrator).
+- Use termos do glossário do scraper para o catálogo; para o canal, use [`../gateway-whatsapp/CONTEXT.md`](../gateway-whatsapp/CONTEXT.md): Contato, Conversa, Mensagem, Mídia, Allowlist, Canal, Pareamento, Desparear.
 
 ## Comandos
 

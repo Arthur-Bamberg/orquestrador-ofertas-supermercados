@@ -10,6 +10,7 @@ const navItems = [
   { to: "/falhas-extracao", label: "Falhas de Extração" },
   { to: "/usos-extrator", label: "Uso do Extrator" },
   { to: "/operacoes", label: "Operações" },
+  { to: "/canal", label: "Canal" },
   { to: "/conversas", label: "Conversas" },
 ];
 

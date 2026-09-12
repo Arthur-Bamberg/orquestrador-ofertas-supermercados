@@ -26,3 +26,11 @@ func (s *Stub) Enviar(_ context.Context, destino domain.JID, corpo string, midia
 }
 
 func (s *Stub) Conectado() bool { return true }
+
+func (s *Stub) Situacao() domain.CanalSituacao {
+	return domain.CanalSituacao{Estado: domain.CanalConectado}
+}
+
+func (s *Stub) Desparear(context.Context) error {
+	return domain.ErrDesparearIndisponivel
+}

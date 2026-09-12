@@ -1,6 +1,6 @@
 # Ofertas Backoffice
 
-SPA local para administrar Mercados, Fontes, Documentos, Ofertas, Produtos, Marcas, Falhas de Extração, Uso do Extrator, Artefatos, Operações de Pipeline e Conversas do canal WhatsApp.
+SPA local para administrar Mercados, Fontes, Documentos, Ofertas, Produtos, Marcas, Falhas de Extração, Uso do Extrator, Artefatos, Operações de Pipeline, Canal WhatsApp (Pareamento) e Conversas.
 
 ## Rodar localmente
 
@@ -10,7 +10,7 @@ npm install
 npm run dev
 ```
 
-Por padrão o app usa `VITE_API_BASE=http://localhost:8080` (catálogo) e `VITE_GATEWAY_BASE=http://localhost:8090` (Conversas). Copie `.env.example` para `.env` se precisar apontar para outras bases ou definir `VITE_GATEWAY_TOKEN` (envio).
+Por padrão o app usa `VITE_API_BASE=http://localhost:8080` (catálogo) e `VITE_GATEWAY_BASE=http://localhost:8090` (Canal e Conversas). Copie `.env.example` para `.env` se precisar apontar para outras bases ou definir `VITE_GATEWAY_TOKEN` (Pareamento, envio).
 
 ```bash
 cp .env.example .env

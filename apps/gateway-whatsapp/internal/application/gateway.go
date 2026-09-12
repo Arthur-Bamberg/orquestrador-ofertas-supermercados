@@ -472,3 +472,17 @@ func (g *Gateway) Conectado() bool {
 	}
 	return g.canal.Conectado()
 }
+
+func (g *Gateway) SituacaoCanal() domain.CanalSituacao {
+	if g.canal == nil {
+		return domain.CanalSituacao{Estado: domain.CanalDesconectado}
+	}
+	return g.canal.Situacao()
+}
+
+func (g *Gateway) Desparear(ctx context.Context) error {
+	if g.canal == nil {
+		return domain.ErrDesparearIndisponivel
+	}
+	return g.canal.Desparear(ctx)
+}

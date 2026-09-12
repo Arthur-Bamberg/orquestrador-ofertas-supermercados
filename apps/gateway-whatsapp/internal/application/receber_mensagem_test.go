@@ -990,6 +990,17 @@ func (s *stubCanal) Conectado() bool {
 	return s.conectado
 }
 
+func (s *stubCanal) Situacao() domain.CanalSituacao {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.conectado {
+		return domain.CanalSituacao{Estado: domain.CanalConectado}
+	}
+	return domain.CanalSituacao{Estado: domain.CanalDesconectado}
+}
+
+func (s *stubCanal) Desparear(context.Context) error { return domain.ErrDesparearIndisponivel }
+
 func (s *stubCanal) setErr(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

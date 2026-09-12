@@ -150,6 +150,20 @@ export function midiaUrl(mensagemId: string): string {
   return gatewayUrl(`/mensagens/${encodeURIComponent(mensagemId)}/midia`);
 }
 
+export type CanalSituacao = {
+  estado: "pendente" | "conectado" | "desconectado" | string;
+  jid?: string;
+  qrPngBase64?: string;
+};
+
+export function getCanal(): Promise<CanalSituacao> {
+  return gatewayRequest<CanalSituacao>("/canal", undefined, { auth: true });
+}
+
+export function desparearCanal(): Promise<CanalSituacao> {
+  return gatewayRequest<CanalSituacao>("/canal/desparear", undefined, { method: "POST", auth: true });
+}
+
 export function conversaRotulo(conversa: Pick<ConversaResumo, "jid" | "ultimaMensagem">): string {
   const push = conversa.ultimaMensagem?.pushName?.trim();
   if (push) {

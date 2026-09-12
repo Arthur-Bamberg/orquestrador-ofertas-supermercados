@@ -184,6 +184,12 @@ func (stubCanal) Enviar(context.Context, domain.JID, string, *domain.MidiaBytes)
 }
 func (stubCanal) Conectado() bool { return true }
 
+func (stubCanal) Situacao() domain.CanalSituacao {
+	return domain.CanalSituacao{Estado: domain.CanalConectado}
+}
+
+func (stubCanal) Desparear(context.Context) error { return domain.ErrDesparearIndisponivel }
+
 type memMidia struct{ files map[string][]byte }
 
 func (m *memMidia) Guardar(_ context.Context, id domain.MensagemID, midia domain.MidiaBytes) (string, error) {

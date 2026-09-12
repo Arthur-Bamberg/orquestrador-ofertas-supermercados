@@ -11,6 +11,7 @@ import (
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/application"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/domain"
+	"rsc.io/qr"
 )
 
 type Server struct {
@@ -29,6 +30,8 @@ func New(gw *application.Gateway, token, corsOrigin string) http.Handler {
 	mux.HandleFunc("GET /conversas/{id}", s.obterConversa)
 	mux.HandleFunc("GET /conversas/{id}/mensagens", s.listarMensagens)
 	mux.HandleFunc("GET /mensagens/{id}/midia", s.obterMidia)
+	mux.HandleFunc("GET /canal", s.canal)
+	mux.HandleFunc("POST /canal/desparear", s.desparear)
 	return s.withCORS(mux)
 }
 
@@ -174,6 +177,62 @@ func (s *Server) listarMensagens(w http.ResponseWriter, r *http.Request) {
 		out = append(out, mensagemToJSON(m))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) canal(w http.ResponseWriter, r *http.Request) {
+	if !s.authorized(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "não autorizado"})
+		return
+	}
+	if s.gw == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "canal desconectado"})
+		return
+	}
+	writeCanal(w, http.StatusOK, s.gw.SituacaoCanal())
+}
+
+func (s *Server) desparear(w http.ResponseWriter, r *http.Request) {
+	if !s.authorized(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "não autorizado"})
+		return
+	}
+	err := s.gw.Desparear(r.Context())
+	if err != nil {
+		if errors.Is(err, domain.ErrSemPareamento) || errors.Is(err, domain.ErrDesparearIndisponivel) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeCanal(w, http.StatusOK, s.gw.SituacaoCanal())
+}
+
+type canalJSON struct {
+	Estado      string `json:"estado"`
+	JID         string `json:"jid,omitempty"`
+	QRPngBase64 string `json:"qrPngBase64,omitempty"`
+}
+
+func writeCanal(w http.ResponseWriter, status int, sit domain.CanalSituacao) {
+	out := canalJSON{Estado: string(sit.Estado), JID: string(sit.JID)}
+	if sit.QR != "" {
+		png, err := pngQR(sit.QR)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "QR inválido"})
+			return
+		}
+		out.QRPngBase64 = base64.StdEncoding.EncodeToString(png)
+	}
+	writeJSON(w, status, out)
+}
+
+func pngQR(code string) ([]byte, error) {
+	c, err := qr.Encode(code, qr.M)
+	if err != nil {
+		return nil, err
+	}
+	return c.PNG(), nil
 }
 
 func (s *Server) obterMidia(w http.ResponseWriter, r *http.Request) {

@@ -12,6 +12,8 @@ type MidiaBytes struct {
 type Canal interface {
 	Enviar(ctx context.Context, destino JID, corpo string, midia *MidiaBytes) (provedorID string, err error)
 	Conectado() bool
+	Situacao() CanalSituacao
+	Desparear(ctx context.Context) error
 }
 
 type Repositorio interface {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./api";
-import { conversaRotulo, listConversas, midiaUrl, enviarTexto } from "./gateway";
+import { conversaRotulo, desparearCanal, getCanal, listConversas, midiaUrl, enviarTexto } from "./gateway";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -67,5 +67,35 @@ describe("gateway client", () => {
     expect(conversaRotulo({ jid: "5511@s.whatsapp.net", ultimaMensagem: { pushName: "Ana" } as never })).toBe(
       "5511@s.whatsapp.net · Ana",
     );
+  });
+
+  it("GET /canal envia Bearer e lê estado do Canal", async () => {
+    vi.stubEnv("VITE_GATEWAY_TOKEN", "secret");
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, { estado: "pendente", qrPngBase64: "iVBOR" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const got = await getCanal();
+
+    expect(got.estado).toBe("pendente");
+    expect(got.qrPngBase64).toBe("iVBOR");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("http://localhost:8090/canal");
+    expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("/api/");
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer secret");
+  });
+
+  it("POST /canal/desparear envia Bearer", async () => {
+    vi.stubEnv("VITE_GATEWAY_TOKEN", "secret");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { estado: "pendente" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await desparearCanal();
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/canal/desparear");
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer secret");
   });
 });

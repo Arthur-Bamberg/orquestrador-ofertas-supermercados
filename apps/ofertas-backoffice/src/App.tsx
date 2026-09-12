@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
+import { CanalPage } from "./pages/CanalPage";
 import { ConversasListPage, ConversaDetailPage } from "./pages/ConversasPages";
 import { FalhasExtracaoPage } from "./pages/FalhasExtracaoPage";
 import { OperationsPage } from "./pages/OperationsPage";
@@ -11,6 +12,7 @@ export function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Navigate to="/mercados" replace />} />
+        <Route path="canal" element={<CanalPage />} />
         <Route path="conversas" element={<ConversasListPage />} />
         <Route path="conversas/:id" element={<ConversaDetailPage />} />
         <Route path=":resourceSlug" element={<ResourceListPage />} />

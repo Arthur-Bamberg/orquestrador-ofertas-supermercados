@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -203,6 +204,139 @@ func TestRastroHTTP_conversasMensagensMidiaCORS(t *testing.T) {
 	if !strings.Contains(res.Header().Get("Access-Control-Allow-Headers"), "Authorization") {
 		t.Fatalf("allow headers %q", res.Header().Get("Access-Control-Allow-Headers"))
 	}
+}
+
+func TestCanalHTTP_estadoQRDesparear(t *testing.T) {
+	pngMagic := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
+	fake := &situacaoCanal{sit: domain.CanalSituacao{
+		Estado: domain.CanalPendente,
+		QR:     "2@example-pairing-code",
+	}}
+	gw := application.New(application.Deps{
+		Allow:  domain.NovaAllowlist("5511999999999"),
+		Repo:   newMemRepo(),
+		Canal:  fake,
+		Midias: memMidia{files: map[string][]byte{}},
+		NewID:  func() string { return "h-1" },
+	})
+	h := httpapi.New(gw, "secret", "")
+
+	res := httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/canal", nil))
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("GET sem token %d", res.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/canal", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("GET pendente %d %s", res.Code, res.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["estado"] != string(domain.CanalPendente) || body["jid"] != "" {
+		t.Fatalf("pendente %+v", body)
+	}
+	raw, err := base64.StdEncoding.DecodeString(body["qrPngBase64"])
+	if err != nil || !bytes.HasPrefix(raw, pngMagic) {
+		t.Fatalf("QR PNG %v %q", err, body["qrPngBase64"])
+	}
+
+	fake.sit = domain.CanalSituacao{Estado: domain.CanalConectado, JID: "5511988887777@s.whatsapp.net"}
+	req = httptest.NewRequest(http.MethodGet, "/canal", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	body = map[string]string{}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["estado"] != string(domain.CanalConectado) || body["jid"] != "5511988887777@s.whatsapp.net" || body["qrPngBase64"] != "" {
+		t.Fatalf("conectado %+v", body)
+	}
+
+	fake.sit = domain.CanalSituacao{Estado: domain.CanalDesconectado, JID: "5511988887777@s.whatsapp.net"}
+	req = httptest.NewRequest(http.MethodGet, "/canal", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	body = map[string]string{}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["estado"] != string(domain.CanalDesconectado) || body["jid"] == "" || body["qrPngBase64"] != "" {
+		t.Fatalf("desconectado %+v", body)
+	}
+
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/canal/desparear", nil))
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("POST sem token %d", res.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/canal/desparear", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("desparear %d %s", res.Code, res.Body.String())
+	}
+	if fake.calls != 1 {
+		t.Fatalf("Desparear calls=%d", fake.calls)
+	}
+	body = map[string]string{}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["estado"] != string(domain.CanalPendente) || body["qrPngBase64"] == "" {
+		t.Fatalf("após Desparear %+v", body)
+	}
+
+	fake.desparear = domain.ErrSemPareamento
+	req = httptest.NewRequest(http.MethodPost, "/canal/desparear", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusConflict {
+		t.Fatalf("sem Pareamento %d", res.Code)
+	}
+
+	stubGW := newGW(t, true)
+	h = httpapi.New(stubGW, "secret", "")
+	req = httptest.NewRequest(http.MethodPost, "/canal/desparear", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusConflict {
+		t.Fatalf("stub Desparear %d %s", res.Code, res.Body.String())
+	}
+}
+
+type situacaoCanal struct {
+	sit       domain.CanalSituacao
+	desparear error
+	calls     int
+}
+
+func (c *situacaoCanal) Enviar(context.Context, domain.JID, string, *domain.MidiaBytes) (string, error) {
+	return "stub", nil
+}
+
+func (c *situacaoCanal) Conectado() bool { return c.sit.Estado == domain.CanalConectado }
+
+func (c *situacaoCanal) Situacao() domain.CanalSituacao { return c.sit }
+
+func (c *situacaoCanal) Desparear(context.Context) error {
+	c.calls++
+	if c.desparear != nil {
+		return c.desparear
+	}
+	c.sit = domain.CanalSituacao{Estado: domain.CanalPendente, QR: "2@example-pairing-code"}
+	return nil
 }
 
 type readyCanal struct {

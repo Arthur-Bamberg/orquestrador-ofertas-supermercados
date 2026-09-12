@@ -3,6 +3,7 @@ package whatsapp
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"mime"
@@ -38,12 +39,15 @@ func sessionDSN(path string) string {
 }
 
 type Cliente struct {
-	client   *whatsmeow.Client
-	mu       sync.RWMutex
-	on       bool
-	handle   func(context.Context, application.Entrada)
-	recibo   func(context.Context, string, domain.StatusEnvio)
-	assuntos assuntosGrupo
+	client    *whatsmeow.Client
+	container *sqlstore.Container
+	life      context.Context
+	mu        sync.RWMutex
+	on        bool
+	qr        string
+	handle    func(context.Context, application.Entrada)
+	recibo    func(context.Context, string, domain.StatusEnvio)
+	assuntos  assuntosGrupo
 }
 
 func Ligar(ctx context.Context, sessionPath string) (*Cliente, error) {
@@ -68,7 +72,7 @@ func Ligar(ctx context.Context, sessionPath string) (*Cliente, error) {
 		return nil, err
 	}
 	cli := whatsmeow.NewClient(device, waLog.Stdout("whatsmeow", "INFO", true))
-	c := &Cliente{client: cli}
+	c := &Cliente{client: cli, container: container, life: ctx}
 	cli.AddEventHandler(c.onEvent)
 	return c, nil
 }
@@ -115,22 +119,54 @@ func (c *Cliente) SetReciboHandler(h func(context.Context, string, domain.Status
 }
 
 func (c *Cliente) Connect(ctx context.Context) error {
-	if c.client.Store.ID == nil {
-		ch, err := c.client.GetQRChannel(ctx)
+	c.mu.RLock()
+	cli := c.client
+	qrCtx := c.life
+	c.mu.RUnlock()
+	if qrCtx == nil {
+		qrCtx = ctx
+	}
+	if cli.Store.ID == nil {
+		ch, err := cli.GetQRChannel(qrCtx)
 		if err != nil {
 			return err
 		}
-		go func() {
-			for evt := range ch {
-				if evt.Event == "code" {
-					if err := ImprimirQR(os.Stderr, evt.Code); err != nil {
-						fmt.Fprintf(os.Stderr, "QR: %v\n", err)
-					}
-				}
-			}
-		}()
+		go c.watchQR(ch)
 	}
-	return c.client.Connect()
+	return cli.Connect()
+}
+
+func (c *Cliente) watchQR(ch <-chan whatsmeow.QRChannelItem) {
+	for evt := range ch {
+		switch evt.Event {
+		case whatsmeow.QRChannelEventCode:
+			c.setQR(evt.Code)
+			if err := ImprimirQR(os.Stderr, evt.Code); err != nil {
+				fmt.Fprintf(os.Stderr, "QR: %v\n", err)
+			}
+		case whatsmeow.QRChannelSuccess.Event:
+			c.setQR("")
+		case whatsmeow.QRChannelTimeout.Event:
+			c.setQR("")
+			go func() {
+				if err := c.Connect(context.Background()); err != nil {
+					log.Printf("whatsapp QR timeout: %v", err)
+				}
+			}()
+		default:
+			if evt.Event != whatsmeow.QRChannelEventError {
+				continue
+			}
+			c.setQR("")
+			log.Printf("whatsapp QR: %v", evt.Error)
+		}
+	}
+}
+
+func (c *Cliente) setQR(code string) {
+	c.mu.Lock()
+	c.qr = code
+	c.mu.Unlock()
 }
 
 func (c *Cliente) Disconnect() {
@@ -140,7 +176,52 @@ func (c *Cliente) Disconnect() {
 func (c *Cliente) Conectado() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.on && c.client.IsConnected()
+	return c.on && c.client != nil && c.client.IsConnected()
+}
+
+func (c *Cliente) Situacao() domain.CanalSituacao {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	var id *types.JID
+	if c.client != nil && c.client.Store != nil {
+		id = c.client.Store.ID
+	}
+	if id == nil {
+		return domain.CanalSituacao{Estado: domain.CanalPendente, QR: c.qr}
+	}
+	jid := domain.JID(id.ToNonAD().String())
+	if c.on && c.client.IsConnected() {
+		return domain.CanalSituacao{Estado: domain.CanalConectado, JID: jid}
+	}
+	return domain.CanalSituacao{Estado: domain.CanalDesconectado, JID: jid}
+}
+
+func (c *Cliente) Desparear(ctx context.Context) error {
+	c.mu.Lock()
+	cli := c.client
+	container := c.container
+	c.mu.Unlock()
+	if cli == nil || cli.Store == nil || cli.Store.ID == nil {
+		return domain.ErrSemPareamento
+	}
+	if err := cli.Logout(ctx); err != nil {
+		cli.Disconnect()
+		if delErr := cli.Store.Delete(ctx); delErr != nil {
+			return fmt.Errorf("desparear: %w", errors.Join(err, delErr))
+		}
+	}
+	if container == nil {
+		return fmt.Errorf("desparear: store indisponível")
+	}
+	device := container.NewDevice()
+	novo := whatsmeow.NewClient(device, waLog.Stdout("whatsmeow", "INFO", true))
+	c.mu.Lock()
+	c.client = novo
+	c.on = false
+	c.qr = ""
+	novo.AddEventHandler(c.onEvent)
+	c.mu.Unlock()
+	return c.Connect(ctx)
 }
 
 func (c *Cliente) Enviar(ctx context.Context, destino domain.JID, corpo string, midia *domain.MidiaBytes) (string, error) {
@@ -254,6 +335,7 @@ func (c *Cliente) onEvent(raw any) {
 	case *events.Connected:
 		c.mu.Lock()
 		c.on = true
+		c.qr = ""
 		c.mu.Unlock()
 		go c.carregarAssuntos()
 	case *events.Disconnected:
