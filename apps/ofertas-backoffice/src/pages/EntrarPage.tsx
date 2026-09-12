@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { eu, identificar } from "../api";
 import { ErrorAlert } from "../components/ErrorAlert";
+import { operadorIdentificado } from "../sessao";
 
 export function EntrarPage() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export function EntrarPage() {
     }
   }
 
-  if (jaIdentificado.data) {
+  if (operadorIdentificado(jaIdentificado.data)) {
     return <Navigate to="/mercados" replace />;
   }
 

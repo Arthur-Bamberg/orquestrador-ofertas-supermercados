@@ -42,6 +42,26 @@ describe("request", () => {
     } satisfies Partial<ApiError>);
   });
 
+  it("401 no catálogo manda para /entrar", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("window", { location: { pathname: "/mercados", assign } });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(401, { error: "não identificado" })));
+
+    await expect(request("/mercados")).rejects.toMatchObject({ status: 401 });
+    expect(assign).toHaveBeenCalledWith("/entrar");
+  });
+
+  it("401 em /identificar não redireciona", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("window", { location: { pathname: "/entrar", assign } });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(401, { error: "nome ou senha inválidos" })));
+
+    await expect(request("/identificar", { method: "POST", body: { nome: "x", senha: "y" } })).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(assign).not.toHaveBeenCalled();
+  });
+
   it("uses domínio fallback when 409 has no message", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(409, {})));
 

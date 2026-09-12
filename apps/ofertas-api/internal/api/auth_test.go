@@ -106,6 +106,43 @@ func TestIdentificar_catalogoExigeOperador(t *testing.T) {
 	}
 }
 
+func TestRequireOperador_todasAsRotasDoBackoffice(t *testing.T) {
+	catalog := storetest.New(t)
+	ids := abrirIDs(t)
+	h := New(catalog, ids, config.Config{})
+	rotas := []struct{ method, path string }{
+		{http.MethodGet, "/api/eu"},
+		{http.MethodGet, "/api/mercados"},
+		{http.MethodPost, "/api/mercados"},
+		{http.MethodGet, "/api/mercados/x"},
+		{http.MethodPut, "/api/mercados/x"},
+		{http.MethodDelete, "/api/mercados/x"},
+		{http.MethodGet, "/api/fontes"},
+		{http.MethodPost, "/api/fontes"},
+		{http.MethodGet, "/api/produtos"},
+		{http.MethodGet, "/api/marcas"},
+		{http.MethodGet, "/api/documentos"},
+		{http.MethodGet, "/api/documentos/x/falhas"},
+		{http.MethodGet, "/api/documentos/x/artefatos"},
+		{http.MethodGet, "/api/ofertas"},
+		{http.MethodPost, "/api/ofertas"},
+		{http.MethodGet, "/api/usos-extrator"},
+		{http.MethodGet, "/api/ops"},
+		{http.MethodPost, "/api/ops/run"},
+		{http.MethodPost, "/api/ops/discover"},
+		{http.MethodPost, "/api/ops/reprocess"},
+		{http.MethodPost, "/api/ops/testar"},
+		{http.MethodGet, "/api/ops/x"},
+		{http.MethodPost, "/api/ops/x/cancel"},
+	}
+	for _, r := range rotas {
+		res := doJSON(t, h, r.method, r.path, "{}")
+		if res.Code != http.StatusUnauthorized {
+			t.Errorf("%s %s anônimo %d %s", r.method, r.path, res.Code, res.Body.String())
+		}
+	}
+}
+
 func TestSair_naoDerrubaOutraIdentificacao(t *testing.T) {
 	catalog := storetest.New(t)
 	ids := abrirIDs(t)

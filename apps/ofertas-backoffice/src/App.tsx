@@ -29,6 +29,7 @@ export function App() {
           <Route path="usos-extrator/:documentoId/:tentativa" element={<UsoExtratorDetailPage />} />
           <Route path="usos-extrator/:documentoId/:tentativa/editar" element={<UsoExtratorFormPage mode="edit" />} />
           <Route path="operacoes" element={<OperationsPage />} />
+          <Route path="*" element={<Navigate to="/mercados" replace />} />
         </Route>
       </Route>
     </Routes>

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Navigate, Outlet } from "react-router-dom";
 import { eu } from "../api";
+import { operadorIdentificado } from "../sessao";
 
 export function RequireOperador() {
   const query = useQuery({
@@ -17,7 +18,7 @@ export function RequireOperador() {
     );
   }
 
-  if (query.isError || !query.data) {
+  if (query.isError || !operadorIdentificado(query.data)) {
     return <Navigate to="/entrar" replace />;
   }
 

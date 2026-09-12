@@ -34,7 +34,21 @@ func New(gw *application.Gateway, token, corsOrigin string, ids operador.Consult
 	mux.HandleFunc("GET /mensagens/{id}/midia", s.obterMidia)
 	mux.HandleFunc("GET /canal", s.canal)
 	mux.HandleFunc("POST /canal/desparear", s.desparear)
-	return s.withCORS(mux)
+	return s.withCORS(s.proteger(mux))
+}
+
+func (s *Server) proteger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health", "/ready", "/envios":
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !s.requireOperador(w, r) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) withCORS(next http.Handler) http.Handler {
@@ -113,9 +127,6 @@ func (s *Server) envios(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listarConversas(w http.ResponseWriter, r *http.Request) {
-	if !s.requireOperador(w, r) {
-		return
-	}
 	q := r.URL.Query()
 	items, err := s.gw.ListarConversas(r.Context(), application.FiltroConversas{
 		Tipo: domain.TipoConversa(q.Get("tipo")),
@@ -133,9 +144,6 @@ func (s *Server) listarConversas(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) obterConversa(w http.ResponseWriter, r *http.Request) {
-	if !s.requireOperador(w, r) {
-		return
-	}
 	item, ok, err := s.gw.ObterConversa(r.Context(), domain.ConversaID(r.PathValue("id")))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -149,9 +157,6 @@ func (s *Server) obterConversa(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listarMensagens(w http.ResponseWriter, r *http.Request) {
-	if !s.requireOperador(w, r) {
-		return
-	}
 	id := domain.ConversaID(r.PathValue("id"))
 	if _, ok, err := s.gw.ObterConversa(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -192,9 +197,6 @@ func (s *Server) listarMensagens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) canal(w http.ResponseWriter, r *http.Request) {
-	if !s.requireOperador(w, r) {
-		return
-	}
 	if s.gw == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "canal desconectado"})
 		return
@@ -203,9 +205,6 @@ func (s *Server) canal(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) desparear(w http.ResponseWriter, r *http.Request) {
-	if !s.requireOperador(w, r) {
-		return
-	}
 	err := s.gw.Desparear(r.Context())
 	if err != nil {
 		if errors.Is(err, domain.ErrSemPareamento) || errors.Is(err, domain.ErrDesparearIndisponivel) {
@@ -246,9 +245,6 @@ func pngQR(code string) ([]byte, error) {
 }
 
 func (s *Server) obterMidia(w http.ResponseWriter, r *http.Request) {
-	if !s.requireOperador(w, r) {
-		return
-	}
 	msg, ok, err := s.gw.ObterMensagem(r.Context(), domain.MensagemID(r.PathValue("id")))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
