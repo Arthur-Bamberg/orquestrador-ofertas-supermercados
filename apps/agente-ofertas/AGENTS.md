@@ -8,7 +8,7 @@ Module path: `github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/
 
 1. **Agente da Lista** receives a Lista (`POST /listas` from the gateway, Bearer `GATEWAY_TOKEN`), splits Itens, derives a Termo per Item (interpretation, closed-class fallback), runs Coleta per non-empty Termo in parallel via `ofertas-scraper-v2`, and reads vigente encarte Ofertas (Documento)
 2. Waits for every Item, then **Agente de Resposta** drops related products, keeps the Produto with fewest extra name tokens, cheapest Oferta (price ties listed), and sends through gateway `POST /envios`
-3. Catalog assistant (`POST /interpretar`, `POST /mcp`) enters at Agente da Lista — same chain, no WhatsApp
+3. Catalog assistant (`POST /interpretar`, `POST /mcp`) enters at Agente da Lista — same chain, no WhatsApp. Both require Bearer `GATEWAY_TOKEN`.
 
 Does **not** pair WhatsApp, persist Mensagem, or run the Extrator. Does **not** HTTP the supermarket itself (Coleta is `ofertas-scraper-v2`).
 

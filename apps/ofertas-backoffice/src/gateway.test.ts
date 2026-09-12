@@ -16,7 +16,7 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe("gateway client", () => {
-  it("lista Conversas no host do gateway, sem prefixo /api", async () => {
+  it("lista Conversas no proxy /gateway, sem prefixo /api", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, []));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -24,19 +24,14 @@ describe("gateway client", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const url = String(fetchMock.mock.calls[0]?.[0]);
-    expect(url).toContain("http://localhost:8090/conversas");
+    expect(url).toContain("/gateway/conversas");
     expect(url).toContain("tipo=grupo");
     expect(url).toContain("q=Beto");
     expect(url).not.toContain("/api/");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: "include" });
   });
 
-  it("recusa envio sem VITE_GATEWAY_TOKEN", async () => {
-    vi.stubEnv("VITE_GATEWAY_TOKEN", "");
-    await expect(enviarTexto("5511999999999", "oi")).rejects.toThrow(/VITE_GATEWAY_TOKEN/);
-  });
-
-  it("envia Bearer em POST /envios", async () => {
-    vi.stubEnv("VITE_GATEWAY_TOKEN", "secret");
+  it("POST /envios envia cookie, sem Bearer", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, { ID: "m1" }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -44,12 +39,11 @@ describe("gateway client", () => {
 
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/envios");
-    expect(headers.get("Authorization")).toBe("Bearer secret");
+    expect(headers.get("Authorization")).toBeNull();
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: "include" });
   });
 
   it("propaga 403 do gateway como ApiError", async () => {
-    vi.stubEnv("VITE_GATEWAY_TOKEN", "secret");
-    vi.stubEnv("VITE_GATEWAY_TOKEN", "secret");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(403, { error: "conversa fora da allowlist" })));
 
     await expect(enviarTexto("120363abc@g.us", "oi")).rejects.toMatchObject({
@@ -60,7 +54,7 @@ describe("gateway client", () => {
   });
 
   it("monta URL de Mídia por id da Mensagem", () => {
-    expect(midiaUrl("abc")).toBe("http://localhost:8090/mensagens/abc/midia");
+    expect(midiaUrl("abc")).toBe("/gateway/mensagens/abc/midia");
   });
 
   it("rótulo usa JID e pushName da última Mensagem", () => {
@@ -69,25 +63,21 @@ describe("gateway client", () => {
     );
   });
 
-  it("GET /canal envia Bearer e lê estado do Canal", async () => {
-    vi.stubEnv("VITE_GATEWAY_TOKEN", "secret");
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse(200, { estado: "pendente", qrPngBase64: "iVBOR" }),
-    );
+  it("GET /canal lê estado do Canal sem Bearer", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { estado: "pendente", qrPngBase64: "iVBOR" }));
     vi.stubGlobal("fetch", fetchMock);
 
     const got = await getCanal();
 
     expect(got.estado).toBe("pendente");
     expect(got.qrPngBase64).toBe("iVBOR");
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("http://localhost:8090/canal");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/gateway/canal");
     expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("/api/");
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
-    expect(headers.get("Authorization")).toBe("Bearer secret");
+    expect(headers.get("Authorization")).toBeNull();
   });
 
-  it("POST /canal/desparear envia Bearer", async () => {
-    vi.stubEnv("VITE_GATEWAY_TOKEN", "secret");
+  it("POST /canal/desparear usa cookie", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { estado: "pendente" }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -96,6 +86,6 @@ describe("gateway client", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/canal/desparear");
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
-    expect(headers.get("Authorization")).toBe("Bearer secret");
+    expect(headers.get("Authorization")).toBeNull();
   });
 });

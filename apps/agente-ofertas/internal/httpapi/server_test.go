@@ -61,11 +61,20 @@ func TestHTTP_healthListasInterpretarEMCP(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("mcp sem token %d", res.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	req.Header.Set("Authorization", "Bearer secret")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || !bytes.Contains(res.Body.Bytes(), []byte("interpretar_lista")) {
 		t.Fatalf("mcp list %d %s", res.Code, res.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"interpretar_lista","arguments":{"texto":"xyzabc"}}}`))
+	req.Header.Set("Authorization", "Bearer secret")
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || !bytes.Contains(res.Body.Bytes(), []byte("Não achei")) {

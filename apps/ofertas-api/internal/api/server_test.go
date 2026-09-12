@@ -21,7 +21,7 @@ func TestMain(m *testing.M) {
 
 func TestMercadoHandlers(t *testing.T) {
 	catalog := storetest.New(t)
-	handler := New(catalog, config.Config{CORSOrigin: "http://localhost:5173"})
+	handler := novaAPI(t, catalog, config.Config{CORSOrigin: "http://localhost:5173"})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/mercados", strings.NewReader(`{"id":"m1","nome":"Mercado Um"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -48,7 +48,7 @@ func TestMercadoHandlers(t *testing.T) {
 
 func TestEntityHTTP_CRUDAndConflicts(t *testing.T) {
 	catalog := storetest.New(t)
-	h := New(catalog, config.Config{CORSOrigin: "http://localhost:5173"})
+	h := novaAPI(t, catalog, config.Config{CORSOrigin: "http://localhost:5173"})
 	if res := doJSON(t, h, http.MethodPost, "/api/mercados", `{"id":"m1","nome":"Mercado Um"}`); res.Code != http.StatusCreated {
 		t.Fatalf("mercado POST %d %s", res.Code, res.Body.String())
 	}
@@ -239,7 +239,7 @@ func TestEntityHTTP_CRUDAndConflicts(t *testing.T) {
 
 func TestCORSOptions(t *testing.T) {
 	catalog := storetest.New(t)
-	h := New(catalog, config.Config{CORSOrigin: "http://localhost:5173"})
+	h := novaAPI(t, catalog, config.Config{CORSOrigin: "http://localhost:5173"})
 	res := doJSON(t, h, http.MethodOptions, "/api/mercados", "")
 	if res.Code != http.StatusNoContent {
 		t.Fatalf("status=%d", res.Code)
@@ -251,7 +251,7 @@ func TestCORSOptions(t *testing.T) {
 
 func TestOperacaoPipelineHTTP(t *testing.T) {
 	catalog := storetest.New(t)
-	h := New(catalog, config.Config{})
+	h := novaAPI(t, catalog, config.Config{})
 
 	res := doJSON(t, h, http.MethodPost, "/api/ops/run", "{}")
 	if res.Code != http.StatusAccepted {
@@ -342,7 +342,7 @@ func TestTestarMercadoHTTP(t *testing.T) {
 	}))
 	t.Cleanup(v2.Close)
 
-	h := New(catalog, config.Config{ColetaURL: v2.URL, ColetaToken: "secret"})
+	h := novaAPI(t, catalog, config.Config{ColetaURL: v2.URL, ColetaToken: "secret"})
 
 	t.Run("encarte_enfileira_discover", func(t *testing.T) {
 		res := doJSON(t, h, http.MethodPost, "/api/ops/testar", `{"mercadoId":"mercado-via"}`)
@@ -408,7 +408,7 @@ func TestTestarMercadoHTTP(t *testing.T) {
 func TestArtefatosHTTP(t *testing.T) {
 	catalog := storetest.New(t)
 	root := t.TempDir()
-	h := New(catalog, config.Config{ArtefatoRoot: root})
+	h := novaAPI(t, catalog, config.Config{ArtefatoRoot: root})
 	if res := doJSON(t, h, http.MethodPost, "/api/mercados", `{"id":"m1","nome":"M"}`); res.Code != http.StatusCreated {
 		t.Fatalf("mercado %d %s", res.Code, res.Body.String())
 	}

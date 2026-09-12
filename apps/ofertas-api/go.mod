@@ -1,8 +1,11 @@
 module github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-api
 
-go 1.24.5
+go 1.25.0
 
-require github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store v0.0.0
+require (
+	github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store v0.0.0
+	github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/operador v0.0.0
+)
 
 require (
 	github.com/fergusstrange/embedded-postgres v1.34.0 // indirect
@@ -12,9 +15,11 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
-	golang.org/x/crypto v0.37.0 // indirect
-	golang.org/x/sync v0.13.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 )
 
 replace github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store => ../../modules/ofertas-store
+
+replace github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/operador => ../../modules/operador

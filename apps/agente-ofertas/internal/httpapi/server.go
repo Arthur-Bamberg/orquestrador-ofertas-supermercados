@@ -85,6 +85,10 @@ type mcpReq struct {
 }
 
 func (s *Server) mcp(w http.ResponseWriter, r *http.Request) {
+	if !s.authorized(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "não autorizado"})
+		return
+	}
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body"})

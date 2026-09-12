@@ -17,16 +17,22 @@ import (
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-api/internal/config"
 	store "github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store"
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/operador"
 )
 
 type Server struct {
 	catalog *store.Catalog
+	ids     operador.Store
 	cfg     config.Config
 }
 
-func New(catalog *store.Catalog, cfg config.Config) http.Handler {
-	s := &Server{catalog: catalog, cfg: cfg}
+func New(catalog *store.Catalog, ids operador.Store, cfg config.Config) http.Handler {
+	s := &Server{catalog: catalog, ids: ids, cfg: cfg}
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("POST /api/identificar", s.identificar)
+	mux.HandleFunc("POST /api/sair", s.sair)
+	mux.HandleFunc("GET /api/eu", s.eu)
 
 	mux.HandleFunc("GET /api/mercados", s.listMercados)
 	mux.HandleFunc("POST /api/mercados", s.createMercado)
@@ -88,14 +94,15 @@ func New(catalog *store.Catalog, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /api/ops/{id}", s.getOp)
 	mux.HandleFunc("POST /api/ops/{id}/cancel", s.cancelOp)
 
-	return s.withCORS(mux)
+	return s.withCORS(s.requireOperador(mux))
 }
 
 func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.cfg.CORSOrigin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", s.cfg.CORSOrigin)
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		}
 		if r.Method == http.MethodOptions {

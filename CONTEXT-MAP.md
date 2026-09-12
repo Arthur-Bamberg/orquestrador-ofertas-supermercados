@@ -7,12 +7,15 @@ Nome comercial atual do produto: **Pague Menos Mercado**. Não é um Mercado do 
 - [Catálogo de ofertas](./apps/ofertas-scraper/CONTEXT.md) — Oferta, Produto, Mercado, Fonte, Documento, Coleta, Extrator, Indicação Promocional (encarte, ofertas-scraper-v2, API e backoffice)
 - [Canal WhatsApp](./apps/gateway-whatsapp/CONTEXT.md) — Contato, Conversa, Mensagem, Mídia, Canal, Pareamento, Desparear
 - [Agente de ofertas](./apps/agente-ofertas/CONTEXT.md) — Lista, Item, Termo, Resposta; papéis Agente da Lista e Agente de Resposta (assistente de catálogo é superfície deste contexto, não um terceiro)
+- [Backoffice](./apps/ofertas-backoffice/CONTEXT.md) — Operador (quem se identifica na SPA para administrar catálogo e Canal)
 
-Cadeia Lista → Coleta → Resposta: [`docs/arquitetura-agentes-lista-coleta.md`](./docs/arquitetura-agentes-lista-coleta.md). Testar Mercado (scan encarte / scraping site, sem Extrator): ADR [0015](./docs/adr/0015-testar-mercado-encarte-ou-site.md). Cadeia do Agente: ADR [0016](./docs/adr/0016-agente-lista-coleta-encarte-resposta.md). Pareamento no backoffice: ADR [0017](./docs/adr/0017-backoffice-pareamento-via-gateway.md).
+Cadeia Lista → Coleta → Resposta: [`docs/arquitetura-agentes-lista-coleta.md`](./docs/arquitetura-agentes-lista-coleta.md). Testar Mercado (scan encarte / scraping site, sem Extrator): ADR [0015](./docs/adr/0015-testar-mercado-encarte-ou-site.md). Cadeia do Agente: ADR [0016](./docs/adr/0016-agente-lista-coleta-encarte-resposta.md). Pareamento no backoffice: ADR [0017](./docs/adr/0017-backoffice-pareamento-via-gateway.md). Operador no backoffice: ADR [0018](./docs/adr/0018-operador-backoffice.md).
 
 ## Relationships
 
 - **Catálogo ↛ Canal**: o gateway não lê nem escreve Oferta; estado de envio não entra nas tabelas do catálogo (workspace ADR 0006 / 0007)
+- **Operador → Catálogo e Canal**: só o Operador identificado administra no backoffice (catálogo via `ofertas-api`, rastro e Canal via `gateway-whatsapp`). Não é Contato. Não há cadastro na UI. Permanece identificado até Sair ou a linha ser apagada.
+- **Máquina ↛ Operador**: chamadas entre processos identificam-se como máquina, não com nome e senha. Anônimo não chama HTTP de administração nem as portas entre apps.
 - **Canal → backoffice**: o SPA lê Conversa/Mensagem (e envia texto na allowlist), o estado do Canal, o QR quando pendente e o JID do Pareamento; Desparear parte da superfície Canal. Tudo via `gateway-whatsapp` (ADR 0009 / 0017), não via `ofertas-api`
 - **Canal → Agente da Lista**: Mensagem viva de texto na Allowlist vira Lista; o gateway não chama Resposta nem o scraper
 - **Agente da Lista → Coleta**: um Termo por Item (vazio não busca); Itens da mesma Lista em paralelo no `ofertas-scraper-v2`; a Coleta persiste e devolve os mesmos dados; reuso no dia se já houver Coleta `concluido`/`parcial`

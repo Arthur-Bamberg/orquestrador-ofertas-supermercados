@@ -18,11 +18,30 @@ import (
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/domain"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/httpapi"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/infra/canal"
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/operador"
 )
+
+const cookieOperador = "id-arthur"
+
+func idsTeste() *operador.Mem {
+	m := operador.NewMem()
+	m.Fixar(cookieOperador, operador.Operador{ID: "op1", Nome: "arthur"})
+	return m
+}
+
+func handlerGW(gw *application.Gateway, cors string) http.Handler {
+	return httpapi.New(gw, "secret", cors, idsTeste())
+}
+
+func reqOperador(method, path string) *http.Request {
+	req := httptest.NewRequest(method, path, nil)
+	req.AddCookie(&http.Cookie{Name: operador.CookieName, Value: cookieOperador})
+	return req
+}
 
 func TestHealthReadyEEnvios(t *testing.T) {
 	gw, disconnected := newGW(t, true), newGW(t, false)
-	h := httpapi.New(gw, "secret", "")
+	h := httpapi.New(gw, "secret", "", nil)
 
 	res := httptest.NewRecorder()
 	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/health", nil))
@@ -31,7 +50,7 @@ func TestHealthReadyEEnvios(t *testing.T) {
 	}
 
 	res = httptest.NewRecorder()
-	httpapi.New(disconnected, "secret", "").ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/ready", nil))
+	httpapi.New(disconnected, "secret", "", nil).ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/ready", nil))
 	if res.Code != http.StatusServiceUnavailable {
 		t.Fatalf("ready off %d", res.Code)
 	}
@@ -62,6 +81,16 @@ func TestHealthReadyEEnvios(t *testing.T) {
 	}
 	if msg.Corpo != "oi" || msg.Midia == nil || msg.Status != domain.StatusEnviado {
 		t.Fatalf("%+v", msg)
+	}
+
+	hOp := handlerGW(gw, "")
+	req = httptest.NewRequest(http.MethodPost, "/envios", bytes.NewBufferString(`{"conversaJid":"5511999999999","corpo":"ola"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: operador.CookieName, Value: cookieOperador})
+	res = httptest.NewRecorder()
+	hOp.ServeHTTP(res, req)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("envio Operador %d %s", res.Code, res.Body.String())
 	}
 }
 
@@ -121,9 +150,21 @@ func TestRastroHTTP_conversasMensagensMidiaCORS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := httpapi.New(gw, "secret", "http://localhost:5173")
-	req := httptest.NewRequest(http.MethodGet, "/conversas", nil)
+	h := handlerGW(gw, "http://localhost:5173")
 	res := httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/conversas", nil))
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("rastro anônimo %d", res.Code)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/conversas", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("rastro com token de máquina %d", res.Code)
+	}
+	req = reqOperador(http.MethodGet, "/conversas")
+	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
 		t.Fatalf("list %d %s", res.Code, res.Body.String())
@@ -149,7 +190,7 @@ func TestRastroHTTP_conversasMensagensMidiaCORS(t *testing.T) {
 	}
 
 	res = httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/conversas?tipo=grupo", nil))
+	h.ServeHTTP(res, reqOperador(http.MethodGet, "/conversas?tipo=grupo"))
 	conversas = nil
 	if err := json.NewDecoder(res.Body).Decode(&conversas); err != nil {
 		t.Fatal(err)
@@ -160,13 +201,13 @@ func TestRastroHTTP_conversasMensagensMidiaCORS(t *testing.T) {
 
 	cid := string(primeira.Conversa.ID)
 	res = httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/conversas/"+cid, nil))
+	h.ServeHTTP(res, reqOperador(http.MethodGet, "/conversas/"+cid))
 	if res.Code != http.StatusOK {
 		t.Fatalf("get conversa %d %s", res.Code, res.Body.String())
 	}
 
 	res = httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/conversas/"+cid+"/mensagens?limit=2", nil))
+	h.ServeHTTP(res, reqOperador(http.MethodGet, "/conversas/"+cid+"/mensagens?limit=2"))
 	if res.Code != http.StatusOK {
 		t.Fatalf("msgs %d %s", res.Code, res.Body.String())
 	}
@@ -180,7 +221,7 @@ func TestRastroHTTP_conversasMensagensMidiaCORS(t *testing.T) {
 	antes := msgs[0]["criadoEm"].(string)
 	antesID := msgs[0]["id"].(string)
 	res = httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/conversas/"+cid+"/mensagens?limit=2&antesCriadoEm="+antes+"&antesId="+antesID, nil))
+	h.ServeHTTP(res, reqOperador(http.MethodGet, "/conversas/"+cid+"/mensagens?limit=2&antesCriadoEm="+antes+"&antesId="+antesID))
 	msgs = nil
 	if err := json.NewDecoder(res.Body).Decode(&msgs); err != nil {
 		t.Fatal(err)
@@ -190,7 +231,7 @@ func TestRastroHTTP_conversasMensagensMidiaCORS(t *testing.T) {
 	}
 
 	res = httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/mensagens/"+string(comMidia.Mensagem.ID)+"/midia", nil))
+	h.ServeHTTP(res, reqOperador(http.MethodGet, "/mensagens/"+string(comMidia.Mensagem.ID)+"/midia"))
 	if res.Code != http.StatusOK || res.Header().Get("Content-Type") != "image/jpeg" || res.Body.String() != "\x01\x02\x03" {
 		t.Fatalf("midia %d %q %q", res.Code, res.Header().Get("Content-Type"), res.Body.String())
 	}
@@ -219,16 +260,23 @@ func TestCanalHTTP_estadoQRDesparear(t *testing.T) {
 		Midias: memMidia{files: map[string][]byte{}},
 		NewID:  func() string { return "h-1" },
 	})
-	h := httpapi.New(gw, "secret", "")
+	h := handlerGW(gw, "")
 
 	res := httptest.NewRecorder()
 	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/canal", nil))
 	if res.Code != http.StatusUnauthorized {
-		t.Fatalf("GET sem token %d", res.Code)
+		t.Fatalf("GET anônimo %d", res.Code)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/canal", nil)
 	req.Header.Set("Authorization", "Bearer secret")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("GET com token de máquina %d", res.Code)
+	}
+
+	req = reqOperador(http.MethodGet, "/canal")
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -247,8 +295,7 @@ func TestCanalHTTP_estadoQRDesparear(t *testing.T) {
 	}
 
 	fake.sit = domain.CanalSituacao{Estado: domain.CanalConectado, JID: "5511988887777@s.whatsapp.net"}
-	req = httptest.NewRequest(http.MethodGet, "/canal", nil)
-	req.Header.Set("Authorization", "Bearer secret")
+	req = reqOperador(http.MethodGet, "/canal")
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	body = map[string]string{}
@@ -260,8 +307,7 @@ func TestCanalHTTP_estadoQRDesparear(t *testing.T) {
 	}
 
 	fake.sit = domain.CanalSituacao{Estado: domain.CanalDesconectado, JID: "5511988887777@s.whatsapp.net"}
-	req = httptest.NewRequest(http.MethodGet, "/canal", nil)
-	req.Header.Set("Authorization", "Bearer secret")
+	req = reqOperador(http.MethodGet, "/canal")
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	body = map[string]string{}
@@ -275,11 +321,10 @@ func TestCanalHTTP_estadoQRDesparear(t *testing.T) {
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/canal/desparear", nil))
 	if res.Code != http.StatusUnauthorized {
-		t.Fatalf("POST sem token %d", res.Code)
+		t.Fatalf("POST anônimo %d", res.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/canal/desparear", nil)
-	req.Header.Set("Authorization", "Bearer secret")
+	req = reqOperador(http.MethodPost, "/canal/desparear")
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -297,8 +342,7 @@ func TestCanalHTTP_estadoQRDesparear(t *testing.T) {
 	}
 
 	fake.desparear = domain.ErrSemPareamento
-	req = httptest.NewRequest(http.MethodPost, "/canal/desparear", nil)
-	req.Header.Set("Authorization", "Bearer secret")
+	req = reqOperador(http.MethodPost, "/canal/desparear")
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	if res.Code != http.StatusConflict {
@@ -306,9 +350,8 @@ func TestCanalHTTP_estadoQRDesparear(t *testing.T) {
 	}
 
 	stubGW := newGW(t, true)
-	h = httpapi.New(stubGW, "secret", "")
-	req = httptest.NewRequest(http.MethodPost, "/canal/desparear", nil)
-	req.Header.Set("Authorization", "Bearer secret")
+	h = handlerGW(stubGW, "")
+	req = reqOperador(http.MethodPost, "/canal/desparear")
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	if res.Code != http.StatusConflict {

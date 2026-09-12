@@ -7,6 +7,9 @@ use (
 	./apps/ofertas-scraper
 	./apps/ofertas-scraper-v2
 	./modules/ofertas-store
+	./modules/operador
 )
 
 replace github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store v0.0.0 => ./modules/ofertas-store
+
+replace github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/operador v0.0.0 => ./modules/operador

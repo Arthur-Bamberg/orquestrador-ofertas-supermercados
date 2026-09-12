@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, normalizeList, request } from "./api";
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -15,6 +16,7 @@ function jsonResponse(status: number, body: unknown): Response {
 
 describe("request", () => {
   it("GET JSON from /api path", async () => {
+    vi.stubEnv("VITE_API_BASE", "");
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { id: "m1", nome: "Fort" }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -24,6 +26,7 @@ describe("request", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const url = String(fetchMock.mock.calls[0]?.[0]);
     expect(url).toContain("/api/mercados/m1");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: "include" });
   });
 
   it("throws ApiError 409 with payload error", async () => {
@@ -46,6 +49,20 @@ describe("request", () => {
       status: 409,
       message: "Operação bloqueada por conflito de domínio.",
     });
+  });
+});
+
+describe("identificar", () => {
+  it("POST /api/identificar envia nome e senha com credentials", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { nome: "arthur" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { identificar } = await import("./api");
+    await identificar("arthur", "segredo");
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/identificar");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST", credentials: "include" });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ nome: "arthur", senha: "segredo" });
   });
 });
 

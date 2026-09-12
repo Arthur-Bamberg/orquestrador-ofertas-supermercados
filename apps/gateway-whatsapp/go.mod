@@ -11,6 +11,7 @@ require (
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.57.0
 	rsc.io/qr v0.2.0
+	github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/operador v0.0.0
 )
 
 require (
@@ -44,3 +45,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/operador => ../../modules/operador

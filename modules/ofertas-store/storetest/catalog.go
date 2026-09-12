@@ -22,6 +22,12 @@ var (
 	pgServer *embeddedpostgres.EmbeddedPostgres
 )
 
+func DSN(t *testing.T) string {
+	t.Helper()
+	start(t)
+	return pgDSN
+}
+
 func New(t *testing.T) *store.Catalog {
 	t.Helper()
 	start(t)

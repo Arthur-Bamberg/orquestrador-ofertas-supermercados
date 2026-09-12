@@ -12,6 +12,7 @@ import (
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-api/internal/config"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/ofertas-api/internal/ops"
 	store "github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store"
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/operador"
 )
 
 func main() {
@@ -36,9 +37,16 @@ func main() {
 
 	go ops.NewWorker(catalog, cfg, log.Default()).Run(ctx)
 
+	ids, err := operador.Open(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer ids.Close()
+
 	server := &http.Server{
 		Addr:    cfg.HTTPAddr,
-		Handler: api.New(catalog, cfg),
+		Handler: api.New(catalog, ids, cfg),
 	}
 	go func() {
 		<-ctx.Done()

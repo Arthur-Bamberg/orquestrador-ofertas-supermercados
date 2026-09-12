@@ -1,4 +1,6 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useOutletContext } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { sair } from "../api";
 
 const navItems = [
   { to: "/mercados", label: "Mercados" },
@@ -15,6 +17,16 @@ const navItems = [
 ];
 
 export function Layout() {
+  const { nome } = useOutletContext<{ nome: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  async function onSair() {
+    await sair();
+    queryClient.clear();
+    navigate("/entrar", { replace: true });
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -29,6 +41,12 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
+        <div className="sidebar-operador">
+          <p>{nome}</p>
+          <button type="button" onClick={() => void onSair()}>
+            Sair
+          </button>
+        </div>
       </aside>
       <main className="content">
         <Outlet />

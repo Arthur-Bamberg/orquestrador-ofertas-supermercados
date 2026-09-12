@@ -11,6 +11,7 @@ import (
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/application"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/domain"
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/operador"
 	"rsc.io/qr"
 )
 
@@ -18,10 +19,11 @@ type Server struct {
 	gw         *application.Gateway
 	token      string
 	corsOrigin string
+	ids        operador.Consulta
 }
 
-func New(gw *application.Gateway, token, corsOrigin string) http.Handler {
-	s := &Server{gw: gw, token: token, corsOrigin: corsOrigin}
+func New(gw *application.Gateway, token, corsOrigin string, ids operador.Consulta) http.Handler {
+	s := &Server{gw: gw, token: token, corsOrigin: corsOrigin, ids: ids}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /ready", s.ready)
@@ -39,6 +41,7 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.corsOrigin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", s.corsOrigin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
 		}
@@ -74,7 +77,7 @@ type envioBody struct {
 }
 
 func (s *Server) envios(w http.ResponseWriter, r *http.Request) {
-	if !s.authorized(r) {
+	if !s.maquina(r) && !s.operador(r) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "não autorizado"})
 		return
 	}
@@ -110,6 +113,9 @@ func (s *Server) envios(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listarConversas(w http.ResponseWriter, r *http.Request) {
+	if !s.requireOperador(w, r) {
+		return
+	}
 	q := r.URL.Query()
 	items, err := s.gw.ListarConversas(r.Context(), application.FiltroConversas{
 		Tipo: domain.TipoConversa(q.Get("tipo")),
@@ -127,6 +133,9 @@ func (s *Server) listarConversas(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) obterConversa(w http.ResponseWriter, r *http.Request) {
+	if !s.requireOperador(w, r) {
+		return
+	}
 	item, ok, err := s.gw.ObterConversa(r.Context(), domain.ConversaID(r.PathValue("id")))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -140,6 +149,9 @@ func (s *Server) obterConversa(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listarMensagens(w http.ResponseWriter, r *http.Request) {
+	if !s.requireOperador(w, r) {
+		return
+	}
 	id := domain.ConversaID(r.PathValue("id"))
 	if _, ok, err := s.gw.ObterConversa(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -180,8 +192,7 @@ func (s *Server) listarMensagens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) canal(w http.ResponseWriter, r *http.Request) {
-	if !s.authorized(r) {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "não autorizado"})
+	if !s.requireOperador(w, r) {
 		return
 	}
 	if s.gw == nil {
@@ -192,8 +203,7 @@ func (s *Server) canal(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) desparear(w http.ResponseWriter, r *http.Request) {
-	if !s.authorized(r) {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "não autorizado"})
+	if !s.requireOperador(w, r) {
 		return
 	}
 	err := s.gw.Desparear(r.Context())
@@ -236,6 +246,9 @@ func pngQR(code string) ([]byte, error) {
 }
 
 func (s *Server) obterMidia(w http.ResponseWriter, r *http.Request) {
+	if !s.requireOperador(w, r) {
+		return
+	}
 	msg, ok, err := s.gw.ObterMensagem(r.Context(), domain.MensagemID(r.PathValue("id")))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -259,7 +272,23 @@ func (s *Server) obterMidia(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(raw)
 }
 
-func (s *Server) authorized(r *http.Request) bool {
+func (s *Server) requireOperador(w http.ResponseWriter, r *http.Request) bool {
+	if s.operador(r) {
+		return true
+	}
+	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "não identificado"})
+	return false
+}
+
+func (s *Server) operador(r *http.Request) bool {
+	if s.ids == nil {
+		return false
+	}
+	_, ok, err := s.ids.OperadorPorIdentificacao(r.Context(), operador.IDFromRequest(r))
+	return err == nil && ok
+}
+
+func (s *Server) maquina(r *http.Request) bool {
 	if s.token == "" {
 		return false
 	}

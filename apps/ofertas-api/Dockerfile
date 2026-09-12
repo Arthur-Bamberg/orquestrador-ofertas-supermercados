@@ -3,6 +3,7 @@
 FROM golang:1.26-bookworm AS build
 WORKDIR /src
 COPY modules/ofertas-store ./modules/ofertas-store
+COPY modules/operador ./modules/operador
 COPY apps/ofertas-api ./apps/ofertas-api
 COPY apps/ofertas-scraper ./apps/ofertas-scraper
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \

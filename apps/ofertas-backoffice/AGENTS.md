@@ -4,9 +4,9 @@ Backoffice local em Vite + React + TypeScript para administrar entidades do dom�
 
 ## Escopo
 
-- SPA sem autenticação. Catálogo em `VITE_API_BASE` (padrão `http://localhost:8080`) sob `/api/...`. Canal WhatsApp em `VITE_GATEWAY_BASE` (padrão `http://localhost:8090`) — estado/Pareamento (`GET /canal`, `POST /canal/desparear`), Conversas, Mensagens e envio de texto (`VITE_GATEWAY_TOKEN` = `GATEWAY_TOKEN`).
+- SPA com identificação do **Operador** (nome + senha; cookie httpOnly). Catálogo em `/api/...` (Vite/nginx proxy para `ofertas-api`). Canal WhatsApp em `/gateway/...` (proxy para `gateway-whatsapp`) — estado/Pareamento, Conversas, Mensagens e envio de texto. Glossário: [`CONTEXT.md`](./CONTEXT.md).
 - UI administrativa funcional: tabelas, filtros, formulários, confirmações de exclusão e mensagens claras de erro da API. Superfície **Canal**: QR quando pendente, JID quando há Pareamento, Desparear com confirmação. Conversas são rastro só-leitura com compositor nas allowlisted. Operações: Testar Mercado faz scan de encarte ou scraping de site (sem Extrator).
-- Use termos do glossário do scraper para o catálogo; para o canal, use [`../gateway-whatsapp/CONTEXT.md`](../gateway-whatsapp/CONTEXT.md): Contato, Conversa, Mensagem, Mídia, Allowlist, Canal, Pareamento, Desparear.
+- Use termos do glossário do scraper para o catálogo; para o canal, use [`../gateway-whatsapp/CONTEXT.md`](../gateway-whatsapp/CONTEXT.md): Contato, Conversa, Mensagem, Mídia, Allowlist, Canal, Pareamento, Desparear; **Operador** e **Sair** neste `CONTEXT.md`.
 
 ## Comandos
 
@@ -17,11 +17,11 @@ npm run build
 npm test
 ```
 
-No Compose: `docker compose up --build` (ADR 0008) publica o SPA em `http://localhost:5173` (nginx) contra a API em `http://localhost:8080` e o gateway em `http://localhost:8090`. Rebuild do backoffice é necessário se mudar `GATEWAY_TOKEN` (vai para `VITE_GATEWAY_TOKEN` no bundle).
+No Compose: `docker compose up --build` (ADR 0008) publica o SPA em `http://localhost:5173` (nginx faz proxy de `/api` e `/gateway`). Host `npm run dev` usa o proxy do Vite. Não bakeie `GATEWAY_TOKEN` no SPA (ADR 0018).
 
 ## Regras locais
 
-- Não introduza autenticação neste app sem decisão explícita.
+- O Operador identifica-se em `/entrar`. Não há CRUD de Operador na UI (insert/delete no Postgres). `GATEWAY_TOKEN` não entra no bundle.
 - Mantenha o cliente de API tolerante a pequenas variações de payload, mas preserve os endpoints esperados em `/api`.
 - Não comite `.env` nem valores secretos; versionar apenas `.env.example`.
 - Prefira componentes simples e reutilizáveis antes de adicionar bibliotecas de UI.

@@ -1,10 +1,6 @@
 import { ApiError } from "./api";
 
-export const GATEWAY_BASE = (import.meta.env.VITE_GATEWAY_BASE ?? "http://localhost:8090").replace(/\/$/, "");
-
-function gatewayToken(): string {
-  return String(import.meta.env.VITE_GATEWAY_TOKEN ?? "");
-}
+export const GATEWAY_BASE = (import.meta.env.VITE_GATEWAY_BASE ?? "/gateway").replace(/\/$/, "");
 
 export type MidiaResumo = {
   tipo: string;
@@ -52,20 +48,20 @@ export type PaginaMensagens = {
 type RequestOptions = {
   method?: string;
   body?: unknown;
-  auth?: boolean;
 };
 
 function gatewayUrl(path: string, query?: Record<string, string>): string {
   const normalized = path.startsWith("/") ? path : `/${path}`;
-  const url = new URL(`${GATEWAY_BASE}${normalized}`);
+  const params = new URLSearchParams();
   if (query) {
     Object.entries(query).forEach(([key, value]) => {
       if (value.trim() !== "") {
-        url.searchParams.set(key, value);
+        params.set(key, value);
       }
     });
   }
-  return url.toString();
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return `${GATEWAY_BASE}${normalized}${suffix}`;
 }
 
 async function parseResponse(response: Response): Promise<unknown> {
@@ -99,14 +95,8 @@ export async function gatewayRequest<T>(path: string, query?: Record<string, str
   const init: RequestInit = {
     method: options.method ?? "GET",
     headers,
+    credentials: "include",
   };
-  if (options.auth) {
-    const token = gatewayToken();
-    if (token.trim() === "") {
-      throw new Error("VITE_GATEWAY_TOKEN não configurado; não é possível enviar.");
-    }
-    headers.set("Authorization", `Bearer ${token}`);
-  }
   if (options.body !== undefined) {
     headers.set("content-type", "application/json");
     init.body = JSON.stringify(options.body);
@@ -114,6 +104,9 @@ export async function gatewayRequest<T>(path: string, query?: Record<string, str
   const response = await fetch(gatewayUrl(path, query), init);
   const payload = await parseResponse(response);
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== "undefined" && window.location.pathname !== "/entrar") {
+      window.location.assign("/entrar");
+    }
     throw new ApiError(response.status, errorMessage(response.status, payload), payload);
   }
   return payload as T;
@@ -141,7 +134,6 @@ export function listMensagens(conversaId: string, pagina: PaginaMensagens = {}):
 export function enviarTexto(conversaJid: string, corpo: string): Promise<unknown> {
   return gatewayRequest("/envios", undefined, {
     method: "POST",
-    auth: true,
     body: { conversaJid, corpo },
   });
 }
@@ -157,11 +149,11 @@ export type CanalSituacao = {
 };
 
 export function getCanal(): Promise<CanalSituacao> {
-  return gatewayRequest<CanalSituacao>("/canal", undefined, { auth: true });
+  return gatewayRequest<CanalSituacao>("/canal");
 }
 
 export function desparearCanal(): Promise<CanalSituacao> {
-  return gatewayRequest<CanalSituacao>("/canal/desparear", undefined, { method: "POST", auth: true });
+  return gatewayRequest<CanalSituacao>("/canal/desparear", undefined, { method: "POST" });
 }
 
 export function conversaRotulo(conversa: Pick<ConversaResumo, "jid" | "ultimaMensagem">): string {

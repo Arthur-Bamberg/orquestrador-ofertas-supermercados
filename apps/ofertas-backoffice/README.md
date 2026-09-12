@@ -10,15 +10,15 @@ npm install
 npm run dev
 ```
 
-Por padrão o app usa `VITE_API_BASE=http://localhost:8080` (catálogo) e `VITE_GATEWAY_BASE=http://localhost:8090` (Canal e Conversas). Copie `.env.example` para `.env` se precisar apontar para outras bases ou definir `VITE_GATEWAY_TOKEN` (Pareamento, envio).
+Por padrão o app usa a mesma origem: `/api` (catálogo) e `/gateway` (Canal e Conversas), via proxy do Vite ou do nginx. Copie `.env.example` para `.env` só se precisar apontar para outras bases.
 
 ```bash
 cp .env.example .env
 ```
 
-A API do backoffice deve estar rodando em `:8080` para a experiência local padrão.
+O Operador identifica-se em `/entrar` (nome + senha). Não há cadastro na UI — insira a linha no Postgres (veja o `.env.example` da raiz). A API do backoffice deve estar rodando em `:8080` para o proxy local padrão.
 
-No monorepo: `docker compose up --build` sobe API + SPA (ADR 0008). O browser usa `VITE_API_BASE` (padrão `http://localhost:8080`).
+No monorepo: `docker compose up --build` sobe API + SPA (ADR 0008). O browser usa `http://localhost:5173`.
 
 ## Build
 

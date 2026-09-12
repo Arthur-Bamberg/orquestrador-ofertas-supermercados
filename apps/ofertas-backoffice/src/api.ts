@@ -1,6 +1,6 @@
 import type { ApiListPayload, ArtifactItem, EntityRecord } from "./domain";
 
-export const API_BASE = (import.meta.env.VITE_API_BASE ?? "http://localhost:8080").replace(/\/$/, "");
+export const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 
 export class ApiError extends Error {
   status: number;
@@ -22,17 +22,16 @@ type RequestOptions = {
 
 function apiUrl(path: string, query?: Record<string, string>): string {
   const normalizedPath = path.startsWith("/api/") ? path : `/api${path.startsWith("/") ? path : `/${path}`}`;
-  const url = new URL(`${API_BASE}${normalizedPath}`);
-
+  const params = new URLSearchParams();
   if (query) {
     Object.entries(query).forEach(([key, value]) => {
       if (value.trim() !== "") {
-        url.searchParams.set(key, value);
+        params.set(key, value);
       }
     });
   }
-
-  return url.toString();
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return `${API_BASE}${normalizedPath}${suffix}`;
 }
 
 async function parseResponse(response: Response): Promise<unknown> {
@@ -74,6 +73,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const init: RequestInit = {
     method: options.method ?? "GET",
     headers,
+    credentials: "include",
   };
 
   if (options.body !== undefined) {
@@ -85,10 +85,39 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const payload = await parseResponse(response);
 
   if (!response.ok) {
+    if (response.status === 401 && !normalizedPathIsIdentificar(path)) {
+      redirectEntrar();
+    }
     throw new ApiError(response.status, errorMessage(response.status, payload), payload);
   }
 
   return payload as T;
+}
+
+function normalizedPathIsIdentificar(path: string): boolean {
+  return path.includes("/identificar");
+}
+
+function redirectEntrar(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (window.location.pathname === "/entrar") {
+    return;
+  }
+  window.location.assign("/entrar");
+}
+
+export function identificar(nome: string, senha: string): Promise<{ nome: string }> {
+  return request<{ nome: string }>("/identificar", { method: "POST", body: { nome, senha } });
+}
+
+export function sair(): Promise<void> {
+  return request<void>("/sair", { method: "POST" });
+}
+
+export function eu(): Promise<{ nome: string }> {
+  return request<{ nome: string }>("/eu");
 }
 
 export function normalizeList(payload: ApiListPayload | unknown): EntityRecord[] {
@@ -156,6 +185,7 @@ export async function uploadArtifact(documentoId: string, tentativa: string, fil
     apiUrl(`/documentos/${encodeURIComponent(documentoId)}/artefatos/${encodeURIComponent(tentativa)}/${encodedPath}`),
     {
       method: "PUT",
+      credentials: "include",
       headers: file.type ? { "content-type": file.type } : undefined,
       body: file,
     },
@@ -163,6 +193,9 @@ export async function uploadArtifact(documentoId: string, tentativa: string, fil
   const payload = await parseResponse(response);
 
   if (!response.ok) {
+    if (response.status === 401) {
+      redirectEntrar();
+    }
     throw new ApiError(response.status, errorMessage(response.status, payload), payload);
   }
 

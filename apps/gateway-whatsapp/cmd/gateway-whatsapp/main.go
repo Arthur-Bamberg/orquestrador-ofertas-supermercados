@@ -19,6 +19,7 @@ import (
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/infra/midia"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/infra/pg"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/infra/whatsapp"
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/operador"
 )
 
 func main() {
@@ -99,7 +100,14 @@ func main() {
 		}
 	}
 
-	server := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.New(gw, cfg.GatewayToken, cfg.CORSOrigin)}
+	ids, err := operador.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer ids.Close()
+
+	server := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.New(gw, cfg.GatewayToken, cfg.CORSOrigin, ids)}
 	go func() {
 		<-ctx.Done()
 		_ = server.Shutdown(context.Background())
