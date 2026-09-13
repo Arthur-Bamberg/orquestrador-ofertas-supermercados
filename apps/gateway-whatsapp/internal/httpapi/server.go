@@ -114,7 +114,15 @@ func (s *Server) envios(w http.ResponseWriter, r *http.Request) {
 			Conteudo: raw,
 		}
 	}
-	msg, err := s.gw.Enviar(r.Context(), out)
+	var (
+		msg domain.Mensagem
+		err error
+	)
+	if s.maquina(r) {
+		msg, err = s.gw.Enviar(r.Context(), out)
+	} else {
+		msg, err = s.gw.EnviarOperador(r.Context(), out)
+	}
 	if err != nil {
 		if errors.Is(err, application.ErrNaoPermitido) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})

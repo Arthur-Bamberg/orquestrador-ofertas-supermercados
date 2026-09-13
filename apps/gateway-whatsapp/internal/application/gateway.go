@@ -119,10 +119,12 @@ func (g *Gateway) Receber(ctx context.Context, in Entrada) (ResultadoReceber, er
 					return ResultadoReceber{}, err
 				}
 			}
-			if eraVazio && strings.TrimSpace(in.Corpo) != "" && g.deveAgente(in) {
-				log.Printf("whatsapp agente atender (corpo atualizado) conversa=%s corpo=%q", conversa.JID, in.Corpo)
-				if err := g.agente.Atender(ctx, string(conversa.JID), in.Corpo); err != nil {
-					log.Printf("whatsapp agente atender falhou: %v", err)
+			if eraVazio && strings.TrimSpace(in.Corpo) != "" && g.candidatoSaida(in) {
+				ctt, err := g.upsertRemetente(ctx, in)
+				if err != nil {
+					log.Printf("whatsapp contato na atualização falhou: %v", err)
+				} else {
+					g.depoisDePersistir(ctx, in, conversa, ctt)
 				}
 			}
 			return ResultadoReceber{Aceita: true, Conversa: conversa, Mensagem: existing, Duplicada: true}, nil
@@ -182,18 +184,7 @@ func (g *Gateway) Receber(ctx context.Context, in Entrada) (ResultadoReceber, er
 		}
 		return ResultadoReceber{}, err
 	}
-	if in.Grupo && !g.allow.PermiteConversa(in.ConversaJID, in.ConversaPN, in.ConversaLID) {
-		log.Printf("whatsapp grupo fora da allowlist: jid=%s nome=%q (adicione à WHATSAPP_ALLOWLIST para responder)", in.ConversaJID, in.ConversaNome)
-	}
-	if g.deveAgente(in) {
-		log.Printf("whatsapp agente atender conversa=%s corpo=%q", conversa.JID, in.Corpo)
-		if err := g.agente.Atender(ctx, string(conversa.JID), in.Corpo); err != nil {
-			log.Printf("whatsapp agente atender falhou: %v", err)
-		}
-	} else if g.deveAck(in) {
-		log.Printf("whatsapp ack enviado conversa=%s", conversa.JID)
-		_, _ = g.enviarNaConversa(ctx, conversa, contato, g.ackTexto, nil)
-	}
+	g.depoisDePersistir(ctx, in, conversa, contato)
 	return ResultadoReceber{Aceita: true, Conversa: conversa, Mensagem: msg}, nil
 }
 
@@ -243,27 +234,17 @@ func (g *Gateway) receberDuplicada(ctx context.Context, in Entrada) (ResultadoRe
 	return ResultadoReceber{Aceita: true, Conversa: conversa, Mensagem: existing, Duplicada: true}, nil
 }
 
-func (g *Gateway) deveAck(in Entrada) bool {
-	if g.agente != nil || g.ackTexto == "" || in.Status || in.Origem == domain.OrigemHistorico {
-		return false
+func (g *Gateway) upsertRemetente(ctx context.Context, in Entrada) (domain.Contato, error) {
+	convJID, convLID := domain.Identidade(in.ConversaJID, in.ConversaPN, in.ConversaLID)
+	remJID, remLID := domain.Identidade(in.RemetenteJID, in.RemetentePN, in.RemetenteLID)
+	if remJID == "" {
+		remJID, remLID = convJID, convLID
 	}
-	switch in.Tipo {
-	case domain.MensagemReacao, domain.MensagemRevogacao, domain.MensagemIndecifravel:
-		return false
-	}
-	if strings.TrimSpace(in.Corpo) == "" {
-		return false
-	}
-	if in.FromMe {
-		if !in.Grupo || g.foiEnviada(in.ProvedorID) {
-			return false
-		}
-	}
-	return g.allow.PermiteConversa(in.ConversaJID, in.ConversaPN, in.ConversaLID)
+	return g.repo.UpsertContato(ctx, domain.Contato{ID: domain.ContatoID(g.newID()), JID: remJID, JIDLID: remLID})
 }
 
-func (g *Gateway) deveAgente(in Entrada) bool {
-	if g.agente == nil || strings.TrimSpace(in.Corpo) == "" {
+func (g *Gateway) candidatoSaida(in Entrada) bool {
+	if strings.TrimSpace(in.Corpo) == "" {
 		return false
 	}
 	switch in.Tipo {
@@ -278,13 +259,67 @@ func (g *Gateway) deveAgente(in Entrada) bool {
 			return false
 		}
 	}
-	return g.allow.PermiteConversa(in.ConversaJID, in.ConversaPN, in.ConversaLID)
+	return true
+}
+
+func (g *Gateway) depoisDePersistir(ctx context.Context, in Entrada, conversa domain.Conversa, contato domain.Contato) {
+	if !g.candidatoSaida(in) {
+		return
+	}
+	if in.FromMe && in.Grupo {
+		g.chamarAgenteOuAck(ctx, in, conversa, contato)
+		return
+	}
+	if !contato.BoasVindas {
+		log.Printf("whatsapp boas-vindas conversa=%s contato=%s", conversa.JID, contato.JID)
+		if _, err := g.enviarNaConversa(ctx, conversa, contato, domain.TextoBoasVindas, nil); err != nil {
+			log.Printf("whatsapp boas-vindas falhou: %v", err)
+			return
+		}
+		contato.BoasVindas = true
+		if _, err := g.repo.UpsertContato(ctx, contato); err != nil {
+			log.Printf("whatsapp marcar boas-vindas falhou: %v", err)
+		}
+		return
+	}
+	if !contato.Aceite {
+		if strings.TrimSpace(in.Corpo) == "1" {
+			contato.Aceite = true
+			if _, err := g.repo.UpsertContato(ctx, contato); err != nil {
+				log.Printf("whatsapp marcar aceite falhou: %v", err)
+				return
+			}
+			log.Printf("whatsapp aceite conversa=%s contato=%s", conversa.JID, contato.JID)
+			if _, err := g.enviarNaConversa(ctx, conversa, contato, domain.TextoConfirmacaoAceite, nil); err != nil {
+				log.Printf("whatsapp confirmação de aceite falhou: %v", err)
+			}
+			return
+		}
+		log.Printf("whatsapp pedido de aceite conversa=%s contato=%s", conversa.JID, contato.JID)
+		if _, err := g.enviarNaConversa(ctx, conversa, contato, domain.TextoPedidoAceite, nil); err != nil {
+			log.Printf("whatsapp pedido de aceite falhou: %v", err)
+		}
+		return
+	}
+	g.chamarAgenteOuAck(ctx, in, conversa, contato)
+}
+
+func (g *Gateway) chamarAgenteOuAck(ctx context.Context, in Entrada, conversa domain.Conversa, contato domain.Contato) {
+	if g.agente != nil {
+		log.Printf("whatsapp agente atender conversa=%s corpo=%q", conversa.JID, in.Corpo)
+		if err := g.agente.Atender(ctx, string(conversa.JID), in.Corpo); err != nil {
+			log.Printf("whatsapp agente atender falhou: %v", err)
+		}
+		return
+	}
+	if g.ackTexto == "" {
+		return
+	}
+	log.Printf("whatsapp ack enviado conversa=%s", conversa.JID)
+	_, _ = g.enviarNaConversa(ctx, conversa, contato, g.ackTexto, nil)
 }
 
 func (g *Gateway) Enviar(ctx context.Context, out Saida) (domain.Mensagem, error) {
-	if !g.allow.PermiteConversa(out.ConversaJID) {
-		return domain.Mensagem{}, ErrNaoPermitido
-	}
 	jid := domain.NormalizarJID(out.ConversaJID)
 	tipo := domain.ConversaDireta
 	if strings.HasSuffix(string(jid), "@g.us") {
@@ -299,6 +334,13 @@ func (g *Gateway) Enviar(ctx context.Context, out Saida) (domain.Mensagem, error
 		return domain.Mensagem{}, err
 	}
 	return g.enviarNaConversa(ctx, conversa, contato, out.Corpo, out.Midia)
+}
+
+func (g *Gateway) EnviarOperador(ctx context.Context, out Saida) (domain.Mensagem, error) {
+	if !g.allow.PermiteConversa(out.ConversaJID) {
+		return domain.Mensagem{}, ErrNaoPermitido
+	}
+	return g.Enviar(ctx, out)
 }
 
 func (g *Gateway) enviarNaConversa(ctx context.Context, conversa domain.Conversa, contato domain.Contato, corpo string, midia *domain.MidiaBytes) (domain.Mensagem, error) {

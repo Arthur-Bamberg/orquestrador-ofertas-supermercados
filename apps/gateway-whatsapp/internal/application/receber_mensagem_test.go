@@ -68,7 +68,7 @@ func TestReceber_preservaTextoSeGuardarMidiaFalhar(t *testing.T) {
 	}
 }
 
-func TestReceber_persisteForaDaAllowlistSemAck(t *testing.T) {
+func TestReceber_persisteForaDaAllowlistComBoasVindas(t *testing.T) {
 	fx := newGW(t, "5511999999999")
 	got, err := fx.gw.Receber(context.Background(), application.Entrada{
 		ProvedorID:   "wamid.x",
@@ -82,15 +82,15 @@ func TestReceber_persisteForaDaAllowlistSemAck(t *testing.T) {
 	if !got.Aceita {
 		t.Fatal("deveria persistir")
 	}
-	if len(fx.canal.envios) != 0 {
-		t.Fatalf("ack fora da allowlist: %+v", fx.canal.envios)
+	if len(fx.canal.envios) != 1 || !strings.Contains(fx.canal.envios[0].Corpo, "TERMOS DE USO") {
+		t.Fatalf("esperava Boas-vindas fora da Allowlist: %+v", fx.canal.envios)
 	}
 	msgs, err := fx.gw.ListarMensagens(context.Background(), got.Conversa.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(msgs) != 1 || msgs[0].Corpo != "oi" {
-		t.Fatalf("msgs %+v", msgs)
+	if len(msgs) != 2 {
+		t.Fatalf("msgs %d", len(msgs))
 	}
 }
 
@@ -186,6 +186,298 @@ func TestReceber_fromMeDiretoNaoDisparaAgente(t *testing.T) {
 	}
 }
 
+func TestReceber_primeiraMensagemVivaEnviaBoasVindasSemAgente(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:    domain.NovaAllowlist("5511999999999"),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   &memMidia{files: map[string][]byte{}},
+		AckTexto: "ack-teste",
+		Agente:   ag,
+		NewID:    seqIDs(),
+	})
+	_, err := gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.novo",
+		ConversaJID:  "5511888888888",
+		RemetenteJID: "5511888888888",
+		Corpo:        "leite",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ag.calls) != 0 {
+		t.Fatalf("não deveria chamar Agente antes do Aceite: %+v", ag.calls)
+	}
+	if len(canal.envios) != 1 {
+		t.Fatalf("envios=%+v", canal.envios)
+	}
+	corpo := canal.envios[0].Corpo
+	if !strings.Contains(corpo, "TERMOS DE USO") || !strings.Contains(corpo, "Responda 1") {
+		t.Fatalf("esperava Boas-vindas com Termos de Uso, obteve %q", corpo)
+	}
+	if corpo == "ack-teste" {
+		t.Fatal("não deveria ser Ack")
+	}
+}
+
+func TestReceber_semAceiteReiteraPedidoENaoChamaAgente(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:    domain.NovaAllowlist("5511999999999"),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   &memMidia{files: map[string][]byte{}},
+		AckTexto: "ack-teste",
+		Agente:   ag,
+		NewID:    seqIDs(),
+	})
+	in := application.Entrada{
+		ConversaJID:  "5511888888888",
+		RemetenteJID: "5511888888888",
+	}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.bv", "leite")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.pedido", "óleo")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ag.calls) != 0 {
+		t.Fatalf("não deveria chamar Agente: %+v", ag.calls)
+	}
+	if len(canal.envios) != 2 || canal.envios[1].Corpo != domain.TextoPedidoAceite {
+		t.Fatalf("envios=%+v", canal.envios)
+	}
+}
+
+func TestReceber_umDepoisDasBoasVindasConcedeAceite(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:    domain.NovaAllowlist(""),
+		Repo:     repo,
+		Canal:    canal,
+		Midias:   &memMidia{files: map[string][]byte{}},
+		AckTexto: "ack-teste",
+		Agente:   ag,
+		NewID:    seqIDs(),
+	})
+	in := application.Entrada{ConversaJID: "5511888888888", RemetenteJID: "5511888888888"}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.bv", "oi")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.um", "1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ag.calls) != 0 {
+		t.Fatalf("1 não chama Agente: %+v", ag.calls)
+	}
+	if len(canal.envios) != 2 || canal.envios[1].Corpo != domain.TextoConfirmacaoAceite {
+		t.Fatalf("envios=%+v", canal.envios)
+	}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.lista", "leite")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ag.calls) != 1 || ag.calls[0].corpo != "leite" {
+		t.Fatalf("depois do Aceite deveria chamar Agente: %+v", ag.calls)
+	}
+}
+
+func TestReceber_primeiroUmNaoConcedeAceite(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:  domain.NovaAllowlist(""),
+		Repo:   repo,
+		Canal:  canal,
+		Midias: &memMidia{files: map[string][]byte{}},
+		Agente: ag,
+		NewID:  seqIDs(),
+	})
+	in := application.Entrada{ConversaJID: "5511888888888", RemetenteJID: "5511888888888"}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.um1", "1")); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(canal.envios[0].Corpo, "TERMOS DE USO") {
+		t.Fatalf("primeiro 1 ainda é Boas-vindas: %q", canal.envios[0].Corpo)
+	}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.leite", "leite")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ag.calls) != 0 {
+		t.Fatalf("sem Aceite não chama Agente: %+v", ag.calls)
+	}
+	if canal.envios[1].Corpo != domain.TextoPedidoAceite {
+		t.Fatalf("envios=%+v", canal.envios)
+	}
+}
+
+func TestReceber_aceiteEDoRemetenteNoGrupo(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:  domain.NovaAllowlist(""),
+		Repo:   repo,
+		Canal:  canal,
+		Midias: &memMidia{files: map[string][]byte{}},
+		Agente: ag,
+		NewID:  seqIDs(),
+	})
+	ana := application.Entrada{ConversaJID: "120363abc@g.us", RemetenteJID: "5511911111111", Grupo: true}
+	bruno := application.Entrada{ConversaJID: "120363abc@g.us", RemetenteJID: "5511922222222", Grupo: true}
+	if _, err := gw.Receber(context.Background(), with(ana, "wamid.ana1", "oi")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gw.Receber(context.Background(), with(ana, "wamid.ana2", "1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gw.Receber(context.Background(), with(bruno, "wamid.bruno1", "óleo")); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(canal.envios[len(canal.envios)-1].Corpo, "TERMOS DE USO") {
+		t.Fatalf("Bruno novo deveria receber Boas-vindas: %+v", canal.envios)
+	}
+	if _, err := gw.Receber(context.Background(), with(ana, "wamid.ana3", "leite")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ag.calls) != 1 || ag.calls[0].corpo != "leite" {
+		t.Fatalf("Ana com Aceite deveria chamar Agente: %+v", ag.calls)
+	}
+}
+
+func TestReceber_depoisDoAceiteSemAgenteEnviaAck(t *testing.T) {
+	fx := newGW(t, "")
+	in := application.Entrada{ConversaJID: "5511888888888", RemetenteJID: "5511888888888"}
+	if _, err := fx.gw.Receber(context.Background(), with(in, "wamid.bv", "oi")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.gw.Receber(context.Background(), with(in, "wamid.um", "1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.gw.Receber(context.Background(), with(in, "wamid.oi2", "oi de novo")); err != nil {
+		t.Fatal(err)
+	}
+	if len(fx.canal.envios) != 3 || fx.canal.envios[2].Corpo != "ack-teste" {
+		t.Fatalf("envios=%+v", fx.canal.envios)
+	}
+}
+
+func TestReceber_doisDepoisDasBoasVindasReiteraPedido(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	ag := &stubAgente{}
+	gw := application.New(application.Deps{
+		Allow:  domain.NovaAllowlist(""),
+		Repo:   repo,
+		Canal:  canal,
+		Midias: &memMidia{files: map[string][]byte{}},
+		Agente: ag,
+		NewID:  seqIDs(),
+	})
+	in := application.Entrada{ConversaJID: "5511888888888", RemetenteJID: "5511888888888"}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.bv", "oi")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.dois", "2")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ag.calls) != 0 {
+		t.Fatalf("2 não chama Agente: %+v", ag.calls)
+	}
+	if canal.envios[1].Corpo != domain.TextoPedidoAceite {
+		t.Fatalf("envios=%+v", canal.envios)
+	}
+}
+
+func TestReceber_umComEspacoConcedeAceite(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	gw := application.New(application.Deps{
+		Allow:  domain.NovaAllowlist(""),
+		Repo:   repo,
+		Canal:  canal,
+		Midias: &memMidia{files: map[string][]byte{}},
+		NewID:  seqIDs(),
+	})
+	in := application.Entrada{ConversaJID: "5511888888888", RemetenteJID: "5511888888888"}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.bv", "oi")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.um", "  1  ")); err != nil {
+		t.Fatal(err)
+	}
+	if canal.envios[1].Corpo != domain.TextoConfirmacaoAceite {
+		t.Fatalf("envios=%+v", canal.envios)
+	}
+}
+
+func TestReceber_falhaNasBoasVindasNaoMarcaFato(t *testing.T) {
+	repo := newMemRepo()
+	canal := &stubCanal{}
+	canal.setErr(errors.New("whatsapp down"))
+	gw := application.New(application.Deps{
+		Allow:  domain.NovaAllowlist(""),
+		Repo:   repo,
+		Canal:  canal,
+		Midias: &memMidia{files: map[string][]byte{}},
+		NewID:  seqIDs(),
+	})
+	in := application.Entrada{ConversaJID: "5511888888888", RemetenteJID: "5511888888888"}
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.bv", "oi")); err != nil {
+		t.Fatal(err)
+	}
+	canal.setErr(nil)
+	if _, err := gw.Receber(context.Background(), with(in, "wamid.2", "leite")); err != nil {
+		t.Fatal(err)
+	}
+	if len(canal.envios) != 1 || !strings.Contains(canal.envios[0].Corpo, "TERMOS DE USO") {
+		t.Fatalf("segunda tentativa deveria reenviar Boas-vindas: %+v", canal.envios)
+	}
+}
+
+func TestReceber_reacaoEMidiaSemTextoNaoDisparamPortao(t *testing.T) {
+	fx := newGW(t, "")
+	if _, err := fx.gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.reac",
+		ConversaJID:  "5511888888888",
+		RemetenteJID: "5511888888888",
+		Corpo:        "👍",
+		Tipo:         domain.MensagemReacao,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.gw.Receber(context.Background(), application.Entrada{
+		ProvedorID:   "wamid.img",
+		ConversaJID:  "5511888888888",
+		RemetenteJID: "5511888888888",
+		Corpo:        "",
+		Midia: &domain.MidiaBytes{
+			Tipo:     domain.MidiaImagem,
+			Filename: "a.jpg",
+			MIME:     "image/jpeg",
+			Conteudo: []byte{1},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(fx.canal.envios) != 0 {
+		t.Fatalf("reação e mídia sem texto não disparam portão: %+v", fx.canal.envios)
+	}
+}
+
+func with(in application.Entrada, provedor, corpo string) application.Entrada {
+	in.ProvedorID = provedor
+	in.Corpo = corpo
+	return in
+}
+
 func TestReceber_persisteTextoDeConversaNaAllowlist(t *testing.T) {
 	fx := newGW(t, "5511999999999")
 	got, err := fx.gw.Receber(context.Background(), application.Entrada{
@@ -257,7 +549,7 @@ func TestReceber_grupoAllowlistedViraConversaGrupo(t *testing.T) {
 	}
 }
 
-func TestReceber_grupoForaDaAllowlistPersisteSemAckMesmoComRemetentePermitido(t *testing.T) {
+func TestReceber_grupoForaDaAllowlistPersisteComBoasVindas(t *testing.T) {
 	fx := newGW(t, "5511999999999")
 	got, err := fx.gw.Receber(context.Background(), application.Entrada{
 		ProvedorID:   "wamid.g2",
@@ -272,8 +564,8 @@ func TestReceber_grupoForaDaAllowlistPersisteSemAckMesmoComRemetentePermitido(t 
 	if !got.Aceita {
 		t.Fatal("deveria persistir o grupo")
 	}
-	if len(fx.canal.envios) != 0 {
-		t.Fatalf("ack no grupo fora da lista: %+v", fx.canal.envios)
+	if len(fx.canal.envios) != 1 || !strings.Contains(fx.canal.envios[0].Corpo, "TERMOS DE USO") {
+		t.Fatalf("esperava Boas-vindas no grupo: %+v", fx.canal.envios)
 	}
 	if got.Conversa.Tipo != domain.ConversaGrupo {
 		t.Fatalf("tipo=%s", got.Conversa.Tipo)
@@ -326,6 +618,7 @@ func TestReceber_notificaAgenteNoLugarDoAck(t *testing.T) {
 		Agente:   ag,
 		NewID:    seqIDs(),
 	})
+	aceitar(t, repo, "5511999999999")
 	got, err := gw.Receber(context.Background(), application.Entrada{
 		ProvedorID:   "wamid.agente",
 		ConversaJID:  "5511999999999",
@@ -425,9 +718,7 @@ func TestReceber_duplicadaAtualizaCorpoVazioEDisparaAgente(t *testing.T) {
 	}
 }
 
-
-
-func TestReceber_foraDaAllowlistNaoChamaAgente(t *testing.T) {
+func TestReceber_foraDaAllowlistComAceiteChamaAgente(t *testing.T) {
 	repo := newMemRepo()
 	canal := &stubCanal{}
 	ag := &stubAgente{}
@@ -440,6 +731,7 @@ func TestReceber_foraDaAllowlistNaoChamaAgente(t *testing.T) {
 		Agente:   ag,
 		NewID:    seqIDs(),
 	})
+	aceitar(t, repo, "5511888888888")
 	if _, err := gw.Receber(context.Background(), application.Entrada{
 		ProvedorID:   "wamid.fora",
 		ConversaJID:  "5511888888888",
@@ -448,8 +740,8 @@ func TestReceber_foraDaAllowlistNaoChamaAgente(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(ag.calls) != 0 || len(canal.envios) != 0 {
-		t.Fatalf("agente=%+v canal=%+v", ag.calls, canal.envios)
+	if len(ag.calls) != 1 || ag.calls[0].corpo != "leite" {
+		t.Fatalf("com Aceite o Agente atende fora da Allowlist: %+v", ag.calls)
 	}
 }
 
@@ -503,7 +795,7 @@ func TestReceber_fromMeEmGrupoSemAgenteEnviaAck(t *testing.T) {
 	}
 }
 
-func TestReceber_fromMeEmGrupoForaDaAllowlistNaoDispara(t *testing.T) {
+func TestReceber_fromMeEmGrupoDisparaAgenteForaDaAllowlist(t *testing.T) {
 	repo := newMemRepo()
 	canal := &stubCanal{}
 	ag := &stubAgente{}
@@ -527,8 +819,8 @@ func TestReceber_fromMeEmGrupoForaDaAllowlistNaoDispara(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ag.calls) != 0 || len(canal.envios) != 0 {
-		t.Fatalf("não deveria disparar fora da allowlist: ag=%+v canal=%+v", ag.calls, canal.envios)
+	if len(ag.calls) != 1 || ag.calls[0].corpo != "tomate e arroz" {
+		t.Fatalf("FromMe em grupo não usa Allowlist nem Aceite: %+v", ag.calls)
 	}
 }
 
@@ -578,6 +870,7 @@ func TestReceber_mensagemEnviadaPeloGatewayNaoGeraLoop(t *testing.T) {
 
 func TestReceber_enviaAckNaMesmaConversa(t *testing.T) {
 	fx := newGW(t, "120363abc@g.us")
+	aceitar(t, fx.repo, "5511999999999")
 	got, err := fx.gw.Receber(context.Background(), application.Entrada{
 		ProvedorID:   "wamid.gack",
 		ConversaJID:  "120363abc@g.us",
@@ -667,7 +960,7 @@ func TestEnviar_marcaFalhouSeCanalErra(t *testing.T) {
 
 func TestEnviar_silencioForaDaAllowlist(t *testing.T) {
 	fx := newGW(t, "5511999999999")
-	_, err := fx.gw.Enviar(context.Background(), application.Saida{
+	_, err := fx.gw.EnviarOperador(context.Background(), application.Saida{
 		ConversaJID: "5511888888888",
 		Corpo:       "spam",
 	})
@@ -676,6 +969,20 @@ func TestEnviar_silencioForaDaAllowlist(t *testing.T) {
 	}
 	if len(fx.canal.envios) != 0 {
 		t.Fatalf("enviou %+v", fx.canal.envios)
+	}
+}
+
+func TestEnviar_agenteEntregaForaDaAllowlist(t *testing.T) {
+	fx := newGW(t, "5511999999999")
+	msg, err := fx.gw.Enviar(context.Background(), application.Saida{
+		ConversaJID: "5511888888888",
+		Corpo:       "Resposta",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg.Corpo != "Resposta" || len(fx.canal.envios) != 1 {
+		t.Fatalf("msg=%+v envios=%+v", msg, fx.canal.envios)
 	}
 }
 
@@ -762,6 +1069,21 @@ func newMemRepo() *memRepo {
 	}
 }
 
+func aceitar(t *testing.T, repo *memRepo, jids ...string) {
+	t.Helper()
+	for i, raw := range jids {
+		j := domain.NormalizarJID(raw)
+		if _, err := repo.UpsertContato(context.Background(), domain.Contato{
+			ID:         domain.ContatoID("aceite-" + strconv.Itoa(i) + "-" + string(j)),
+			JID:        j,
+			BoasVindas: true,
+			Aceite:     true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func (m *memRepo) UpsertContato(_ context.Context, c domain.Contato) (domain.Contato, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -832,6 +1154,12 @@ func (m *memRepo) mergeContato(existing, in domain.Contato) domain.Contato {
 	}
 	if strings.HasSuffix(string(existing.JID), "@lid") && in.JID != "" && !strings.HasSuffix(string(in.JID), "@lid") {
 		existing.JID = in.JID
+	}
+	if in.BoasVindas {
+		existing.BoasVindas = true
+	}
+	if in.Aceite {
+		existing.Aceite = true
 	}
 	m.contatos[existing.ID] = existing
 	m.indexContato(existing)

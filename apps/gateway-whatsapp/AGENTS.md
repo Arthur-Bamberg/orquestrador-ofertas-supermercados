@@ -1,6 +1,6 @@
 # AGENTS.md — gateway-whatsapp
 
-Gateway do canal WhatsApp. Glossário: [`CONTEXT.md`](./CONTEXT.md). Workspace: [`../../AGENTS.md`](../../AGENTS.md). ADRs: [`../../docs/adr/0007-gateway-whatsapp-whatsmeow.md`](../../docs/adr/0007-gateway-whatsapp-whatsmeow.md), [`../../docs/adr/0009-backoffice-le-canal-via-gateway.md`](../../docs/adr/0009-backoffice-le-canal-via-gateway.md), [`../../docs/adr/0017-backoffice-pareamento-via-gateway.md`](../../docs/adr/0017-backoffice-pareamento-via-gateway.md), [`../../docs/adr/0018-operador-backoffice.md`](../../docs/adr/0018-operador-backoffice.md), [`docs/adr/0001-rastro-completo-whatsapp.md`](./docs/adr/0001-rastro-completo-whatsapp.md), [`docs/adr/0003-receber-concorrente-unique.md`](./docs/adr/0003-receber-concorrente-unique.md).
+Gateway do canal WhatsApp. Glossário: [`CONTEXT.md`](./CONTEXT.md). Workspace: [`../../AGENTS.md`](../../AGENTS.md). ADRs: [`../../docs/adr/0007-gateway-whatsapp-whatsmeow.md`](../../docs/adr/0007-gateway-whatsapp-whatsmeow.md), [`../../docs/adr/0009-backoffice-le-canal-via-gateway.md`](../../docs/adr/0009-backoffice-le-canal-via-gateway.md), [`../../docs/adr/0017-backoffice-pareamento-via-gateway.md`](../../docs/adr/0017-backoffice-pareamento-via-gateway.md), [`../../docs/adr/0018-operador-backoffice.md`](../../docs/adr/0018-operador-backoffice.md), [`../../docs/adr/0019-aceite-no-contato-em-vez-de-allowlist.md`](../../docs/adr/0019-aceite-no-contato-em-vez-de-allowlist.md), [`docs/adr/0001-rastro-completo-whatsapp.md`](./docs/adr/0001-rastro-completo-whatsapp.md), [`docs/adr/0003-receber-concorrente-unique.md`](./docs/adr/0003-receber-concorrente-unique.md).
 
 Module path: `github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp`
 
@@ -12,7 +12,7 @@ Long-running process that:
 2. Accepts inbound text and media in 1:1, groups and Status (stories)
 3. Persists Contato / Conversa / Mensagem in Postgres schema `whatsapp` (allowlist does **not** gate INSERT)
 4. Stores media bytes under `MIDIA_ROOT` (best-effort; row is kept if download fails)
-5. Sends a static ack only to allowlisted Conversas when `AGENTE_URL` is empty (no Oferta lookup). With `AGENTE_URL`, those live text Mensagens go to `agente-ofertas` instead of Ack
+5. First live text from a Contato without Boas-vindas gets the presentation + Termos de Uso (`1`/`2`). Later texts without Aceite get Pedido de Aceite. After Aceite: static ack when `AGENTE_URL` is empty; with `AGENTE_URL`, those Mensagens go to `agente-ofertas`. Allowlist does **not** gate this path. FromMe in a group skips the Aceite gate.
 6. Exposes `GET /health`, `GET /ready` (open); `GET /conversas`, `GET /conversas/{id}/mensagens`, `GET /mensagens/{id}/midia`, `GET /canal`, `POST /canal/desparear` (Operador cookie); `POST /envios` (Operador cookie **or** Bearer `GATEWAY_TOKEN`)
 
 Does **not** import `modules/ofertas-store`. The Agente is `apps/agente-ofertas`.
@@ -56,7 +56,7 @@ With `WHATSAPP_STUB=1`, no QR; `/ready` is up; `POST /envios` talks to the stub.
 
 Live WhatsApp: `WHATSAPP_STUB=0`, dedicated number, scan the QR on **Canal** in the backoffice (or gateway logs). Opt-in tests only: `LIVE_WHATSAPP=1` (none in the default suite).
 
-Allowlist: comma-separated E.164 and/or group JIDs (`120363…@g.us`). Matching strips device suffix and the Brazilian extra `9` after DDD. The list gates **ack and POST /envios**, not persistence or `GET /conversas`. Group messages are stored even if the group JID is not listed. The backoffice compositor only appears when the Conversa resumo has `permitido: true`.
+Allowlist: comma-separated E.164 and/or group JIDs (`120363…@g.us`). Matching strips device suffix and the Brazilian extra `9` after DDD. The list gates **only the Operador compositor** (`permitido` + `POST /envios` with Operador cookie). Bearer `GATEWAY_TOKEN` (Agente) and automatic Canal replies (Boas-vindas, Pedido de Aceite, Ack) ignore it. Persistence and `GET /conversas` were already ungated.
 
 History sync (`events.HistorySync`) is ingested into `whatsapp.mensagem` (`origem=historico`). Chunks already dispatched before this handler existed are gone unless you re-pair (new QR). Inspect:
 

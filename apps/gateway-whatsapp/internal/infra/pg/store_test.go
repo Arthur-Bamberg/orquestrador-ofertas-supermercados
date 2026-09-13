@@ -3,6 +3,7 @@ package pg_test
 import (
 	"context"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,6 +32,14 @@ func TestStore_receberGrupoEMidiaRoundtrip(t *testing.T) {
 			return t.Name() + "-" + itoa(n.Add(1))
 		},
 	})
+	if _, err := repo.UpsertContato(context.Background(), domain.Contato{
+		ID:         domain.ContatoID("aceite-grupo"),
+		JID:        domain.NormalizarJID("5511999999999"),
+		BoasVindas: true,
+		Aceite:     true,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	got, err := gw.Receber(context.Background(), application.Entrada{
 		ProvedorID:   "wamid.pg1",
 		ConversaJID:  "120363abc@g.us",
@@ -83,6 +92,14 @@ func TestStore_receberConcorrenteMesmoProvedorNaoErro(t *testing.T) {
 			return t.Name() + "-" + itoa(n.Add(1))
 		},
 	})
+	if _, err := repo.UpsertContato(context.Background(), domain.Contato{
+		ID:         domain.ContatoID("aceite-race"),
+		JID:        domain.NormalizarJID("5511999999999"),
+		BoasVindas: true,
+		Aceite:     true,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	in := application.Entrada{
 		ProvedorID:   "wamid.race",
 		ConversaJID:  "5511999999999",
@@ -143,6 +160,16 @@ func TestStore_listarConversasOrdenaPelaUltima(t *testing.T) {
 		},
 	})
 	ctx := context.Background()
+	for i, jid := range []string{"5511999999999", "5511888888888"} {
+		if _, err := repo.UpsertContato(ctx, domain.Contato{
+			ID:         domain.ContatoID("aceite-list-" + itoa(int64(i+1))),
+			JID:        domain.NormalizarJID(jid),
+			BoasVindas: true,
+			Aceite:     true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err := gw.Receber(ctx, application.Entrada{
 		ProvedorID:   "wamid.old",
 		ConversaJID:  "5511999999999",
@@ -174,6 +201,64 @@ func TestStore_listarConversasOrdenaPelaUltima(t *testing.T) {
 	}
 	if got[0].TotalMensagens != 1 {
 		t.Fatalf("total=%d", got[0].TotalMensagens)
+	}
+}
+
+func TestStore_boasVindasEAceitePersistem(t *testing.T) {
+	repo := pgtest.New(t)
+	var n atomic.Int64
+	gw := application.New(application.Deps{
+		Allow: domain.NovaAllowlist(""),
+		Repo:  repo,
+		Canal: stubCanal{},
+		NewID: func() string {
+			return t.Name() + "-" + itoa(n.Add(1))
+		},
+	})
+	ctx := context.Background()
+	first, err := gw.Receber(ctx, application.Entrada{
+		ProvedorID:   "wamid.bv",
+		ConversaJID:  "5511777777777",
+		RemetenteJID: "5511777777777",
+		Corpo:        "oi",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gw.Receber(ctx, application.Entrada{
+		ProvedorID:   "wamid.um",
+		ConversaJID:  "5511777777777",
+		RemetenteJID: "5511777777777",
+		Corpo:        "1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gw.Receber(ctx, application.Entrada{
+		ProvedorID:   "wamid.lista",
+		ConversaJID:  "5511777777777",
+		RemetenteJID: "5511777777777",
+		Corpo:        "leite",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := gw.ListarMensagens(ctx, first.Conversa.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	temBoas, temConfirmacao := false, false
+	for _, m := range msgs {
+		if m.Direcao != domain.DirecaoSaida {
+			continue
+		}
+		if strings.Contains(m.Corpo, "TERMOS DE USO") {
+			temBoas = true
+		}
+		if m.Corpo == domain.TextoConfirmacaoAceite {
+			temConfirmacao = true
+		}
+	}
+	if !temBoas || !temConfirmacao {
+		t.Fatalf("saidas incompletas (%d msgs)", len(msgs))
 	}
 }
 

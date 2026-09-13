@@ -18,6 +18,7 @@ func TestListarConversas_ordenaPelaUltimaEMarcaPermitido(t *testing.T) {
 		Canal: &stubCanal{},
 		NewID: seqIDs(),
 	})
+	aceitar(t, repo, "5511999999999", "5511888888888")
 	ctx := context.Background()
 	old := time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC)
 	newer := time.Date(2026, 8, 2, 10, 0, 0, 0, time.UTC)
@@ -74,6 +75,7 @@ func TestListarConversas_filtraTipoEQ(t *testing.T) {
 		Canal: &stubCanal{},
 		NewID: seqIDs(),
 	})
+	aceitar(t, repo, "5511999999999", "5511888888888")
 	ctx := context.Background()
 	if _, err := gw.Receber(ctx, application.Entrada{
 		ProvedorID:   "wamid.d",

@@ -60,9 +60,11 @@ const (
 )
 
 type Contato struct {
-	ID     ContatoID
-	JID    JID
-	JIDLID JID
+	ID         ContatoID
+	JID        JID
+	JIDLID     JID
+	BoasVindas bool
+	Aceite     bool
 }
 
 type Conversa struct {

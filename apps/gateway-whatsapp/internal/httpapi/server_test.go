@@ -92,10 +92,25 @@ func TestHealthReadyEEnvios(t *testing.T) {
 	if res.Code != http.StatusCreated {
 		t.Fatalf("envio Operador %d %s", res.Code, res.Body.String())
 	}
+
+	req = httptest.NewRequest(http.MethodPost, "/envios", bytes.NewBufferString(`{"conversaJid":"5511888888888","corpo":"fora"}`))
+	req.AddCookie(&http.Cookie{Name: operador.CookieName, Value: cookieOperador})
+	res = httptest.NewRecorder()
+	hOp.ServeHTTP(res, req)
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("Operador fora da Allowlist %d %s", res.Code, res.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPost, "/envios", bytes.NewBufferString(`{"conversaJid":"5511888888888","corpo":"resposta"}`))
+	req.Header.Set("Authorization", "Bearer secret")
+	res = httptest.NewRecorder()
+	hOp.ServeHTTP(res, req)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("Agente fora da Allowlist %d %s", res.Code, res.Body.String())
+	}
 }
 
 func TestRastroHTTP_conversasMensagensMidiaCORS(t *testing.T) {
-	gw := newGW(t, true)
+	gw := newGW(t, true, "5511999999999", "5511888888888")
 	ctx := context.Background()
 	old := time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC)
 	mid := time.Date(2026, 8, 1, 11, 0, 0, 0, time.UTC)
@@ -389,13 +404,25 @@ type readyCanal struct {
 
 func (c readyCanal) Conectado() bool { return c.on }
 
-func newGW(t *testing.T, conectado bool) *application.Gateway {
+func newGW(t *testing.T, conectado bool, aceites ...string) *application.Gateway {
 	t.Helper()
 	n := 0
 	var mu sync.Mutex
+	repo := newMemRepo()
+	for i, raw := range aceites {
+		j := domain.NormalizarJID(raw)
+		if _, err := repo.UpsertContato(context.Background(), domain.Contato{
+			ID:         domain.ContatoID("aceite-" + strconv.Itoa(i) + "-" + string(j)),
+			JID:        j,
+			BoasVindas: true,
+			Aceite:     true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return application.New(application.Deps{
 		Allow:  domain.NovaAllowlist("5511999999999"),
-		Repo:   newMemRepo(),
+		Repo:   repo,
 		Canal:  &readyCanal{on: conectado},
 		Midias: memMidia{files: map[string][]byte{}},
 		NewID: func() string {
@@ -442,7 +469,15 @@ func (m *memRepo) UpsertContato(_ context.Context, c domain.Contato) (domain.Con
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if id, ok := m.contatoJID[c.JID]; ok {
-		return m.contatos[id], nil
+		existing := m.contatos[id]
+		if c.BoasVindas {
+			existing.BoasVindas = true
+		}
+		if c.Aceite {
+			existing.Aceite = true
+		}
+		m.contatos[id] = existing
+		return existing, nil
 	}
 	m.contatos[c.ID] = c
 	m.contatoJID[c.JID] = c.ID

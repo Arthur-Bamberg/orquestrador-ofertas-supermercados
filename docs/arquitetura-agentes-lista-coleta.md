@@ -8,22 +8,30 @@ Dois papéis de Agente, **um** app (`agente-ofertas`). A Coleta de vitrine é o 
 
 | Papel | Quem chama | Faz | Não faz |
 |-------|------------|-----|---------|
-| **Agente da Lista** | Canal (Mensagem viva na Allowlist) ou assistente | Parte a Lista em Itens; obtém o Termo de cada Item; dispara **em paralelo** uma Coleta por Termo não vazio; lê Ofertas vigentes de encarte (Documento); espera todas as consultas | Não envia WhatsApp; não escolhe Produto |
+| **Agente da Lista** | Canal (Mensagem viva com Aceite no Contato remetente) ou assistente | Classifica a Intenção; se Lista, parte em Itens; obtém o Termo de cada Item; dispara **em paralelo** uma Coleta por Termo não vazio; lê Ofertas vigentes de encarte (Documento); espera todas as Coletas e o encarte | Não envia WhatsApp; não escolhe Produto |
 | **Agente de Resposta** | Agente da Lista, só depois de todas as consultas | Organiza a Resposta (Produto de menos extras no Termo, relacionados fora, mais barato; empate de preço lista) e chama o Canal (`POST /envios`) | Não busca; não persiste Oferta; não deriva o Termo; não consulta o catálogo por conta própria |
 
-Cadeia: Lista → Coletas + encarte → Resposta. Não há Agente de Filtragem.
+Cadeia: Intenção; se Lista → Coletas + encarte → Resposta. Não há Agente de Filtragem.
 
 ## Sequência
 
 ```
-Mensagem viva (Allowlist)
+Mensagem viva de texto
         │
-        ▼
+        ├─ sem Boas-vindas → Boas-vindas (Canal; não chama Agente; não lê `1`)
+        └─ com Boas-vindas
+                ├─ sem Aceite, corpo ≠ `1` → Pedido de Aceite (Canal)
+                ├─ sem Aceite, corpo `1` → Aceite + confirmação (Canal)
+                └─ com Aceite
+                        ▼
 Agente da Lista          ← gateway-whatsapp (não chama Resposta nem o scraper)
         │
-        ├─ Item 1 → Termo ──► ofertas-scraper-v2 (Coleta) ─┐
-        ├─ Item 2 → Termo ──► ofertas-scraper-v2 (Coleta) ─┼─ paralelo
-        └─ Item N → Termo ──► ofertas-scraper-v2 (Coleta) ─┘
+        ├─ Recusa  → direta: texto de Recusa; grupo: nada
+        ├─ Consulta → direta: texto de Consulta; grupo: nada
+        └─ Lista
+            ├─ Item 1 → Termo ──► ofertas-scraper-v2 (Coleta) ─┐
+            ├─ Item 2 → Termo ──► ofertas-scraper-v2 (Coleta) ─┼─ paralelo
+            └─ Item N → Termo ──► ofertas-scraper-v2 (Coleta) ─┘
         │                    │
         │                    ▼
         │           persiste todo cartão completo
@@ -72,7 +80,7 @@ Zero tipos depois disso: diz que não achou.
 
 | App | Neste fluxo |
 |-----|-------------|
-| `gateway-whatsapp` | Entrega a Lista ao Agente da Lista; envia a Resposta (`POST /envios`). Não lê Oferta. |
+| `gateway-whatsapp` | Entrega o texto da Mensagem ao Agente da Lista; envia a Resposta (`POST /envios`). Não lê Oferta. |
 | `agente-ofertas` | Os dois papéis. Assistente de catálogo (MCP / `POST /interpretar`) entra no Agente da Lista sem Canal — mesma cadeia. |
 | `ofertas-scraper-v2` | Coleta de vitrine. |
 | `ofertas-scraper` | Encarte (Fonte → Documento → Extrator). Fora desta cadeia. |
@@ -80,9 +88,9 @@ Zero tipos depois disso: diz que não achou.
 
 ## Contratos entre papéis (mesmo processo)
 
-1. **Canal → Agente da Lista:** texto da Mensagem (e JID da Conversa para a Resposta voltar).
-2. **Agente da Lista → Coleta:** um Termo por Item (vazio não chama); N chamadas em paralelo.
+1. **Canal → Agente da Lista:** só se o Contato remetente tem Aceite; texto da Mensagem (e JID da Conversa para a saída voltar). O Agente da Lista classifica a Intenção. Sem Aceite o Canal não chama o Agente.
+2. **Agente da Lista → Coleta:** só se Intenção for Lista; um Termo por Item (vazio não chama); N chamadas em paralelo.
 3. **Coleta → Agente da Lista:** cartões/Ofertas persistidos daquela busca.
 4. **Agente da Lista → encarte:** Ofertas vigentes ligadas a Documento cujo Produto/Marca casa com o Termo.
-5. **Agente da Lista → Agente de Resposta:** conjunto reunido (consultado + encarte), só depois de todas as consultas.
-6. **Agente de Resposta → Canal:** texto da Resposta + JID.
+5. **Agente da Lista → Agente de Resposta:** conjunto reunido (consultado + encarte), só depois de todas as Coletas e do encarte da Lista.
+6. **Agente de Resposta → Canal:** texto da Resposta + JID. Consulta e Recusa na direta também saem por `POST /envios`; em grupo não.

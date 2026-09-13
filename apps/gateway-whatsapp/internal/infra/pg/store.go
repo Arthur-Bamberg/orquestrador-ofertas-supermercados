@@ -108,8 +108,8 @@ func (s *Store) UpsertContato(ctx context.Context, c domain.Contato) (domain.Con
 	if ok {
 		return s.mergeContato(ctx, existing, c)
 	}
-	_, err = s.pool.Exec(ctx, `INSERT INTO whatsapp.contato (id, jid, jid_lid) VALUES ($1, $2, $3)`,
-		string(c.ID), string(c.JID), string(c.JIDLID))
+	_, err = s.pool.Exec(ctx, `INSERT INTO whatsapp.contato (id, jid, jid_lid, boas_vindas, aceite) VALUES ($1, $2, $3, $4, $5)`,
+		string(c.ID), string(c.JID), string(c.JIDLID), c.BoasVindas, c.Aceite)
 	if err == nil {
 		return c, nil
 	}
@@ -133,7 +133,7 @@ func (s *Store) findContato(ctx context.Context, keys ...domain.JID) (domain.Con
 		if k == "" {
 			continue
 		}
-		err := s.pool.QueryRow(ctx, `SELECT id, jid, jid_lid FROM whatsapp.contato WHERE jid=$1 OR jid_lid=$1`, string(k)).Scan(&c.ID, &c.JID, &lid)
+		err := s.pool.QueryRow(ctx, `SELECT id, jid, jid_lid, boas_vindas, aceite FROM whatsapp.contato WHERE jid=$1 OR jid_lid=$1`, string(k)).Scan(&c.ID, &c.JID, &lid, &c.BoasVindas, &c.Aceite)
 		if err == pgx.ErrNoRows {
 			continue
 		}
@@ -154,14 +154,21 @@ func (s *Store) mergeContato(ctx context.Context, existing, in domain.Contato) (
 	if strings.HasSuffix(string(jid), "@lid") && in.JID != "" && !strings.HasSuffix(string(in.JID), "@lid") {
 		jid = in.JID
 	}
-	if jid == existing.JID && lid == existing.JIDLID {
+	boas, aceite := existing.BoasVindas, existing.Aceite
+	if in.BoasVindas {
+		boas = true
+	}
+	if in.Aceite {
+		aceite = true
+	}
+	if jid == existing.JID && lid == existing.JIDLID && boas == existing.BoasVindas && aceite == existing.Aceite {
 		return existing, nil
 	}
-	_, err := s.pool.Exec(ctx, `UPDATE whatsapp.contato SET jid=$2, jid_lid=$3 WHERE id=$1`, string(existing.ID), string(jid), string(lid))
+	_, err := s.pool.Exec(ctx, `UPDATE whatsapp.contato SET jid=$2, jid_lid=$3, boas_vindas=$4, aceite=$5 WHERE id=$1`, string(existing.ID), string(jid), string(lid), boas, aceite)
 	if err != nil {
 		return domain.Contato{}, err
 	}
-	existing.JID, existing.JIDLID = jid, lid
+	existing.JID, existing.JIDLID, existing.BoasVindas, existing.Aceite = jid, lid, boas, aceite
 	return existing, nil
 }
 

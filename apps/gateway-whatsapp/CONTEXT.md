@@ -5,11 +5,27 @@ Canal WhatsApp do workspace de ofertas: recebe e envia Mensagens (texto e Mídia
 ## Language
 
 **Contato**:
-Pessoa no canal, identificada pelo JID canónico de telefone (`…@s.whatsapp.net`) quando o evento traz PN; o LID (`…@lid`) fica em `jid_lid`.
+Pessoa no canal, identificada pelo JID canónico de telefone (`…@s.whatsapp.net`) quando o evento traz PN; o LID (`…@lid`) fica em `jid_lid`. Boas-vindas e Aceite são deste Contato, não da Conversa.
 _Avoid_: usuário, cliente, user, sender (como entidade)
 
+**Boas-vindas**:
+Fato no Contato de que o Canal já enviou a apresentação (Pague Menos Mercado, Termos de Uso e o pedido de Aceite com 1 ou 2). Uma vez por Contato, na Conversa da primeira Mensagem viva de texto (inclusive grupo); nessa Mensagem o Canal não lê `1` — ainda não houve apresentação.
+_Avoid_: bem-vindo, welcome, flag de bem-vindo, apresentação (como entidade persistida)
+
+**Termos de Uso**:
+Texto jurídico apresentado nas Boas-vindas, com o qual o Contato faz o Aceite. Não é o Termo do Agente (busca do Item). Não volta no Pedido de Aceite.
+_Avoid_: Termo (sem “de Uso”), ToS, política de privacidade (como se fosse este texto)
+
+**Pedido de Aceite**:
+Mensagem curta depois das Boas-vindas, ainda sem Aceite: o uso exige Aceite e pergunta 1 ou 2. Não republica os Termos de Uso. Não é Consulta nem Ack.
+_Avoid_: nag, lembrete, boas-vindas (como se fosse de novo)
+
+**Aceite**:
+Concordância do Contato com os Termos de Uso; uma vez no Contato, vale em toda Conversa desse Contato. Só o texto `1` concede; `2` e qualquer outro corpo reiteram com Pedido de Aceite. Sem Aceite o texto não é Lista, Consulta nem Recusa.
+_Avoid_: termo-aceito, consentimento, opt-in, usuário aceitou, recusa dos Termos (como fato persistido)
+
 **Conversa**:
-Thread do canal: **direta** (1:1), **grupo** (`…@g.us`) ou **status** (`status@broadcast`). A allowlist vale sobre o JID da Conversa só para **Ack** e `POST /envios`; o rastro persiste em todas.
+Thread do canal: **direta** (1:1), **grupo** (`…@g.us`) ou **status** (`status@broadcast`). O rastro persiste em todas. O portão do produto é o Aceite do Contato; a Allowlist só vale para o compositor do Operador.
 _Avoid_: chat, sala, thread
 
 **Mensagem**:
@@ -33,9 +49,9 @@ Operação do Operador que desfaz o Pareamento: só quando o Canal está conecta
 _Avoid_: logout (como sinónimo de desconectado), desconectar (socket cair), apagar rastro
 
 **Allowlist**:
-Lista de JIDs de Conversa que recebem Ack e `POST /envios`. Fora dela o gateway **persiste** e **não** envia Ack nem aceita `POST /envios`. O backoffice lista todas; só mostra compositor quando `permitido`. Desparear não muda esta lista.
+Lista de JIDs de Conversa em que o Operador envia texto pelo backoffice (`permitido` no resumo; `POST /envios` com cookie de Operador). Não porta Boas-vindas, Pedido de Aceite, Ack, chamada ao Agente nem `POST /envios` com Bearer do Agente. Desparear não muda esta lista.
 _Avoid_: whitelist, ACL genérica
 
 **Ack**:
-Texto estático (`WHATSAPP_ACK_TEXTO`) enviado na Conversa da Allowlist após uma Mensagem viva (não FromMe, não Status, não histórico) **quando o Agente não está ligado** ou a Mensagem não vira Lista. Prova de canal; não consulta Oferta. Com Agente, a Resposta do Agente substitui o Ack nessas Mensagens.
+Texto estático (`WHATSAPP_ACK_TEXTO`) após Mensagem viva (não FromMe, não Status, não histórico) **quando o Agente não está ligado** e o Contato remetente tem Aceite. Prova de canal; não consulta Oferta. Sem Aceite saem Boas-vindas ou Pedido de Aceite, não Ack. Com Agente, a Resposta substitui o Ack.
 _Avoid_: bot reply, confirmação de leitura
