@@ -27,24 +27,30 @@ type InterpretadorTermo interface {
 	Termo(ctx context.Context, item string) (string, error)
 }
 
+type ClassificadorIntencao interface {
+	Classificar(ctx context.Context, texto string) (domain.Classificacao, error)
+}
+
 type Envio interface {
 	Enviar(ctx context.Context, conversaJID, corpo string) error
 }
 
 type Deps struct {
-	Cat    Catalogo
-	Coleta Coleta
-	Termo  InterpretadorTermo
-	Envio  Envio
-	Hoje   func() time.Time
+	Cat      Catalogo
+	Coleta   Coleta
+	Termo    InterpretadorTermo
+	Intencao ClassificadorIntencao
+	Envio    Envio
+	Hoje     func() time.Time
 }
 
 type Agente struct {
-	cat    Catalogo
-	coleta Coleta
-	termo  InterpretadorTermo
-	envio  Envio
-	hoje   func() time.Time
+	cat      Catalogo
+	coleta   Coleta
+	termo    InterpretadorTermo
+	intencao ClassificadorIntencao
+	envio    Envio
+	hoje     func() time.Time
 }
 
 func New(d Deps) *Agente {
@@ -52,21 +58,21 @@ func New(d Deps) *Agente {
 	if hoje == nil {
 		hoje = time.Now
 	}
-	return &Agente{cat: d.Cat, coleta: d.Coleta, termo: d.Termo, envio: d.Envio, hoje: hoje}
+	return &Agente{cat: d.Cat, coleta: d.Coleta, termo: d.Termo, intencao: d.Intencao, envio: d.Envio, hoje: hoje}
 }
 
 func (a *Agente) Agora() time.Time { return a.hoje() }
 
 func (a *Agente) InterpretarLista(ctx context.Context, texto string) (string, error) {
-	return Interpretar(ctx, domain.ParseLista(texto), a.cat, a.coleta, a.hoje(), a.termo)
+	return a.textoDaIntencao(ctx, texto, a.classificar(ctx, texto))
 }
 
 func (a *Agente) Atender(ctx context.Context, conversaJID, corpo string) error {
-	lista := domain.ParseLista(corpo)
-	if len(lista.Itens) == 0 {
+	cl := a.classificar(ctx, corpo)
+	if (cl.Intencao == domain.IntencaoConsulta || cl.Intencao == domain.IntencaoRecusa) && conversaGrupo(conversaJID) {
 		return nil
 	}
-	texto, err := Interpretar(ctx, lista, a.cat, a.coleta, a.hoje(), a.termo)
+	texto, err := a.textoDaIntencao(ctx, corpo, cl)
 	if err != nil {
 		return err
 	}
@@ -74,6 +80,38 @@ func (a *Agente) Atender(ctx context.Context, conversaJID, corpo string) error {
 		return nil
 	}
 	return a.envio.Enviar(ctx, conversaJID, texto)
+}
+
+func (a *Agente) textoDaIntencao(ctx context.Context, texto string, cl domain.Classificacao) (string, error) {
+	switch cl.Intencao {
+	case domain.IntencaoConsulta:
+		if strings.TrimSpace(cl.Texto) == "" {
+			return domain.DescricaoPagueMenosMercado, nil
+		}
+		return cl.Texto, nil
+	case domain.IntencaoRecusa:
+		return domain.TextoRecusa, nil
+	}
+	lista := domain.ParseLista(texto)
+	if len(lista.Itens) == 0 {
+		return "", nil
+	}
+	return Interpretar(ctx, lista, a.cat, a.coleta, a.hoje(), a.termo)
+}
+
+func (a *Agente) classificar(ctx context.Context, texto string) domain.Classificacao {
+	if a.intencao == nil {
+		return domain.Classificacao{Intencao: domain.IntencaoLista}
+	}
+	cl, err := a.intencao.Classificar(ctx, texto)
+	if err != nil {
+		return domain.Classificacao{Intencao: domain.IntencaoLista}
+	}
+	return cl
+}
+
+func conversaGrupo(jid string) bool {
+	return strings.HasSuffix(jid, "@g.us")
 }
 
 func Interpretar(ctx context.Context, lista domain.Lista, cat Catalogo, coleta Coleta, agora time.Time, interp InterpretadorTermo) (string, error) {

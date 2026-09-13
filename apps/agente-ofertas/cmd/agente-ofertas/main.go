@@ -53,7 +53,9 @@ func main() {
 		Envio:  envio.Gateway{Base: cfg.GatewayURL, Token: cfg.GatewayToken},
 	}
 	if cfg.GeminiAPIKey != "" {
-		deps.Termo = termo.Gemini{Key: cfg.GeminiAPIKey, Model: cfg.GeminiModel}
+		g := termo.Gemini{Key: cfg.GeminiAPIKey, Model: cfg.GeminiModel}
+		deps.Termo = g
+		deps.Intencao = g
 	}
 	ag := application.New(deps)
 

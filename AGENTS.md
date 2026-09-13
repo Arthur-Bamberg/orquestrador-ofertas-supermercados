@@ -25,6 +25,7 @@ Create an app module only when implementing it — do not scaffold empty `apps/`
 | Layout | `apps/<name>` per deployable; `modules/<name>` for shared libs (lazy) |
 | Local infra | Root [`docker-compose.yml`](./docker-compose.yml) — Postgres + apps (ADR 0008) |
 | Deploy images | `apps/<name>/Dockerfile` |
+| GCP | Cloud Run, project `orquestrador-ofertas`, region `southamerica-east1` — see [GCP](#gcp) |
 | Shared data | One PostgreSQL instance for all apps (ADR 0006) |
 | Schedule / TZ | Per app (scraper: external cron or `docker compose run`, `America/Sao_Paulo`) |
 
@@ -62,6 +63,20 @@ Register new modules in root `go.work` (`use ./apps/...` or `./modules/...`).
 - **DRY across apps:** never copy packages between apps. When a second app needs the same code, **extract** it to `modules/<name>` and depend on that module.
 - Prefer extracting after the second consumer is real — do not invent empty `modules/` “just in case”.
 - `presentation` → `application` → `domain` (and `infra` implements domain ports) inside each app unless an ADR says otherwise.
+
+## GCP
+
+Cloud Run in project [`orquestrador-ofertas`](https://console.cloud.google.com/run?project=orquestrador-ofertas), region `southamerica-east1`.
+
+| App | URL |
+|-----|-----|
+| **ofertas-backoffice** | https://ofertas-backoffice-ot4vhmelqq-rj.a.run.app |
+| ofertas-api | https://ofertas-api-ot4vhmelqq-rj.a.run.app |
+| gateway-whatsapp | https://gateway-whatsapp-ot4vhmelqq-rj.a.run.app |
+| agente-ofertas | https://agente-ofertas-ot4vhmelqq-rj.a.run.app |
+| ofertas-scraper-v2 | https://ofertas-scraper-v2-ot4vhmelqq-rj.a.run.app |
+
+Console (backoffice): [ofertas-backoffice](https://console.cloud.google.com/run/detail/southamerica-east1/ofertas-backoffice/metrics?project=orquestrador-ofertas).
 
 ## Shared PostgreSQL
 

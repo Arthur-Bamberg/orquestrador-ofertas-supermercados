@@ -115,7 +115,7 @@ func (s *Server) mcp(w http.ResponseWriter, r *http.Request) {
 			"result": map[string]any{
 				"tools": []map[string]any{{
 					"name":        "interpretar_lista",
-					"description": "Interpreta uma Lista: Coleta nos sites e encarte vigente, devolve a Resposta.",
+					"description": "Classifica a Intenção: Lista (Coleta e encarte), Consulta sobre o Pague Menos Mercado, ou Recusa fora do recorte.",
 					"inputSchema": map[string]any{
 						"type":       "object",
 						"properties": map[string]any{"texto": map[string]string{"type": "string"}},

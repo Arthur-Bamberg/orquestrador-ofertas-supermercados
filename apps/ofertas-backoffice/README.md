@@ -20,6 +20,14 @@ O Operador identifica-se em `/entrar` (nome + senha). Não há cadastro na UI �
 
 No monorepo: `docker compose up --build` sobe API + SPA (ADR 0008). O browser usa `http://localhost:5173`.
 
+## GCP
+
+Cloud Run no projeto `orquestrador-ofertas`, região `southamerica-east1`:
+
+https://ofertas-backoffice-ot4vhmelqq-rj.a.run.app
+
+[Serviço no Console](https://console.cloud.google.com/run/detail/southamerica-east1/ofertas-backoffice/metrics?project=orquestrador-ofertas).
+
 ## Build
 
 ```bash
