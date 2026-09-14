@@ -4,9 +4,9 @@ Backoffice local em Vite + React + TypeScript para administrar entidades do dom�
 
 ## Escopo
 
-- SPA com identificação do **Operador** (nome + senha; cookie httpOnly). Catálogo em `/api/...` (Vite/nginx proxy para `ofertas-api`). Canal WhatsApp em `/gateway/...` (proxy para `gateway-whatsapp`) — estado/Pareamento, Conversas, Mensagens e envio de texto. Glossário: [`CONTEXT.md`](./CONTEXT.md).
-- UI administrativa funcional: tabelas, filtros, formulários, confirmações de exclusão e mensagens claras de erro da API. Superfície **Canal**: QR quando pendente, JID quando há Pareamento, Desparear com confirmação. Conversas são rastro só-leitura com compositor nas allowlisted. Operações: Testar Mercado faz scan de encarte ou scraping de site (sem Extrator).
-- Use termos do glossário do scraper para o catálogo; para o canal, use [`../gateway-whatsapp/CONTEXT.md`](../gateway-whatsapp/CONTEXT.md): Contato, Conversa, Mensagem, Mídia, Allowlist, Canal, Pareamento, Desparear; **Operador** e **Sair** neste `CONTEXT.md`.
+- SPA com identificação do **Operador** (nome + senha; cookie httpOnly). Catálogo em `/api/...` (Vite/nginx proxy para `ofertas-api`). Canal WhatsApp em `/gateway/...` (proxy para `gateway-whatsapp`) — estado do Canal, Conversas, Mensagens e envio de texto. Glossário: [`CONTEXT.md`](./CONTEXT.md).
+- UI administrativa funcional: tabelas, filtros, formulários, confirmações de exclusão e mensagens claras de erro da API. Superfície **Canal**: estado pronto / não configurado e Número do Canal. Conversas são rastro só-leitura com compositor nas allowlisted. Operações: Testar Mercado faz scan de encarte ou scraping de site (sem Extrator).
+- Use termos do glossário do scraper para o catálogo; para o canal, use [`../gateway-whatsapp/CONTEXT.md`](../gateway-whatsapp/CONTEXT.md): Contato, Conversa, Mensagem, Mídia, Allowlist, Canal, Janela, Template; **Operador** e **Sair** neste `CONTEXT.md`.
 
 ## Comandos
 

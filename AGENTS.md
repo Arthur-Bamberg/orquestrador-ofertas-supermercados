@@ -12,7 +12,7 @@ Workspace for supermarket-offers apps. It is **not** itself an application binar
 | **Current** | `ofertas-scraper-v2` | HTTP Coleta de vitrine (Fort; ADR 0012 / 0013) |
 | **Current** | `ofertas-api` | Go HTTP API over shared Postgres (CRUD + pipeline ops; ADR 0005 / 0006) |
 | **Current** | `ofertas-backoffice` | Vite/React SPA backoffice (filters + screens; ADR 0005) |
-| **Current** | `gateway-whatsapp` | WhatsApp channel gateway (whatsmeow; ADR 0007) |
+| **Current** | `gateway-whatsapp` | WhatsApp channel gateway (Cloud API; ADR 0020) |
 | **Current** | `agente-ofertas` | Interprets Lista, reads Oferta, replies via Canal; catalog assistant is a surface (ADR 0010) |
 
 Create an app module only when implementing it — do not scaffold empty `apps/` directories.
@@ -41,7 +41,7 @@ apps/
   ofertas-scraper-v2/           # Coleta de vitrine Fort (ADR 0013)
   ofertas-api/
   ofertas-backoffice/
-  gateway-whatsapp/             # WhatsApp channel (ADR 0007)
+  gateway-whatsapp/             # WhatsApp channel (ADR 0020)
   agente-ofertas/               # Lista → Oferta → Resposta (ADR 0010)
 modules/                        # shared Go modules — create only when extracting
 .githooks/                      # pre-commit → test every workspace module

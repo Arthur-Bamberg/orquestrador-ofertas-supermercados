@@ -264,16 +264,14 @@ func TestStore_boasVindasEAceitePersistem(t *testing.T) {
 
 type stubCanal struct{}
 
-func (stubCanal) Enviar(context.Context, domain.JID, string, *domain.MidiaBytes) (string, error) {
+func (stubCanal) Enviar(context.Context, domain.Envio) (string, error) {
 	return "stub", nil
 }
-func (stubCanal) Conectado() bool { return true }
+func (stubCanal) Pronto() bool { return true }
 
 func (stubCanal) Situacao() domain.CanalSituacao {
-	return domain.CanalSituacao{Estado: domain.CanalConectado}
+	return domain.CanalSituacao{Estado: domain.CanalPronto}
 }
-
-func (stubCanal) Desparear(context.Context) error { return domain.ErrDesparearIndisponivel }
 
 type memMidia struct{ files map[string][]byte }
 

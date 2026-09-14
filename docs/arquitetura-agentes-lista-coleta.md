@@ -26,8 +26,8 @@ Mensagem viva de texto
                         ▼
 Agente da Lista          ← gateway-whatsapp (não chama Resposta nem o scraper)
         │
-        ├─ Recusa  → direta: texto de Recusa; grupo: nada
-        ├─ Consulta → direta: texto de Consulta; grupo: nada
+        ├─ Recusa  → texto de Recusa
+        ├─ Consulta → texto de Consulta
         └─ Lista
             ├─ Item 1 → Termo ──► ofertas-scraper-v2 (Coleta) ─┐
             ├─ Item 2 → Termo ──► ofertas-scraper-v2 (Coleta) ─┼─ paralelo
@@ -93,4 +93,4 @@ Zero tipos depois disso: diz que não achou.
 3. **Coleta → Agente da Lista:** cartões/Ofertas persistidos daquela busca.
 4. **Agente da Lista → encarte:** Ofertas vigentes ligadas a Documento cujo Produto/Marca casa com o Termo.
 5. **Agente da Lista → Agente de Resposta:** conjunto reunido (consultado + encarte), só depois de todas as Coletas e do encarte da Lista.
-6. **Agente de Resposta → Canal:** texto da Resposta + JID. Consulta e Recusa na direta também saem por `POST /envios`; em grupo não.
+6. **Agente de Resposta → Canal:** texto da Resposta + JID. Consulta e Recusa também saem por `POST /envios`.

@@ -6,8 +6,8 @@ import "errors"
 // holds the same non-empty provedor_id (concurrent Receber race).
 var ErrProvedorDuplicado = errors.New("provedor_id duplicado")
 
-// ErrSemPareamento is Desparear when the Canal is already pendente.
-var ErrSemPareamento = errors.New("canal sem pareamento")
+// ErrForaDaJanela is a free-form send when the Conversa has no open Janela.
+var ErrForaDaJanela = errors.New("conversa fora da janela de 24h")
 
-// ErrDesparearIndisponivel is Desparear on the stub Canal (local WHATSAPP_STUB).
-var ErrDesparearIndisponivel = errors.New("desparear não se aplica")
+// ErrCanalNaoConfigurado is a send when Cloud API credentials are missing.
+var ErrCanalNaoConfigurado = errors.New("canal não configurado")
