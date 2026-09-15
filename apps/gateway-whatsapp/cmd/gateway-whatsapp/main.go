@@ -48,25 +48,18 @@ func main() {
 	defer store.Close()
 
 	var channel domain.Canal
-	var graph *whatsapp.Cliente
-	opt := httpapi.Options{VerifyToken: cfg.VerifyToken, AppSecret: cfg.AppSecret}
+	var wa *whatsapp.Cliente
 	if cfg.StubCanal {
 		channel = &canal.Stub{}
 		log.Print("canal stub (WHATSAPP_STUB=1)")
 	} else {
-		graph = &whatsapp.Cliente{
-			Token:         cfg.WhatsAppToken,
-			PhoneNumberID: cfg.PhoneNumberID,
-			DisplayJID:    cfg.DisplayJID(),
-			Version:       cfg.GraphVersion,
+		wa, err = whatsapp.Ligar(ctx, cfg.SessionPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
-		channel = graph
-		opt.BaixarMidia = graph.BaixarMidia
-		if graph.Pronto() {
-			log.Printf("canal Cloud API phone_number_id=%s", cfg.PhoneNumberID)
-		} else {
-			log.Print("canal Cloud API não configurado (WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID)")
-		}
+		channel = wa
+		defer wa.Disconnect()
 	}
 
 	deps := application.Deps{
@@ -83,6 +76,30 @@ func main() {
 	}
 	gw := application.New(deps)
 
+	if wa != nil {
+		wa.SetHandler(func(_ context.Context, in application.Entrada) {
+			go func() {
+				got, err := gw.Receber(context.Background(), in)
+				if err != nil {
+					log.Printf("receber: %v", err)
+					return
+				}
+				if got.Aceita {
+					log.Printf("mensagem id=%s conversa=%s direcao=%s origem=%s duplicada=%v", got.Mensagem.ID, got.Conversa.JID, got.Mensagem.Direcao, got.Mensagem.Origem, got.Duplicada)
+				}
+			}()
+		})
+		wa.SetReciboHandler(func(_ context.Context, provedorID string, st domain.StatusEnvio) {
+			if err := gw.MarcarRecibo(context.Background(), provedorID, st); err != nil {
+				log.Printf("recibo: %v", err)
+			}
+		})
+		if err := wa.Connect(ctx); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+
 	ids, err := operador.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -90,7 +107,7 @@ func main() {
 	}
 	defer ids.Close()
 
-	server := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.NewWith(gw, cfg.GatewayToken, cfg.CORSOrigin, ids, opt)}
+	server := &http.Server{Addr: cfg.HTTPAddr, Handler: httpapi.New(gw, cfg.GatewayToken, cfg.CORSOrigin, ids)}
 	go func() {
 		<-ctx.Done()
 		_ = server.Shutdown(context.Background())

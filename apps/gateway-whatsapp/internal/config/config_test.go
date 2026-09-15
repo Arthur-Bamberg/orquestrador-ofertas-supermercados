@@ -18,8 +18,8 @@ func TestLoad_leDotEnvDoDiretorioPai(t *testing.T) {
 	unset(t, "HTTP_ADDR")
 	unset(t, "WHATSAPP_STUB")
 	unset(t, "WHATSAPP_ACK_TEXTO")
+	unset(t, "WHATSAPP_SESSION_PATH")
 	unset(t, "MIDIA_ROOT")
-	unset(t, "WHATSAPP_TOKEN")
 	body := "DATABASE_URL=postgres://from-root/ofertas\nGATEWAY_TOKEN=from-root\nWHATSAPP_ALLOWLIST=5511999999999\nWHATSAPP_STUB=1\n"
 	if err := os.WriteFile(filepath.Join(root, ".env"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -44,8 +44,8 @@ func TestLoad_defaultsEAllowlist(t *testing.T) {
 	t.Setenv("WHATSAPP_STUB", "1")
 	unset(t, "HTTP_ADDR")
 	unset(t, "WHATSAPP_ACK_TEXTO")
+	unset(t, "WHATSAPP_SESSION_PATH")
 	unset(t, "MIDIA_ROOT")
-	unset(t, "WHATSAPP_GRAPH_VERSION")
 
 	cfg, err := Load()
 	if err != nil {
@@ -57,11 +57,8 @@ func TestLoad_defaultsEAllowlist(t *testing.T) {
 	if cfg.AckTexto == "" {
 		t.Fatal("ack default")
 	}
-	if !filepath.IsAbs(cfg.MidiaRoot) {
+	if !filepath.IsAbs(cfg.SessionPath) || !filepath.IsAbs(cfg.MidiaRoot) {
 		t.Fatalf("paths %+v", cfg)
-	}
-	if cfg.GraphVersion != "v21.0" {
-		t.Fatalf("graph %+v", cfg)
 	}
 }
 

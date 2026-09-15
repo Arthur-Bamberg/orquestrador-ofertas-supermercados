@@ -1,6 +1,6 @@
 # Ofertas Backoffice
 
-SPA local para administrar Mercados, Fontes, Documentos, Ofertas, Produtos, Marcas, Falhas de Extração, Uso do Extrator, Artefatos, Operações de Pipeline, Canal WhatsApp e Conversas.
+SPA local para administrar Mercados, Fontes, Documentos, Ofertas, Produtos, Marcas, Falhas de Extração, Uso do Extrator, Artefatos, Operações de Pipeline, Canal WhatsApp (Pareamento) e Conversas.
 
 ## Rodar localmente
 

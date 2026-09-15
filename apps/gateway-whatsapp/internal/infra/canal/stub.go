@@ -13,21 +13,24 @@ type Stub struct {
 }
 
 type Envio struct {
-	Destino  domain.JID
-	Corpo    string
-	Midia    *domain.MidiaBytes
-	Template *domain.Template
+	Destino domain.JID
+	Corpo   string
+	Midia   *domain.MidiaBytes
 }
 
-func (s *Stub) Enviar(_ context.Context, e domain.Envio) (string, error) {
+func (s *Stub) Enviar(_ context.Context, destino domain.JID, corpo string, midia *domain.MidiaBytes) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.Envios = append(s.Envios, Envio{Destino: e.Destino, Corpo: e.Corpo, Midia: e.Midia, Template: e.Template})
+	s.Envios = append(s.Envios, Envio{Destino: destino, Corpo: corpo, Midia: midia})
 	return "stub", nil
 }
 
-func (s *Stub) Pronto() bool { return true }
+func (s *Stub) Conectado() bool { return true }
 
 func (s *Stub) Situacao() domain.CanalSituacao {
-	return domain.CanalSituacao{Estado: domain.CanalPronto}
+	return domain.CanalSituacao{Estado: domain.CanalConectado}
+}
+
+func (s *Stub) Desparear(context.Context) error {
+	return domain.ErrDesparearIndisponivel
 }

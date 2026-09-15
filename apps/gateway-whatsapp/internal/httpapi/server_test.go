@@ -3,9 +3,7 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -62,23 +60,6 @@ func TestHealthReadyEEnvios(t *testing.T) {
 		t.Fatalf("ready on %d", res.Code)
 	}
 
-	if _, err := gw.Receber(context.Background(), application.Entrada{
-		ProvedorID:   "wamid.janela.http",
-		ConversaJID:  "5511999999999",
-		RemetenteJID: "5511999999999",
-		Corpo:        "oi",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := gw.Receber(context.Background(), application.Entrada{
-		ProvedorID:   "wamid.janela.fora",
-		ConversaJID:  "5511888888888",
-		RemetenteJID: "5511888888888",
-		Corpo:        "oi",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
 	req := httptest.NewRequest(http.MethodPost, "/envios", bytes.NewBufferString(`{"conversaJid":"5511999999999","corpo":"oi"}`))
 	req.Header.Set("Content-Type", "application/json")
 	res = httptest.NewRecorder()
@@ -125,14 +106,6 @@ func TestHealthReadyEEnvios(t *testing.T) {
 	hOp.ServeHTTP(res, req)
 	if res.Code != http.StatusCreated {
 		t.Fatalf("Agente fora da Allowlist %d %s", res.Code, res.Body.String())
-	}
-
-	req = httptest.NewRequest(http.MethodPost, "/envios", bytes.NewBufferString(`{"conversaJid":"5511777777777","corpo":"tarde"}`))
-	req.Header.Set("Authorization", "Bearer secret")
-	res = httptest.NewRecorder()
-	hOp.ServeHTTP(res, req)
-	if res.Code != http.StatusConflict {
-		t.Fatalf("fora da Janela %d %s", res.Code, res.Body.String())
 	}
 }
 
@@ -289,8 +262,12 @@ func TestRastroHTTP_conversasMensagensMidiaCORS(t *testing.T) {
 	}
 }
 
-func TestCanalHTTP_estadoPronto(t *testing.T) {
-	fake := &situacaoCanal{sit: domain.CanalSituacao{Estado: domain.CanalNaoConfigurado}}
+func TestCanalHTTP_estadoQRDesparear(t *testing.T) {
+	pngMagic := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
+	fake := &situacaoCanal{sit: domain.CanalSituacao{
+		Estado: domain.CanalPendente,
+		QR:     "2@example-pairing-code",
+	}}
 	gw := application.New(application.Deps{
 		Allow:  domain.NovaAllowlist("5511999999999"),
 		Repo:   newMemRepo(),
@@ -318,17 +295,21 @@ func TestCanalHTTP_estadoPronto(t *testing.T) {
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
-		t.Fatalf("GET não configurado %d %s", res.Code, res.Body.String())
+		t.Fatalf("GET pendente %d %s", res.Code, res.Body.String())
 	}
 	var body map[string]string
 	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if body["estado"] != string(domain.CanalNaoConfigurado) || body["jid"] != "" || body["qrPngBase64"] != "" {
-		t.Fatalf("não configurado %+v", body)
+	if body["estado"] != string(domain.CanalPendente) || body["jid"] != "" {
+		t.Fatalf("pendente %+v", body)
+	}
+	raw, err := base64.StdEncoding.DecodeString(body["qrPngBase64"])
+	if err != nil || !bytes.HasPrefix(raw, pngMagic) {
+		t.Fatalf("QR PNG %v %q", err, body["qrPngBase64"])
 	}
 
-	fake.sit = domain.CanalSituacao{Estado: domain.CanalPronto, JID: "5511988887777@s.whatsapp.net"}
+	fake.sit = domain.CanalSituacao{Estado: domain.CanalConectado, JID: "5511988887777@s.whatsapp.net"}
 	req = reqOperador(http.MethodGet, "/canal")
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
@@ -336,85 +317,92 @@ func TestCanalHTTP_estadoPronto(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if body["estado"] != string(domain.CanalPronto) || body["jid"] != "5511988887777@s.whatsapp.net" {
-		t.Fatalf("pronto %+v", body)
+	if body["estado"] != string(domain.CanalConectado) || body["jid"] != "5511988887777@s.whatsapp.net" || body["qrPngBase64"] != "" {
+		t.Fatalf("conectado %+v", body)
 	}
 
-	res = httptest.NewRecorder()
-	h.ServeHTTP(res, reqOperador(http.MethodPost, "/canal/desparear"))
-	if res.Code != http.StatusNotFound {
-		t.Fatalf("desparear %d %s", res.Code, res.Body.String())
-	}
-}
-
-func TestWebhookHTTP_verifyEReceber(t *testing.T) {
-	gw := newGW(t, true, "5511999999999")
-	h := httpapi.NewWith(gw, "secret", "", idsTeste(), httpapi.Options{VerifyToken: "verify-me", AppSecret: "app-secret"})
-
-	res := httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/webhook?hub.mode=subscribe&hub.verify_token=errado&hub.challenge=abc", nil))
-	if res.Code != http.StatusForbidden {
-		t.Fatalf("verify errado %d", res.Code)
-	}
-	res = httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/webhook?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=abc", nil))
-	if res.Code != http.StatusOK || res.Body.String() != "abc" {
-		t.Fatalf("verify %d %q", res.Code, res.Body.String())
-	}
-
-	payload := `{"object":"whatsapp_business_account","entry":[{"changes":[{"value":{"contacts":[{"profile":{"name":"Ana"},"wa_id":"5511999999999"}],"messages":[{"from":"5511999999999","id":"wamid.hook","timestamp":"1757800000","type":"text","text":{"body":"tomate"}}]}}]}]}`
-	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	fake.sit = domain.CanalSituacao{Estado: domain.CanalDesconectado, JID: "5511988887777@s.whatsapp.net"}
+	req = reqOperador(http.MethodGet, "/canal")
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
-	if res.Code != http.StatusUnauthorized {
-		t.Fatalf("sem assinatura %d", res.Code)
+	body = map[string]string{}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["estado"] != string(domain.CanalDesconectado) || body["jid"] == "" || body["qrPngBase64"] != "" {
+		t.Fatalf("desconectado %+v", body)
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
-	req.Header.Set("X-Hub-Signature-256", "sha256=dead")
 	res = httptest.NewRecorder()
-	h.ServeHTTP(res, req)
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/canal/desparear", nil))
 	if res.Code != http.StatusUnauthorized {
-		t.Fatalf("assinatura má %d", res.Code)
+		t.Fatalf("POST anônimo %d", res.Code)
 	}
 
-	mac := hmac.New(sha256.New, []byte("app-secret"))
-	mac.Write([]byte(payload))
-	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-	req = httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
-	req.Header.Set("X-Hub-Signature-256", sig)
+	req = reqOperador(http.MethodPost, "/canal/desparear")
 	res = httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
-		t.Fatalf("webhook %d %s", res.Code, res.Body.String())
+		t.Fatalf("desparear %d %s", res.Code, res.Body.String())
 	}
-	items, err := gw.ListarConversas(context.Background(), application.FiltroConversas{})
-	if err != nil {
+	if fake.calls != 1 {
+		t.Fatalf("Desparear calls=%d", fake.calls)
+	}
+	body = map[string]string{}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 1 || items[0].UltimaMensagem == nil || items[0].UltimaMensagem.Corpo != "tomate" {
-		t.Fatalf("rastro %+v", items)
+	if body["estado"] != string(domain.CanalPendente) || body["qrPngBase64"] == "" {
+		t.Fatalf("após Desparear %+v", body)
+	}
+
+	fake.desparear = domain.ErrSemPareamento
+	req = reqOperador(http.MethodPost, "/canal/desparear")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusConflict {
+		t.Fatalf("sem Pareamento %d", res.Code)
+	}
+
+	stubGW := newGW(t, true)
+	h = handlerGW(stubGW, "")
+	req = reqOperador(http.MethodPost, "/canal/desparear")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusConflict {
+		t.Fatalf("stub Desparear %d %s", res.Code, res.Body.String())
 	}
 }
 
 type situacaoCanal struct {
-	sit domain.CanalSituacao
+	sit       domain.CanalSituacao
+	desparear error
+	calls     int
 }
 
-func (c *situacaoCanal) Enviar(context.Context, domain.Envio) (string, error) {
+func (c *situacaoCanal) Enviar(context.Context, domain.JID, string, *domain.MidiaBytes) (string, error) {
 	return "stub", nil
 }
 
-func (c *situacaoCanal) Pronto() bool { return c.sit.Estado == domain.CanalPronto }
+func (c *situacaoCanal) Conectado() bool { return c.sit.Estado == domain.CanalConectado }
 
 func (c *situacaoCanal) Situacao() domain.CanalSituacao { return c.sit }
+
+func (c *situacaoCanal) Desparear(context.Context) error {
+	c.calls++
+	if c.desparear != nil {
+		return c.desparear
+	}
+	c.sit = domain.CanalSituacao{Estado: domain.CanalPendente, QR: "2@example-pairing-code"}
+	return nil
+}
 
 type readyCanal struct {
 	canal.Stub
 	on bool
 }
 
-func (c readyCanal) Pronto() bool { return c.on }
+func (c readyCanal) Conectado() bool { return c.on }
 
 func newGW(t *testing.T, conectado bool, aceites ...string) *application.Gateway {
 	t.Helper()

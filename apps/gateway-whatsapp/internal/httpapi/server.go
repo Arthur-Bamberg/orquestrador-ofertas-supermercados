@@ -1,12 +1,9 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,58 +11,36 @@ import (
 
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/application"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/domain"
-	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/infra/whatsapp"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/operador"
+	"rsc.io/qr"
 )
 
-type Options struct {
-	VerifyToken string
-	AppSecret   string
-	BaixarMidia func(context.Context, string, domain.TipoMidia, string, string) (*domain.MidiaBytes, error)
-}
-
 type Server struct {
-	gw          *application.Gateway
-	token       string
-	corsOrigin  string
-	ids         operador.Consulta
-	verifyToken string
-	appSecret   string
-	baixarMidia func(context.Context, string, domain.TipoMidia, string, string) (*domain.MidiaBytes, error)
+	gw         *application.Gateway
+	token      string
+	corsOrigin string
+	ids        operador.Consulta
 }
 
 func New(gw *application.Gateway, token, corsOrigin string, ids operador.Consulta) http.Handler {
-	return NewWith(gw, token, corsOrigin, ids, Options{})
-}
-
-func NewWith(gw *application.Gateway, token, corsOrigin string, ids operador.Consulta, opt Options) http.Handler {
-	s := &Server{
-		gw:          gw,
-		token:       token,
-		corsOrigin:  corsOrigin,
-		ids:         ids,
-		verifyToken: opt.VerifyToken,
-		appSecret:   opt.AppSecret,
-		baixarMidia: opt.BaixarMidia,
-	}
+	s := &Server{gw: gw, token: token, corsOrigin: corsOrigin, ids: ids}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /ready", s.ready)
-	mux.HandleFunc("GET /webhook", s.webhookVerify)
-	mux.HandleFunc("POST /webhook", s.webhookEvento)
 	mux.HandleFunc("POST /envios", s.envios)
 	mux.HandleFunc("GET /conversas", s.listarConversas)
 	mux.HandleFunc("GET /conversas/{id}", s.obterConversa)
 	mux.HandleFunc("GET /conversas/{id}/mensagens", s.listarMensagens)
 	mux.HandleFunc("GET /mensagens/{id}/midia", s.obterMidia)
 	mux.HandleFunc("GET /canal", s.canal)
+	mux.HandleFunc("POST /canal/desparear", s.desparear)
 	return s.withCORS(s.proteger(mux))
 }
 
 func (s *Server) proteger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/health", "/ready", "/envios", "/webhook":
+		case "/health", "/ready", "/envios":
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -97,86 +72,17 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) ready(w http.ResponseWriter, _ *http.Request) {
-	if s.gw == nil || !s.gw.Pronto() {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "canal não configurado"})
+	if s.gw == nil || !s.gw.Conectado() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "canal desconectado"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ready": true})
 }
 
-func (s *Server) webhookVerify(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	if q.Get("hub.mode") != "subscribe" || s.verifyToken == "" || q.Get("hub.verify_token") != s.verifyToken {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(q.Get("hub.challenge")))
-}
-
-func (s *Server) webhookEvento(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "body", http.StatusBadRequest)
-		return
-	}
-	if !whatsapp.AssinaturaValida(s.appSecret, r.Header.Get("X-Hub-Signature-256"), body) {
-		http.Error(w, "assinatura", http.StatusUnauthorized)
-		return
-	}
-	if s.gw == nil {
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-		return
-	}
-	mensagens, recibos, err := whatsapp.ParseWebhook(body)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "json inválido"})
-		return
-	}
-	for _, in := range mensagens {
-		if in.MidiaID != "" && s.baixarMidia != nil {
-			tipo := domain.MidiaImagem
-			mime, filename := "", ""
-			if in.Midia != nil {
-				tipo = in.Midia.Tipo
-				mime = in.Midia.MIME
-				filename = in.Midia.Filename
-			}
-			got, err := s.baixarMidia(r.Context(), in.MidiaID, tipo, mime, filename)
-			if err != nil {
-				log.Printf("whatsapp mídia webhook: %v", err)
-			}
-			if got != nil {
-				in.Midia = got
-			}
-		}
-		entrada, ok := whatsapp.Entrada(in)
-		if !ok {
-			continue
-		}
-		if _, err := s.gw.Receber(r.Context(), entrada); err != nil {
-			log.Printf("whatsapp receber webhook: %v", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-	}
-	for _, rec := range recibos {
-		if err := s.gw.MarcarRecibo(r.Context(), rec.ProvedorID, rec.Status); err != nil {
-			log.Printf("whatsapp recibo webhook: %v", err)
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
 type envioBody struct {
 	ConversaJID string `json:"conversaJid"`
 	Corpo       string `json:"corpo"`
-	Template    *struct {
-		Nome   string `json:"nome"`
-		Idioma string `json:"idioma"`
-	} `json:"template"`
-	Midia *struct {
+	Midia       *struct {
 		Tipo           string `json:"tipo"`
 		Filename       string `json:"filename"`
 		MIME           string `json:"mime"`
@@ -195,9 +101,6 @@ func (s *Server) envios(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := application.Saida{ConversaJID: body.ConversaJID, Corpo: body.Corpo}
-	if body.Template != nil && strings.TrimSpace(body.Template.Nome) != "" {
-		out.Template = &domain.Template{Nome: body.Template.Nome, Idioma: body.Template.Idioma}
-	}
 	if body.Midia != nil && body.Midia.ConteudoBase64 != "" {
 		raw, err := base64.StdEncoding.DecodeString(body.Midia.ConteudoBase64)
 		if err != nil {
@@ -223,14 +126,6 @@ func (s *Server) envios(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, application.ErrNaoPermitido) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
-			return
-		}
-		if errors.Is(err, domain.ErrForaDaJanela) {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-			return
-		}
-		if errors.Is(err, domain.ErrCanalNaoConfigurado) {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 			return
 		}
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
@@ -311,19 +206,50 @@ func (s *Server) listarMensagens(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) canal(w http.ResponseWriter, r *http.Request) {
 	if s.gw == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "canal não configurado"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "canal desconectado"})
+		return
+	}
+	writeCanal(w, http.StatusOK, s.gw.SituacaoCanal())
+}
+
+func (s *Server) desparear(w http.ResponseWriter, r *http.Request) {
+	err := s.gw.Desparear(r.Context())
+	if err != nil {
+		if errors.Is(err, domain.ErrSemPareamento) || errors.Is(err, domain.ErrDesparearIndisponivel) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	writeCanal(w, http.StatusOK, s.gw.SituacaoCanal())
 }
 
 type canalJSON struct {
-	Estado string `json:"estado"`
-	JID    string `json:"jid,omitempty"`
+	Estado      string `json:"estado"`
+	JID         string `json:"jid,omitempty"`
+	QRPngBase64 string `json:"qrPngBase64,omitempty"`
 }
 
 func writeCanal(w http.ResponseWriter, status int, sit domain.CanalSituacao) {
-	writeJSON(w, status, canalJSON{Estado: string(sit.Estado), JID: string(sit.JID)})
+	out := canalJSON{Estado: string(sit.Estado), JID: string(sit.JID)}
+	if sit.QR != "" {
+		png, err := pngQR(sit.QR)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "QR inválido"})
+			return
+		}
+		out.QRPngBase64 = base64.StdEncoding.EncodeToString(png)
+	}
+	writeJSON(w, status, out)
+}
+
+func pngQR(code string) ([]byte, error) {
+	c, err := qr.Encode(code, qr.M)
+	if err != nil {
+		return nil, err
+	}
+	return c.PNG(), nil
 }
 
 func (s *Server) obterMidia(w http.ResponseWriter, r *http.Request) {

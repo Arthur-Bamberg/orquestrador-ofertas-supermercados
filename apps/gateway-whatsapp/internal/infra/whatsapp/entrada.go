@@ -9,7 +9,7 @@ import (
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/domain"
 )
 
-// Inbound is the channel-neutral snapshot of a WhatsApp event (filled by the Cloud API adapter).
+// Inbound is the channel-neutral snapshot of a WhatsApp event (filled by the whatsmeow adapter).
 type Inbound struct {
 	ProvedorID   string
 	ChatJID      string
@@ -29,7 +29,6 @@ type Inbound struct {
 	Tipo         domain.TipoMensagem
 	Payload      string
 	Midia        *domain.MidiaBytes
-	MidiaID      string
 }
 
 func Entrada(in Inbound) (application.Entrada, bool) {

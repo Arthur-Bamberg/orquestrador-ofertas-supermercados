@@ -9,5 +9,5 @@ Pessoa do backoffice, distinta do Contato do Canal, identificada por um nome ún
 _Avoid_: usuário, user, admin, Contato, cliente
 
 **Sair**:
-Operação do Operador que encerra a identificação no backoffice. Não altera o Canal.
-_Avoid_: logout (como sinónimo de desligar o Canal), desconectar
+Operação do Operador que encerra a identificação no backoffice. Não desfaz Pareamento nem altera o Canal.
+_Avoid_: logout (como sinónimo de Desparear), desconectar

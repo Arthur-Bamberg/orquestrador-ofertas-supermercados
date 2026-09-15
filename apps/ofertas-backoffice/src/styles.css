@@ -522,14 +522,41 @@ summary {
   padding: 0.2rem 0.65rem;
 }
 
-.canal-estado-pronto {
+.canal-estado-pendente {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.canal-estado-conectado {
   background: #ecfdf3;
   color: #067647;
 }
 
-.canal-estado-nao_configurado {
+.canal-estado-desconectado {
   background: #fef3f2;
   color: #b42318;
+}
+
+.canal-qr {
+  margin: 1rem 0 0;
+  max-width: 280px;
+}
+
+.canal-qr img {
+  background: #ffffff;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  display: block;
+  height: auto;
+  image-rendering: pixelated;
+  padding: 0.75rem;
+  width: 100%;
+}
+
+.canal-qr figcaption {
+  color: #5d6b7b;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
 }
 
 @media (max-width: 860px) {

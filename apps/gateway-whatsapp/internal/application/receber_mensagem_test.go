@@ -837,15 +837,6 @@ func TestReceber_mensagemEnviadaPeloGatewayNaoGeraLoop(t *testing.T) {
 		Agente:   ag,
 		NewID:    seqIDs(),
 	})
-	if _, err := gw.Receber(context.Background(), application.Entrada{
-		ProvedorID:   "wamid.abrir.janela",
-		ConversaJID:  "120363abc@g.us",
-		RemetenteJID: "5511999999999",
-		Grupo:        true,
-		Corpo:        "oi",
-	}); err != nil {
-		t.Fatal(err)
-	}
 	// 1. O gateway envia uma resposta no grupo
 	msg, err := gw.Enviar(context.Background(), application.Saida{
 		ConversaJID: "120363abc@g.us",
@@ -928,8 +919,6 @@ func TestReceber_naoReenviaAckQuandoDuplicada(t *testing.T) {
 
 func TestEnviar_textoEMidiaParaConversaAllowlisted(t *testing.T) {
 	fx := newGW(t, "5511999999999")
-	abrirJanela(t, fx.gw, "5511999999999", "wamid.janela.midia")
-	antes := len(fx.canal.envios)
 	msg, err := fx.gw.Enviar(context.Background(), application.Saida{
 		ConversaJID: "5511999999999",
 		Corpo:       "resposta",
@@ -949,14 +938,13 @@ func TestEnviar_textoEMidiaParaConversaAllowlisted(t *testing.T) {
 	if msg.Midia == nil || msg.Midia.Tipo != domain.MidiaDocumento {
 		t.Fatalf("midia %+v", msg.Midia)
 	}
-	if len(fx.canal.envios) != antes+1 || fx.canal.envios[len(fx.canal.envios)-1].Corpo != "resposta" {
+	if len(fx.canal.envios) != 1 || fx.canal.envios[0].Corpo != "resposta" {
 		t.Fatalf("canal %+v", fx.canal.envios)
 	}
 }
 
 func TestEnviar_marcaFalhouSeCanalErra(t *testing.T) {
 	fx := newGW(t, "5511999999999")
-	abrirJanela(t, fx.gw, "5511999999999", "wamid.janela.falhou")
 	fx.canal.setErr(errors.New("whatsapp down"))
 	msg, err := fx.gw.Enviar(context.Background(), application.Saida{
 		ConversaJID: "5511999999999",
@@ -986,8 +974,6 @@ func TestEnviar_silencioForaDaAllowlist(t *testing.T) {
 
 func TestEnviar_agenteEntregaForaDaAllowlist(t *testing.T) {
 	fx := newGW(t, "5511999999999")
-	abrirJanela(t, fx.gw, "5511888888888", "wamid.janela.agente")
-	antes := len(fx.canal.envios)
 	msg, err := fx.gw.Enviar(context.Background(), application.Saida{
 		ConversaJID: "5511888888888",
 		Corpo:       "Resposta",
@@ -995,86 +981,8 @@ func TestEnviar_agenteEntregaForaDaAllowlist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if msg.Corpo != "Resposta" || len(fx.canal.envios) != antes+1 {
+	if msg.Corpo != "Resposta" || len(fx.canal.envios) != 1 {
 		t.Fatalf("msg=%+v envios=%+v", msg, fx.canal.envios)
-	}
-}
-
-func TestEnviar_recusaForaDaJanelaSemTemplate(t *testing.T) {
-	fx := newGW(t, "5511999999999")
-	_, err := fx.gw.Enviar(context.Background(), application.Saida{
-		ConversaJID: "5511999999999",
-		Corpo:       "oi",
-	})
-	if !errors.Is(err, domain.ErrForaDaJanela) {
-		t.Fatalf("err=%v", err)
-	}
-	if len(fx.canal.envios) != 0 {
-		t.Fatalf("enviou %+v", fx.canal.envios)
-	}
-}
-
-func TestEnviar_templateForaDaJanela(t *testing.T) {
-	fx := newGW(t, "5511999999999")
-	msg, err := fx.gw.Enviar(context.Background(), application.Saida{
-		ConversaJID: "5511999999999",
-		Template:    &domain.Template{Nome: "hello_world", Idioma: "pt_BR"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if msg.Status != domain.StatusEnviado {
-		t.Fatalf("%+v", msg)
-	}
-	if len(fx.canal.envios) != 1 || fx.canal.envios[0].Template == nil || fx.canal.envios[0].Template.Nome != "hello_world" {
-		t.Fatalf("canal %+v", fx.canal.envios)
-	}
-}
-
-func TestEnviar_recusaJanelaExpirada(t *testing.T) {
-	agora := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
-	fx := newGW(t, "5511999999999")
-	fx.gw = application.New(application.Deps{
-		Allow:    domain.NovaAllowlist("5511999999999"),
-		Repo:     fx.repo,
-		Canal:    fx.canal,
-		Midias:   fx.midias,
-		AckTexto: "ack-teste",
-		NewID:    seqIDs(),
-		Now:      func() time.Time { return agora },
-	})
-	if _, err := fx.gw.Receber(context.Background(), application.Entrada{
-		ProvedorID:   "wamid.velha",
-		ConversaJID:  "5511999999999",
-		RemetenteJID: "5511999999999",
-		Corpo:        "oi",
-		CriadoEm:     agora.Add(-25 * time.Hour),
-	}); err != nil {
-		t.Fatal(err)
-	}
-	_, err := fx.gw.Enviar(context.Background(), application.Saida{
-		ConversaJID: "5511999999999",
-		Corpo:       "tarde",
-	})
-	if !errors.Is(err, domain.ErrForaDaJanela) {
-		t.Fatalf("err=%v", err)
-	}
-}
-
-func abrirJanela(t *testing.T, gw *application.Gateway, jid, provedor string) {
-	t.Helper()
-	in := application.Entrada{
-		ProvedorID:   provedor,
-		ConversaJID:  jid,
-		RemetenteJID: jid,
-		Corpo:        "oi",
-	}
-	if strings.HasSuffix(jid, "@g.us") {
-		in.Grupo = true
-		in.RemetenteJID = "5511999999999"
-	}
-	if _, err := gw.Receber(context.Background(), in); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -1383,29 +1291,28 @@ type stubCanal struct {
 }
 
 type stubEnvio struct {
-	Destino  domain.JID
-	Corpo    string
-	Midia    *domain.MidiaBytes
-	Template *domain.Template
+	Destino domain.JID
+	Corpo   string
+	Midia   *domain.MidiaBytes
 }
 
-func (s *stubCanal) Enviar(_ context.Context, e domain.Envio) (string, error) {
+func (s *stubCanal) Enviar(_ context.Context, destino domain.JID, corpo string, midia *domain.MidiaBytes) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.err != nil {
 		return "", s.err
 	}
 	var copyMidia *domain.MidiaBytes
-	if e.Midia != nil {
-		c := *e.Midia
-		c.Conteudo = bytes.Clone(e.Midia.Conteudo)
+	if midia != nil {
+		c := *midia
+		c.Conteudo = bytes.Clone(midia.Conteudo)
 		copyMidia = &c
 	}
-	s.envios = append(s.envios, stubEnvio{Destino: e.Destino, Corpo: e.Corpo, Midia: copyMidia, Template: e.Template})
+	s.envios = append(s.envios, stubEnvio{Destino: destino, Corpo: corpo, Midia: copyMidia})
 	return "stub", nil
 }
 
-func (s *stubCanal) Pronto() bool {
+func (s *stubCanal) Conectado() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.conectado
@@ -1415,10 +1322,12 @@ func (s *stubCanal) Situacao() domain.CanalSituacao {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.conectado {
-		return domain.CanalSituacao{Estado: domain.CanalPronto}
+		return domain.CanalSituacao{Estado: domain.CanalConectado}
 	}
-	return domain.CanalSituacao{Estado: domain.CanalNaoConfigurado}
+	return domain.CanalSituacao{Estado: domain.CanalDesconectado}
 }
+
+func (s *stubCanal) Desparear(context.Context) error { return domain.ErrDesparearIndisponivel }
 
 func (s *stubCanal) setErr(err error) {
 	s.mu.Lock()

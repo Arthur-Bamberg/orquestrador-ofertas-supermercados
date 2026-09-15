@@ -26,7 +26,6 @@ type Deps struct {
 	AckTexto string
 	Agente   Agente
 	NewID    func() string
-	Now      func() time.Time
 }
 
 type Gateway struct {
@@ -37,7 +36,6 @@ type Gateway struct {
 	ackTexto string
 	agente   Agente
 	newID    func() string
-	now      func() time.Time
 	mu       sync.Mutex
 	enviadas map[string]time.Time
 }
@@ -47,10 +45,6 @@ func New(d Deps) *Gateway {
 	if newID == nil {
 		newID = func() string { return "" }
 	}
-	now := d.Now
-	if now == nil {
-		now = time.Now
-	}
 	return &Gateway{
 		allow:    d.Allow,
 		repo:     d.Repo,
@@ -59,7 +53,6 @@ func New(d Deps) *Gateway {
 		ackTexto: d.AckTexto,
 		agente:   d.Agente,
 		newID:    newID,
-		now:      now,
 		enviadas: make(map[string]time.Time),
 	}
 }
@@ -89,7 +82,6 @@ type Saida struct {
 	ConversaJID string
 	Corpo       string
 	Midia       *domain.MidiaBytes
-	Template    *domain.Template
 }
 
 type ResultadoReceber struct {
@@ -280,7 +272,7 @@ func (g *Gateway) depoisDePersistir(ctx context.Context, in Entrada, conversa do
 	}
 	if !contato.BoasVindas {
 		log.Printf("whatsapp boas-vindas conversa=%s contato=%s", conversa.JID, contato.JID)
-		if _, err := g.enviarNaConversa(ctx, conversa, contato, domain.TextoBoasVindas, nil, nil); err != nil {
+		if _, err := g.enviarNaConversa(ctx, conversa, contato, domain.TextoBoasVindas, nil); err != nil {
 			log.Printf("whatsapp boas-vindas falhou: %v", err)
 			return
 		}
@@ -298,13 +290,13 @@ func (g *Gateway) depoisDePersistir(ctx context.Context, in Entrada, conversa do
 				return
 			}
 			log.Printf("whatsapp aceite conversa=%s contato=%s", conversa.JID, contato.JID)
-			if _, err := g.enviarNaConversa(ctx, conversa, contato, domain.TextoConfirmacaoAceite, nil, nil); err != nil {
+			if _, err := g.enviarNaConversa(ctx, conversa, contato, domain.TextoConfirmacaoAceite, nil); err != nil {
 				log.Printf("whatsapp confirmação de aceite falhou: %v", err)
 			}
 			return
 		}
 		log.Printf("whatsapp pedido de aceite conversa=%s contato=%s", conversa.JID, contato.JID)
-		if _, err := g.enviarNaConversa(ctx, conversa, contato, domain.TextoPedidoAceite, nil, nil); err != nil {
+		if _, err := g.enviarNaConversa(ctx, conversa, contato, domain.TextoPedidoAceite, nil); err != nil {
 			log.Printf("whatsapp pedido de aceite falhou: %v", err)
 		}
 		return
@@ -324,7 +316,7 @@ func (g *Gateway) chamarAgenteOuAck(ctx context.Context, in Entrada, conversa do
 		return
 	}
 	log.Printf("whatsapp ack enviado conversa=%s", conversa.JID)
-	_, _ = g.enviarNaConversa(ctx, conversa, contato, g.ackTexto, nil, nil)
+	_, _ = g.enviarNaConversa(ctx, conversa, contato, g.ackTexto, nil)
 }
 
 func (g *Gateway) Enviar(ctx context.Context, out Saida) (domain.Mensagem, error) {
@@ -341,12 +333,7 @@ func (g *Gateway) Enviar(ctx context.Context, out Saida) (domain.Mensagem, error
 	if err != nil {
 		return domain.Mensagem{}, err
 	}
-	if out.Template == nil || strings.TrimSpace(out.Template.Nome) == "" {
-		if !g.janelaAberta(ctx, conversa.ID) {
-			return domain.Mensagem{}, domain.ErrForaDaJanela
-		}
-	}
-	return g.enviarNaConversa(ctx, conversa, contato, out.Corpo, out.Midia, out.Template)
+	return g.enviarNaConversa(ctx, conversa, contato, out.Corpo, out.Midia)
 }
 
 func (g *Gateway) EnviarOperador(ctx context.Context, out Saida) (domain.Mensagem, error) {
@@ -356,7 +343,7 @@ func (g *Gateway) EnviarOperador(ctx context.Context, out Saida) (domain.Mensage
 	return g.Enviar(ctx, out)
 }
 
-func (g *Gateway) enviarNaConversa(ctx context.Context, conversa domain.Conversa, contato domain.Contato, corpo string, midia *domain.MidiaBytes, tpl *domain.Template) (domain.Mensagem, error) {
+func (g *Gateway) enviarNaConversa(ctx context.Context, conversa domain.Conversa, contato domain.Contato, corpo string, midia *domain.MidiaBytes) (domain.Mensagem, error) {
 	msg := domain.Mensagem{
 		ID:         domain.MensagemID(g.newID()),
 		ConversaID: conversa.ID,
@@ -365,7 +352,7 @@ func (g *Gateway) enviarNaConversa(ctx context.Context, conversa domain.Conversa
 		Corpo:      corpo,
 		Status:     domain.StatusPendente,
 		Origem:     domain.OrigemVivo,
-		CriadoEm:   g.now().UTC(),
+		CriadoEm:   time.Now().UTC(),
 	}
 	if midia != nil {
 		if err := g.anexarMidia(ctx, &msg, midia); err != nil {
@@ -380,12 +367,7 @@ func (g *Gateway) enviarNaConversa(ctx context.Context, conversa domain.Conversa
 		canalMidia = midia
 	}
 	if g.canal != nil {
-		id, err := g.canal.Enviar(ctx, domain.Envio{
-			Destino:  conversa.JID,
-			Corpo:    corpo,
-			Midia:    canalMidia,
-			Template: tpl,
-		})
+		id, err := g.canal.Enviar(ctx, conversa.JID, corpo, canalMidia)
 		if err != nil {
 			msg.Status = domain.StatusFalhou
 			_ = g.repo.SalvarMensagem(ctx, msg)
@@ -526,36 +508,23 @@ func (g *Gateway) LerMidia(ctx context.Context, path string) ([]byte, error) {
 	return g.midias.Ler(ctx, path)
 }
 
-func (g *Gateway) Pronto() bool {
+func (g *Gateway) Conectado() bool {
 	if g.canal == nil {
 		return false
 	}
-	return g.canal.Pronto()
+	return g.canal.Conectado()
 }
 
 func (g *Gateway) SituacaoCanal() domain.CanalSituacao {
 	if g.canal == nil {
-		return domain.CanalSituacao{Estado: domain.CanalNaoConfigurado}
+		return domain.CanalSituacao{Estado: domain.CanalDesconectado}
 	}
 	return g.canal.Situacao()
 }
 
-func (g *Gateway) janelaAberta(ctx context.Context, conversaID domain.ConversaID) bool {
-	msgs, err := g.repo.ListarMensagens(ctx, conversaID)
-	if err != nil {
-		return false
+func (g *Gateway) Desparear(ctx context.Context) error {
+	if g.canal == nil {
+		return domain.ErrDesparearIndisponivel
 	}
-	var ultima time.Time
-	for _, m := range msgs {
-		if m.Direcao != domain.DirecaoEntrada {
-			continue
-		}
-		if m.Origem == domain.OrigemHistorico {
-			continue
-		}
-		if m.CriadoEm.After(ultima) {
-			ultima = m.CriadoEm
-		}
-	}
-	return domain.DentroDaJanela(ultima, g.now())
+	return g.canal.Desparear(ctx)
 }

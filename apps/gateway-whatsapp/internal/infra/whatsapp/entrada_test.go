@@ -26,6 +26,7 @@ func TestEntrada_fromMeSemTextoIgnora(t *testing.T) {
 	}
 }
 
+
 func TestEntrada_reacaoSemTextoAindaEntra(t *testing.T) {
 	got, ok := whatsapp.Entrada(whatsapp.Inbound{
 		ProvedorID: "id1",
