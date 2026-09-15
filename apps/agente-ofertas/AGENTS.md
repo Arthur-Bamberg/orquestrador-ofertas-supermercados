@@ -6,11 +6,11 @@ Module path: `github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/
 
 ## What this system does
 
-1. **Agente da Lista** receives inbound text (`POST /listas` from the gateway, Bearer `GATEWAY_TOKEN`), classifies **Intenção** (Lista, Consulta, Recusa). Recusa/Consulta in a WhatsApp group (`…@g.us`) send nothing. Consulta in a 1:1 is grounded on the Pague Menos Mercado description. Recusa in a 1:1 is a fixed recorte line. Lista: splits Itens, derives a Termo per Item (interpretation, closed-class fallback), runs Coleta per non-empty Termo in parallel via `ofertas-scraper-v2`, and reads vigente encarte Ofertas (Documento)
+1. **Agente da Lista** receives inbound text (`POST /listas` from the gateway, Bearer `GATEWAY_TOKEN`), classifies **Intenção** (Lista, Consulta, Recusa). Recusa/Consulta historically silent on `…@g.us`; the Canal recorte is direta. Consulta in a 1:1 is grounded on the Pague Menos Mercado description. Recusa in a 1:1 is a fixed recorte line. Lista: splits Itens, derives a Termo per Item (interpretation, closed-class fallback), runs Coleta per non-empty Termo in parallel via `ofertas-scraper-v2`, and reads vigente encarte Ofertas (Documento)
 2. Waits for every Item, then **Agente de Resposta** drops related products, keeps the Produto with fewest extra name tokens, cheapest Oferta (price ties listed), and sends through gateway `POST /envios`
 3. Catalog assistant (`POST /interpretar`, `POST /mcp`) enters at Agente da Lista — same Intenção and chain, no WhatsApp (Recusa still returns the recorte line). Both require Bearer `GATEWAY_TOKEN`.
 
-Does **not** pair WhatsApp, persist Mensagem, or run the Extrator. Does **not** HTTP the supermarket itself (Coleta is `ofertas-scraper-v2`).
+Does **not** persist Mensagem or run the Extrator. Does **not** HTTP the supermarket itself (Coleta is `ofertas-scraper-v2`). WhatsApp transport is Cloud API on the gateway (ADR 0020).
 
 ## Stack
 

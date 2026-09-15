@@ -25,15 +25,15 @@ O que o texto que entra no Agente é, antes de haver Lista: Lista, Consulta ou R
 _Avoid_: intent, classificação, tipo de mensagem, jailbreak (como tipo)
 
 **Consulta**:
-Intenção em que a pessoa pergunta ou pede explicação sobre Pague Menos Mercado, ou só cumprimenta — e o texto não é Recusa nem Lista. Em Conversa direta há texto de Consulta; em grupo não há Mensagem de saída.
+Intenção em que a pessoa pergunta ou pede explicação sobre Pague Menos Mercado, ou só cumprimenta — e o texto não é Recusa nem Lista. Na Conversa (direta neste recorte do Canal) há texto de Consulta.
 _Avoid_: FAQ, help, sobre o projeto, mensagem consultiva, saudação (como entidade)
 
 **Recusa**:
-Intenção em que o texto não é Lista nem Consulta. Inclui tentativa de sair do recorte, mesmo que o mesmo texto também nomeie o que comprar. Em Conversa direta há texto de Recusa; em grupo não há Mensagem de saída.
+Intenção em que o texto não é Lista nem Consulta. Inclui tentativa de sair do recorte, mesmo que o mesmo texto também nomeie o que comprar. Na Conversa (direta neste recorte do Canal) há texto de Recusa.
 _Avoid_: jailbreak (como entidade), off-topic, fallback, recusa de serviço, silêncio (como entidade)
 
 **Lista**:
-O que a pessoa quer comprar ou comparar de preço, quando a Intenção do texto de **uma** Mensagem viva de texto cujo Contato remetente tem Aceite (não FromMe, não Status, não histórico, não reacção / revogação / indecifrável) é Lista — o texto pede isso e não é Recusa. Mencionar comida de passagem não é Lista. Mídia sem texto não é Lista neste recorte. A Mensagem seguinte na mesma Conversa é outra Intenção — não acumula. Em grupo a Resposta vai no grupo. O assistente de catálogo também pode entregar uma Lista, sem Canal — sem Aceite.
+O que a pessoa quer comprar ou comparar de preço, quando a Intenção do texto de **uma** Mensagem viva de texto cujo Contato remetente tem Aceite (não histórico, não reacção / revogação / indecifrável) é Lista — o texto pede isso e não é Recusa. Mencionar comida de passagem não é Lista. Mídia sem texto não é Lista neste recorte. A Mensagem seguinte na mesma Conversa é outra Intenção — não acumula. A Resposta sai na mesma Conversa. O assistente de catálogo também pode entregar uma Lista, sem Canal — sem Aceite.
 _Avoid_: Pedido, ordem, carrinho, Mensagem, sessão, lista vigente, lista dividida
 
 **Item**:

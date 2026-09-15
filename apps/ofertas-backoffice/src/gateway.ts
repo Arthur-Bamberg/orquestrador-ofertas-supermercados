@@ -143,17 +143,12 @@ export function midiaUrl(mensagemId: string): string {
 }
 
 export type CanalSituacao = {
-  estado: "pendente" | "conectado" | "desconectado" | string;
+  estado: "pronto" | "nao_configurado" | string;
   jid?: string;
-  qrPngBase64?: string;
 };
 
 export function getCanal(): Promise<CanalSituacao> {
   return gatewayRequest<CanalSituacao>("/canal");
-}
-
-export function desparearCanal(): Promise<CanalSituacao> {
-  return gatewayRequest<CanalSituacao>("/canal/desparear", undefined, { method: "POST" });
 }
 
 export function conversaRotulo(conversa: Pick<ConversaResumo, "jid" | "ultimaMensagem">): string {

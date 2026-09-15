@@ -3,14 +3,24 @@ package domain
 type EstadoCanal string
 
 const (
-	CanalPendente     EstadoCanal = "pendente"
-	CanalConectado    EstadoCanal = "conectado"
-	CanalDesconectado EstadoCanal = "desconectado"
+	CanalNaoConfigurado EstadoCanal = "nao_configurado"
+	CanalPronto         EstadoCanal = "pronto"
 )
 
 // CanalSituacao is the operator-facing snapshot of the Canal.
 type CanalSituacao struct {
 	Estado EstadoCanal
 	JID    JID
-	QR     string
+}
+
+type Template struct {
+	Nome   string
+	Idioma string
+}
+
+type Envio struct {
+	Destino  JID
+	Corpo    string
+	Midia    *MidiaBytes
+	Template *Template
 }

@@ -5,45 +5,60 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp/internal/domain"
 )
 
 type Config struct {
-	DatabaseURL  string
-	HTTPAddr     string
-	GatewayToken string
-	Allowlist    string
-	AckTexto     string
-	StubCanal    bool
-	SessionPath  string
-	MidiaRoot    string
-	CORSOrigin   string
-	AgenteURL    string
+	DatabaseURL   string
+	HTTPAddr      string
+	GatewayToken  string
+	Allowlist     string
+	AckTexto      string
+	StubCanal     bool
+	MidiaRoot     string
+	CORSOrigin    string
+	AgenteURL     string
+	WhatsAppToken string
+	PhoneNumberID string
+	DisplayNumber string
+	VerifyToken   string
+	AppSecret     string
+	GraphVersion  string
 }
 
 func Load() (Config, error) {
 	loadDotEnv(findDotEnv())
 	cfg := Config{
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		HTTPAddr:     envOr("HTTP_ADDR", ":8090"),
-		GatewayToken: os.Getenv("GATEWAY_TOKEN"),
-		Allowlist:    os.Getenv("WHATSAPP_ALLOWLIST"),
-		AckTexto:     envOr("WHATSAPP_ACK_TEXTO", "Recebi. O ajudante de ofertas ainda não está ligado neste canal."),
-		StubCanal:    truthy(os.Getenv("WHATSAPP_STUB")),
-		SessionPath:  envOr("WHATSAPP_SESSION_PATH", "./.data/whatsmeow.db"),
-		MidiaRoot:    envOr("MIDIA_ROOT", "./.data/midia"),
-		CORSOrigin:   envOr("CORS_ORIGIN", "http://localhost:5173"),
-		AgenteURL:    strings.TrimSpace(os.Getenv("AGENTE_URL")),
+		DatabaseURL:   os.Getenv("DATABASE_URL"),
+		HTTPAddr:      envOr("HTTP_ADDR", ":8090"),
+		GatewayToken:  os.Getenv("GATEWAY_TOKEN"),
+		Allowlist:     os.Getenv("WHATSAPP_ALLOWLIST"),
+		AckTexto:      envOr("WHATSAPP_ACK_TEXTO", "Recebi. O ajudante de ofertas ainda não está ligado neste canal."),
+		StubCanal:     truthy(os.Getenv("WHATSAPP_STUB")),
+		MidiaRoot:     envOr("MIDIA_ROOT", "./.data/midia"),
+		CORSOrigin:    envOr("CORS_ORIGIN", "http://localhost:5173"),
+		AgenteURL:     strings.TrimSpace(os.Getenv("AGENTE_URL")),
+		WhatsAppToken: strings.TrimSpace(os.Getenv("WHATSAPP_TOKEN")),
+		PhoneNumberID: strings.TrimSpace(os.Getenv("WHATSAPP_PHONE_NUMBER_ID")),
+		DisplayNumber: strings.TrimSpace(os.Getenv("WHATSAPP_DISPLAY_NUMBER")),
+		VerifyToken:   strings.TrimSpace(os.Getenv("WHATSAPP_VERIFY_TOKEN")),
+		AppSecret:     strings.TrimSpace(os.Getenv("WHATSAPP_APP_SECRET")),
+		GraphVersion:  envOr("WHATSAPP_GRAPH_VERSION", "v21.0"),
 	}
 	var err error
-	cfg.SessionPath, err = filepath.Abs(cfg.SessionPath)
-	if err != nil {
-		return Config{}, err
-	}
 	cfg.MidiaRoot, err = filepath.Abs(cfg.MidiaRoot)
 	if err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+func (c Config) DisplayJID() domain.JID {
+	if c.DisplayNumber == "" {
+		return ""
+	}
+	return domain.NormalizarJID(c.DisplayNumber)
 }
 
 func truthy(v string) bool {
