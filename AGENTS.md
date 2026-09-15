@@ -25,7 +25,7 @@ Create an app module only when implementing it — do not scaffold empty `apps/`
 | Layout | `apps/<name>` per deployable; `modules/<name>` for shared libs (lazy) |
 | Local infra | Root [`docker-compose.yml`](./docker-compose.yml) — Postgres + apps (ADR 0008) |
 | Deploy images | `apps/<name>/Dockerfile` |
-| GCP | Cloud Run, project `orquestrador-ofertas`, region `southamerica-east1` — see [GCP](#gcp) |
+| GCP | Cloud Run for catalog apps; Canal (`gateway-whatsapp`) on a always-on GCE VM — project `ofertas-de-supermercado` (org `bambergsoftware-org`), region `southamerica-east1` — see [GCP](#gcp) |
 | Shared data | One PostgreSQL instance for all apps (ADR 0006) |
 | Schedule / TZ | Per app (scraper: external cron or `docker compose run`, `America/Sao_Paulo`) |
 
@@ -66,17 +66,17 @@ Register new modules in root `go.work` (`use ./apps/...` or `./modules/...`).
 
 ## GCP
 
-Cloud Run in project [`orquestrador-ofertas`](https://console.cloud.google.com/run?project=orquestrador-ofertas), region `southamerica-east1`.
+Project [`ofertas-de-supermercado`](https://console.cloud.google.com/run?project=ofertas-de-supermercado) (organization `bambergsoftware-org`), region `southamerica-east1`. Catalog apps on Cloud Run; Canal on a always-on GCE VM (ADR 0007 / 0020) — only `gateway-whatsapp` on that instance.
 
-| App | URL |
-|-----|-----|
-| **ofertas-backoffice** | https://ofertas-backoffice-ot4vhmelqq-rj.a.run.app |
-| ofertas-api | https://ofertas-api-ot4vhmelqq-rj.a.run.app |
-| gateway-whatsapp | https://gateway-whatsapp-ot4vhmelqq-rj.a.run.app |
-| agente-ofertas | https://agente-ofertas-ot4vhmelqq-rj.a.run.app |
-| ofertas-scraper-v2 | https://ofertas-scraper-v2-ot4vhmelqq-rj.a.run.app |
+| App | Host | URL |
+|-----|------|-----|
+| **ofertas-backoffice** | Cloud Run | https://ofertas-backoffice-3qrcgfe65q-rj.a.run.app |
+| ofertas-api | Cloud Run | https://ofertas-api-3qrcgfe65q-rj.a.run.app |
+| agente-ofertas | Cloud Run | https://agente-ofertas-3qrcgfe65q-rj.a.run.app |
+| ofertas-scraper-v2 | Cloud Run | https://ofertas-scraper-v2-3qrcgfe65q-rj.a.run.app |
+| gateway-whatsapp | GCE VM `gateway-whatsapp` (e2-micro, `southamerica-east1-a`) | http://34.39.249.109:8090 — Canal; QR na tela Canal do backoffice |
 
-Console (backoffice): [ofertas-backoffice](https://console.cloud.google.com/run/detail/southamerica-east1/ofertas-backoffice/metrics?project=orquestrador-ofertas).
+Console (backoffice): [ofertas-backoffice](https://console.cloud.google.com/run/detail/southamerica-east1/ofertas-backoffice/metrics?project=ofertas-de-supermercado).
 
 ## Shared PostgreSQL
 

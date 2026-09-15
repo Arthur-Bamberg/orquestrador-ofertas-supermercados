@@ -1,6 +1,6 @@
 # AGENTS.md — gateway-whatsapp
 
-Gateway do canal WhatsApp. Glossário: [`CONTEXT.md`](./CONTEXT.md). Workspace: [`../../AGENTS.md`](../../AGENTS.md). ADRs: [`../../docs/adr/0007-gateway-whatsapp-whatsmeow.md`](../../docs/adr/0007-gateway-whatsapp-whatsmeow.md), [`../../docs/adr/0009-backoffice-le-canal-via-gateway.md`](../../docs/adr/0009-backoffice-le-canal-via-gateway.md), [`../../docs/adr/0017-backoffice-pareamento-via-gateway.md`](../../docs/adr/0017-backoffice-pareamento-via-gateway.md), [`../../docs/adr/0018-operador-backoffice.md`](../../docs/adr/0018-operador-backoffice.md), [`../../docs/adr/0019-aceite-no-contato-em-vez-de-allowlist.md`](../../docs/adr/0019-aceite-no-contato-em-vez-de-allowlist.md), [`docs/adr/0001-rastro-completo-whatsapp.md`](./docs/adr/0001-rastro-completo-whatsapp.md), [`docs/adr/0003-receber-concorrente-unique.md`](./docs/adr/0003-receber-concorrente-unique.md).
+Gateway do canal WhatsApp. Glossário: [`CONTEXT.md`](./CONTEXT.md). Workspace: [`../../AGENTS.md`](../../AGENTS.md). ADRs: [`../../docs/adr/0007-gateway-whatsapp-whatsmeow.md`](../../docs/adr/0007-gateway-whatsapp-whatsmeow.md), [`../../docs/adr/0009-backoffice-le-canal-via-gateway.md`](../../docs/adr/0009-backoffice-le-canal-via-gateway.md), [`../../docs/adr/0017-backoffice-pareamento-via-gateway.md`](../../docs/adr/0017-backoffice-pareamento-via-gateway.md), [`../../docs/adr/0018-operador-backoffice.md`](../../docs/adr/0018-operador-backoffice.md), [`../../docs/adr/0019-aceite-no-contato-em-vez-de-allowlist.md`](../../docs/adr/0019-aceite-no-contato-em-vez-de-allowlist.md), [`../../docs/adr/0020-canal-always-on-na-vm.md`](../../docs/adr/0020-canal-always-on-na-vm.md), [`docs/adr/0001-rastro-completo-whatsapp.md`](./docs/adr/0001-rastro-completo-whatsapp.md), [`docs/adr/0003-receber-concorrente-unique.md`](./docs/adr/0003-receber-concorrente-unique.md).
 
 Module path: `github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/gateway-whatsapp`
 
@@ -26,6 +26,7 @@ Does **not** import `modules/ofertas-store`. The Agente is `apps/agente-ofertas`
 | Catalog | none |
 | Channel DB | PostgreSQL schema `whatsapp` (same instance, own migrations) |
 | HTTP | `:8090` default; `CORS_ORIGIN` for the backoffice |
+| Production | Always-on GCE VM `gateway-whatsapp` (e2-micro, `southamerica-east1-a`, http://34.39.249.109:8090). This process only (ADR 0020). Not Cloud Run. Startup: [`scripts/gce-startup.sh`](./scripts/gce-startup.sh). |
 
 ## Layout
 

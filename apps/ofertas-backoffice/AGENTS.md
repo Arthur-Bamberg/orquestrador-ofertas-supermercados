@@ -19,7 +19,7 @@ npm test
 
 No Compose: `docker compose up --build` (ADR 0008) publica o SPA em `http://localhost:5173` (nginx faz proxy de `/api` e `/gateway`). Host `npm run dev` usa o proxy do Vite. Não bakeie `GATEWAY_TOKEN` no SPA (ADR 0018).
 
-GCP (Cloud Run, projeto `orquestrador-ofertas`, `southamerica-east1`): https://ofertas-backoffice-ot4vhmelqq-rj.a.run.app — [console](https://console.cloud.google.com/run/detail/southamerica-east1/ofertas-backoffice/metrics?project=orquestrador-ofertas).
+GCP (Cloud Run, projeto `ofertas-de-supermercado`, `southamerica-east1`): https://ofertas-backoffice-3qrcgfe65q-rj.a.run.app — [console](https://console.cloud.google.com/run/detail/southamerica-east1/ofertas-backoffice/metrics?project=ofertas-de-supermercado).
 
 ## Regras locais
 

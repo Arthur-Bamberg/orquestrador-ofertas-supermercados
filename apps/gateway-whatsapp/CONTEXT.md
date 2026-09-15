@@ -37,8 +37,8 @@ Anexo da Mensagem — imagem, áudio, vídeo, documento ou figurinha — bytes n
 _Avoid_: arquivo, blob, attachment, Artefato
 
 **Canal**:
-Capacidade de enviar e receber no WhatsApp (whatsmeow em produção; stub nos testes e com `WHATSAPP_STUB=1`). Um por processo; não pertence a um Mercado. O nome comercial do produto (hoje Pague Menos Mercado) não é um Canal. Estado: **pendente** (sem Pareamento; QR visível), **conectado** (no ar), **desconectado** (há Pareamento e o envio/recebimento não está no ar; sem QR). Stub local conta como conectado. Com Pareamento, o Canal tem o JID do telefone dedicado — visível ao Operador nos estados conectado e desconectado; não é um Contato. Esses três são estado do Canal — **pendente** aqui não é o status de envio da Mensagem.
-_Avoid_: bot, Cloud API, webhook (como sinónimo), Mercado, Pague Menos Mercado (como se fosse este Canal)
+Capacidade de enviar e receber no WhatsApp (whatsmeow em produção; stub nos testes e com `WHATSAPP_STUB=1`). Um por processo, always-on; não pertence a um Mercado. O nome comercial do produto (hoje Pague Menos Mercado) não é um Canal. Estado: **pendente** (sem Pareamento; QR visível), **conectado** (no ar), **desconectado** (há Pareamento e o envio/recebimento não está no ar; sem QR). Processo parado com Pareamento = desconectado. Stub local conta como conectado. Com Pareamento, o Canal tem o JID do telefone dedicado — visível ao Operador nos estados conectado e desconectado; não é um Contato. Esses três são estado do Canal — **pendente** aqui não é o status de envio da Mensagem.
+_Avoid_: bot, Cloud API, webhook (como sinónimo), Mercado, Pague Menos Mercado (como se fosse este Canal), escala a zero
 
 **Pareamento**:
 Vínculo do telefone dedicado ao Canal, feito via QR. Ausente = Canal pendente (QR visível). Presente = Canal conectado ou desconectado. O scan bem-sucedido deixa o Canal conectado.
