@@ -118,6 +118,27 @@ func (c *Cliente) SetReciboHandler(h func(context.Context, string, domain.Status
 	c.recibo = h
 }
 
+type socketQR interface {
+	IsConnected() bool
+	Disconnect()
+	GetQRChannel(context.Context) (<-chan whatsmeow.QRChannelItem, error)
+	Connect() error
+}
+
+func conectarComQR(ctx context.Context, pareado bool, sock socketQR, observar func(<-chan whatsmeow.QRChannelItem)) error {
+	if !pareado {
+		if sock.IsConnected() {
+			sock.Disconnect()
+		}
+		ch, err := sock.GetQRChannel(ctx)
+		if err != nil {
+			return err
+		}
+		observar(ch)
+	}
+	return sock.Connect()
+}
+
 func (c *Cliente) Connect(ctx context.Context) error {
 	c.mu.RLock()
 	cli := c.client
@@ -126,14 +147,10 @@ func (c *Cliente) Connect(ctx context.Context) error {
 	if qrCtx == nil {
 		qrCtx = ctx
 	}
-	if cli.Store.ID == nil {
-		ch, err := cli.GetQRChannel(qrCtx)
-		if err != nil {
-			return err
-		}
+	pareado := cli.Store != nil && cli.Store.ID != nil
+	return conectarComQR(qrCtx, pareado, cli, func(ch <-chan whatsmeow.QRChannelItem) {
 		go c.watchQR(ch)
-	}
-	return cli.Connect()
+	})
 }
 
 func (c *Cliente) watchQR(ch <-chan whatsmeow.QRChannelItem) {
@@ -149,6 +166,7 @@ func (c *Cliente) watchQR(ch <-chan whatsmeow.QRChannelItem) {
 		case whatsmeow.QRChannelTimeout.Event:
 			c.setQR("")
 			go func() {
+				log.Printf("whatsapp QR timeout: renovando Pareamento")
 				if err := c.Connect(context.Background()); err != nil {
 					log.Printf("whatsapp QR timeout: %v", err)
 				}

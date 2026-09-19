@@ -8,7 +8,7 @@ set +x
 PROJECT=ofertas-de-supermercado
 DATA=/var/lib/gateway-whatsapp
 PGHOST=10.100.0.3
-IMAGE_DEFAULT=southamerica-east1-docker.pkg.dev/ofertas-de-supermercado/apps/gateway-whatsapp:48d696a
+IMAGE_DEFAULT=southamerica-east1-docker.pkg.dev/ofertas-de-supermercado/apps/gateway-whatsapp:ac5268b
 
 until command -v docker >/dev/null && docker info >/dev/null 2>&1; do sleep 2; done
 echo "docker ready" >/dev/console
