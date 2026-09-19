@@ -328,6 +328,21 @@ func escolherOfertas(ctx context.Context, item string, ofertas []store.Oferta, p
 	if escolha == nil || len(ofertas) == 0 {
 		return nil, false, nil
 	}
+
+	// Filter offers by size if specified in the item
+	var filteredOfertas []store.Oferta
+	if q, m, ok := store.ExtractQuantityAndMeasure(item); ok {
+		for _, o := range ofertas {
+			if len(o.Quantidades) > 0 && o.Medida == m && containsFloat(o.Quantidades, q) {
+				filteredOfertas = append(filteredOfertas, o)
+			}
+		}
+		if len(filteredOfertas) == 0 {
+			return nil, false, nil // No offers match the requested size
+		}
+		ofertas = filteredOfertas
+	}
+
 	prodByID := map[store.ProdutoID]store.Produto{}
 	for _, p := range produtos {
 		prodByID[p.ID] = p
@@ -578,4 +593,13 @@ func utf8Len(s string) int {
 		n++
 	}
 	return n
+}
+
+func containsFloat(s []float64, f float64) bool {
+	for _, v := range s {
+		if v == f {
+			return true
+		}
+	}
+	return false
 }

@@ -28,6 +28,9 @@ Se não restar nada de mercearia, {"termo":""}.`
 
 	instrucaoEscolha = `Você escolhe quais Ofertas atendem o Item.
 O Item é o texto que a pessoa enviou. Tamanho, sabor, marca e embalagem que ela disse restringem: a Oferta mais barata que falha isso sai. Relacionados saem (molho quando pediu tomate). Preposição no tipo não diferencia: creme de leite e creme leite são o mesmo tipo — se a Oferta é desse tipo, ela atende.
+- Item SEM tamanho/sabor/marca/embalagem: todas as embalagens DO TIPO atendem; relacionados saem.
+- Item COM tamanho: só Ofertas cuja quantidades+medida casam (2000 ml para “2 litros”); a mais barata de outro tamanho sai.
+- Não usar tamanho/marca grudados no NOME DO PRODUTO como se fossem o tipo; olhar quantidades, medida, marca.
 Devolva só JSON: {"ids":["..."]}. Só ids da lista. Se nenhuma atender, {"ids":[]}.`
 )
 

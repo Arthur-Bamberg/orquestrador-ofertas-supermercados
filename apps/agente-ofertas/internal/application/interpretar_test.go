@@ -723,6 +723,53 @@ func TestInterpretarLista_consultaSemTextoUsaDescricao(t *testing.T) {
 	}
 }
 
+
+func TestInterpretar_escolhaFicaComTamanhoPedido(t *testing.T) {
+	cdl := store.ProdutoID("cdl")
+	c := &stubColeta{porTermo: map[string][]store.Oferta{
+		"creme de leite 200g": {
+			{
+				ID: "c1", ProdutoID: cdl, MercadoID: "fort",
+				Valor: 3.49, Quantidades: []float64{200}, Medida: store.MedidaG,
+				DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+			},
+			{
+				ID: "c2", ProdutoID: cdl, MercadoID: "fort",
+				Valor: 4.99, Quantidades: []float64{490}, Medida: store.MedidaG,
+				DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+			},
+		},
+	}}
+	escolha := &stubEscolha{ids: []store.OfertaID{"c1"}} // Expecting only 200g offer
+	ag := application.New(application.Deps{
+		Cat: memCat{
+			produtos: []store.Produto{{ID: cdl, Nome: "Creme de leite", NomeNorm: "creme de leite"}},
+			mercados: map[store.MercadoID]store.Mercado{"fort": {ID: "fort", Nome: "Fort"}},
+		},
+		Coleta:  c,
+		Escolha: escolha,
+		Hoje:    diaFn,
+		Termo:   &stubTermo{porItem: map[string]string{"creme de leite 200g": "creme de leite 200g"}},
+	})
+	got, err := ag.InterpretarLista(context.Background(), "creme de leite 200g")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "*creme de leite 200g*\nCreme de leite\n- Fort — R$ 3,49 / 200 g"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s\n", got, want)
+	}
+	if escolha.item != "creme de leite 200g" {
+		t.Fatalf("escolha sem o Item: %q", escolha.item)
+	}
+	if len(escolha.candidatos) != 1 { // Should pass only the filtered candidate to Escolher
+		t.Fatalf("candidatos=%d", len(escolha.candidatos))
+	}
+	if escolha.candidatos[0].ID != "c1" {
+		t.Fatalf("candidato errado: %q", escolha.candidatos[0].ID)
+	}
+}
+
 func TestInterpretarLista_escolhaFicaComTamanhoPedidoNaoComMaisBarato(t *testing.T) {
 	coca := store.MarcaID("coca")
 	c := &stubColeta{porTermo: map[string][]store.Oferta{

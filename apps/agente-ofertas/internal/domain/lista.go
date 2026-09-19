@@ -1,5 +1,4 @@
 package domain
-
 import (
 	"regexp"
 	"strings"

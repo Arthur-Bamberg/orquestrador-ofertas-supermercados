@@ -1,0 +1,1 @@
+ALTER TABLE produto ADD COLUMN original_nome TEXT NOT NULL DEFAULT '';

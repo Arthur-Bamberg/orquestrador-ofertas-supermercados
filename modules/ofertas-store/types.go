@@ -56,10 +56,11 @@ func (f Fonte) TipoOuEncarte() TipoFonte {
 }
 
 type Produto struct {
-	ID         ProdutoID `json:"id"`
-	Nome       string    `json:"nome"`
-	NomeNorm   string    `json:"nomeNorm"`
-	Categorias []string  `json:"categorias"`
+	ID           ProdutoID `json:"id"`
+	Nome         string    `json:"nome"`
+	OriginalNome string    `json:"originalNome"`
+	NomeNorm     string    `json:"nomeNorm"`
+	Categorias   []string  `json:"categorias"`
 }
 
 type Marca struct {

@@ -5,6 +5,7 @@ use (
 	./apps/gateway-whatsapp
 	./apps/ofertas-api
 	./apps/ofertas-scraper
+	./apps/ofertas-scraper/cmd/merge-produtos
 	./apps/ofertas-scraper-v2
 	./modules/ofertas-store
 	./modules/operador

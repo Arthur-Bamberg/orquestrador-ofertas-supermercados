@@ -158,17 +158,17 @@ func (s *Catalog) SaveProduto(ctx context.Context, p Produto) error {
 	if cats == nil {
 		cats = []string{}
 	}
-	_, err := s.pool.Exec(ctx, `INSERT INTO produto (id, nome, nome_norm, categorias)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, nome_norm = EXCLUDED.nome_norm, categorias = EXCLUDED.categorias`,
-		p.ID, p.Nome, p.NomeNorm, cats)
+	_, err := s.pool.Exec(ctx, `INSERT INTO produto (id, nome, original_nome, nome_norm, categorias)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, original_nome = EXCLUDED.original_nome, nome_norm = EXCLUDED.nome_norm, categorias = EXCLUDED.categorias`,
+		p.ID, p.Nome, p.OriginalNome, p.NomeNorm, cats)
 	return wrapPG(err)
 }
 
 func (s *Catalog) GetProduto(ctx context.Context, id ProdutoID) (Produto, bool, error) {
 	var p Produto
-	err := s.pool.QueryRow(ctx, `SELECT id, nome, nome_norm, categorias FROM produto WHERE id = $1`, id).
-		Scan(&p.ID, &p.Nome, &p.NomeNorm, &p.Categorias)
+	err := s.pool.QueryRow(ctx, `SELECT id, nome, original_nome, nome_norm, categorias FROM produto WHERE id = $1`, id).
+		Scan(&p.ID, &p.Nome, &p.OriginalNome, &p.NomeNorm, &p.Categorias)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Produto{}, false, nil
 	}
@@ -180,8 +180,8 @@ func (s *Catalog) GetProduto(ctx context.Context, id ProdutoID) (Produto, bool, 
 
 func (s *Catalog) GetProdutoByNomeNorm(ctx context.Context, nomeNorm string) (Produto, bool, error) {
 	var p Produto
-	err := s.pool.QueryRow(ctx, `SELECT id, nome, nome_norm, categorias FROM produto WHERE nome_norm = $1`, nomeNorm).
-		Scan(&p.ID, &p.Nome, &p.NomeNorm, &p.Categorias)
+	err := s.pool.QueryRow(ctx, `SELECT id, nome, original_nome, nome_norm, categorias FROM produto WHERE nome_norm = $1`, nomeNorm).
+		Scan(&p.ID, &p.Nome, &p.OriginalNome, &p.NomeNorm, &p.Categorias)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Produto{}, false, nil
 	}
@@ -192,7 +192,7 @@ func (s *Catalog) GetProdutoByNomeNorm(ctx context.Context, nomeNorm string) (Pr
 }
 
 func (s *Catalog) ListProdutos(ctx context.Context) ([]Produto, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, nome, nome_norm, categorias FROM produto ORDER BY id`)
+	rows, err := s.pool.Query(ctx, `SELECT id, nome, original_nome, nome_norm, categorias FROM produto ORDER BY id`)
 	if err != nil {
 		return nil, wrapPG(err)
 	}
@@ -200,7 +200,7 @@ func (s *Catalog) ListProdutos(ctx context.Context) ([]Produto, error) {
 	out := []Produto{}
 	for rows.Next() {
 		var p Produto
-		if err := rows.Scan(&p.ID, &p.Nome, &p.NomeNorm, &p.Categorias); err != nil {
+		if err := rows.Scan(&p.ID, &p.Nome, &p.OriginalNome, &p.NomeNorm, &p.Categorias); err != nil {
 			return nil, wrapPG(err)
 		}
 		if p.Categorias == nil {
@@ -594,6 +594,45 @@ func (s *Catalog) GetOfertaByUniq(ctx context.Context, chave string) (Oferta, bo
 	return o, err == nil, wrapPG(err)
 }
 
+func (s *Catalog) GetOfertaSources(ctx context.Context, ofertaID OfertaID) ([]DocumentoID, []ColetaID, error) {
+	var docIDs []DocumentoID
+	rows, err := s.pool.Query(ctx, `SELECT documento_id FROM documento_oferta WHERE ofert-id = $1`, ofertaID)
+	if err != nil {
+		return nil, nil, wrapPG(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var docID DocumentoID
+		if err := rows.Scan(&docID); err != nil {
+			return nil, nil, wrapPG(err)
+		}
+		docIDs = append(docIDs, docID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, wrapPG(err)
+	}
+
+	var coletaIDs []ColetaID
+	rows, err = s.pool.Query(ctx, `SELECT colet-id FROM coleta_oferta WHERE ofert-id = $1`, ofertaID)
+	if err != nil {
+		return nil, nil, wrapPG(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var coletaID ColetaID
+		if err := rows.Scan(&coletaID); err != nil {
+			return nil, nil, wrapPG(err)
+		}
+		coletaIDs = append(coletaIDs, coletaID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, wrapPG(err)
+	}
+
+	return docIDs, coletaIDs, nil
+}
+
+
 const ofertaSelect = `SELECT id, produto_id, marca_id, mercado_id, valor, quantidades, medida,
 	data_inicio, data_expiracao, origem_data_inicio, origem_data_expiracao,
 	promocao, comparativo, documento_id, indicacao_promocional FROM oferta`
@@ -651,6 +690,12 @@ func (s *Catalog) DeleteOferta(ctx context.Context, id OfertaID) error {
 	}
 	return nil
 }
+
+func (s *Catalog) UpdateOfertaProdutoID(ctx context.Context, ofertaID OfertaID, newProdutoID ProdutoID) error {
+	_, err := s.pool.Exec(ctx, `UPDATE oferta SET produto_id = $1 WHERE id = $2`, newProdutoID, ofertaID)
+	return wrapPG(err)
+}
+
 
 func (s *Catalog) SaveOfertasForDocumento(ctx context.Context, documentoID DocumentoID, ofertas []Oferta) error {
 	if ofertas == nil {

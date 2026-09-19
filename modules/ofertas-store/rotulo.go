@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -12,6 +14,39 @@ func NormalizarRotulo(s string) string {
 		return ""
 	}
 	return strings.ToLower(strings.Join(fields, " "))
+}
+
+// Regex for extracting quantity and unit (e.g., "1kg", "500g", "2L", "200 ml")
+var quantityMeasurePattern = regexp.MustCompile(`(?i)([[:digit:]]+(?:[.,][[:digit:]]+)?)\s*(kg|g|l|ml|litro)\b`)
+
+// ExtractQuantityAndMeasure attempts to parse quantity and measure from a product name.
+func ExtractQuantityAndMeasure(productName string) (float64, Medida, bool) {
+	matches := quantityMeasurePattern.FindStringSubmatch(productName)
+	if len(matches) < 3 {
+		return 0, "", false
+	}
+	quantityStr := strings.Replace(matches[1], ",", ".", 1) // Replace comma with dot for float parsing
+	quantity, err := strconv.ParseFloat(quantityStr, 64)
+	if err != nil {
+		return 0, "", false
+	}
+	unit := strings.ToLower(matches[2])
+	var medida Medida
+	switch unit {
+	case "kg":
+		medida = MedidaG
+		quantity *= 1000 // Convert kg to g
+	case "g":
+		medida = MedidaG
+	case "l", "litro":
+		medida = MedidaML
+		quantity *= 1000 // Convert L to ml
+	case "ml":
+		medida = MedidaML
+	default:
+		return 0, "", false
+	}
+	return quantity, medida, true
 }
 
 type marcaLookup interface {

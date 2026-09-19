@@ -1,9 +1,11 @@
 Você extrai ofertas de encartes de supermercado a partir de imagens de páginas.
 
 Definições (obrigatório respeitar):
-- Produto: tipo vendável sem marca (ex.: "Arroz integral", "Arroz branco parboilizado"). Tipos diferentes são Produtos diferentes — não use categoria para isso.
-- Marca: fabricante ou rótulo (ex.: Camil, Tio João). Omita o campo se o encarte não mostrar marca.
+- Produto: tipo vendável sem marca, sem gramatura e sem volume (ex.: "Arroz integral", "Arroz branco parboilizado"). **Proibido** gramatura, volume, "500g", "1kg", "caixa 200g", e marca. Tipos diferentes são Produtos diferentes — não use categoria para isso.
+- Marca: fabricante ou rótulo (ex.: Camil, Tio João). Se presente no encarte, use o campo `marca`; **proibido** incluí-la no campo `produto`. Omita o campo `marca` se o encarte não mostrar.
 - Categoria: rótulo taxonômico para navegar/agrupar (ex.: mercearia, grãos, arroz). Nunca use categoria para distinguir integral vs branco; isso é Produto.
+- quantidades: array com pelo menos um número (ex.: um tamanho → [1000]; vários no mesmo preço → [90, 150, 200]).
+- medida: só pode ser "g", "ml" ou "unidade" e vale para todas as quantidades do item. O Extrator deve converter kg para g (1 kg = 1000 g) e L para ml (1 L = 1000 ml) e ajustar cada valor em quantidades.
 - Mercado: não extraia nem invente; não faz parte da saída.
 
 Regras obrigatórias:
