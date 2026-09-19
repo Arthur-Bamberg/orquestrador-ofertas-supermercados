@@ -1,13 +1,13 @@
 # AGENTS.md — agente-ofertas
 
-Dois papéis num processo (Agente da Lista, Agente de Resposta). Glossário: [`CONTEXT.md`](./CONTEXT.md). Cadeia: [`../../docs/arquitetura-agentes-lista-coleta.md`](../../docs/arquitetura-agentes-lista-coleta.md). Workspace: [`../../AGENTS.md`](../../AGENTS.md). ADRs: [`../../docs/adr/0010-agente-ofertas-um-app.md`](../../docs/adr/0010-agente-ofertas-um-app.md), [`../../docs/adr/0016-agente-lista-coleta-encarte-resposta.md`](../../docs/adr/0016-agente-lista-coleta-encarte-resposta.md), [`docs/adr/0001-notifica-http-casamento-por-substring.md`](./docs/adr/0001-notifica-http-casamento-por-substring.md), [`docs/adr/0002-resposta-so-mais-barato.md`](./docs/adr/0002-resposta-so-mais-barato.md), [`docs/adr/0003-termo-antes-da-coleta.md`](./docs/adr/0003-termo-antes-da-coleta.md), [`docs/adr/0004-resposta-um-produto-menos-extras.md`](./docs/adr/0004-resposta-um-produto-menos-extras.md), [`docs/adr/0005-intencao-antes-da-lista.md`](./docs/adr/0005-intencao-antes-da-lista.md).
+Dois papéis num processo (Agente da Lista, Agente de Resposta). Glossário: [`CONTEXT.md`](./CONTEXT.md). Cadeia: [`../../docs/arquitetura-agentes-lista-coleta.md`](../../docs/arquitetura-agentes-lista-coleta.md). Workspace: [`../../AGENTS.md`](../../AGENTS.md). ADRs: [`../../docs/adr/0010-agente-ofertas-um-app.md`](../../docs/adr/0010-agente-ofertas-um-app.md), [`../../docs/adr/0016-agente-lista-coleta-encarte-resposta.md`](../../docs/adr/0016-agente-lista-coleta-encarte-resposta.md), [`docs/adr/0001-notifica-http-casamento-por-substring.md`](./docs/adr/0001-notifica-http-casamento-por-substring.md), [`docs/adr/0002-resposta-so-mais-barato.md`](./docs/adr/0002-resposta-so-mais-barato.md), [`docs/adr/0003-termo-antes-da-coleta.md`](./docs/adr/0003-termo-antes-da-coleta.md), [`docs/adr/0004-resposta-um-produto-menos-extras.md`](./docs/adr/0004-resposta-um-produto-menos-extras.md), [`docs/adr/0005-intencao-antes-da-lista.md`](./docs/adr/0005-intencao-antes-da-lista.md), [`docs/adr/0006-resposta-interpreta-item-contra-ofertas.md`](./docs/adr/0006-resposta-interpreta-item-contra-ofertas.md).
 
 Module path: `github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/agente-ofertas`
 
 ## What this system does
 
 1. **Agente da Lista** receives inbound text (`POST /listas` from the gateway, Bearer `GATEWAY_TOKEN`), classifies **Intenção** (Lista, Consulta, Recusa). Recusa/Consulta in a WhatsApp group (`…@g.us`) send nothing. Consulta in a 1:1 is grounded on the Pague Menos Mercado description. Recusa in a 1:1 is a fixed recorte line. Lista: splits Itens, derives a Termo per Item (interpretation, closed-class fallback), runs Coleta per non-empty Termo in parallel via `ofertas-scraper-v2`, and reads vigente encarte Ofertas (Documento)
-2. Waits for every Item, then **Agente de Resposta** drops related products, keeps the Produto with fewest extra name tokens, cheapest Oferta (price ties listed), and sends through gateway `POST /envios`
+2. Waits for every Item, then **Agente de Resposta** interprets the Item text against reunited Ofertas (size/flavor/brand/packaging in the person's text constrain; cheaper mismatch is dropped), then keeps cheapest among those that match, and sends through gateway `POST /envios`
 3. Catalog assistant (`POST /interpretar`, `POST /mcp`) enters at Agente da Lista — same Intenção and chain, no WhatsApp (Recusa still returns the recorte line). Both require Bearer `GATEWAY_TOKEN`.
 
 Does **not** pair WhatsApp, persist Mensagem, or run the Extrator. Does **not** HTTP the supermarket itself (Coleta is `ofertas-scraper-v2`).
@@ -19,7 +19,7 @@ Does **not** pair WhatsApp, persist Mensagem, or run the Extrator. Does **not** 
 | Language | Go (workspace module) |
 | Catalog | `modules/ofertas-store` (read) |
 | Coleta | HTTP `COLETA_URL` → `ofertas-scraper-v2` `POST /coletas` |
-| Termo / Intenção | Gemini (`GEMINI_API_KEY`); sem chave, o texto segue como Lista e o Termo cai no invólucro |
+| Termo / Intenção / Resposta | Gemini (`GEMINI_API_KEY`); sem chave, o texto segue como Lista, o Termo cai no invólucro e a Resposta olha o Termo |
 | Canal | HTTP to `gateway-whatsapp` |
 | HTTP | `:8091` default |
 

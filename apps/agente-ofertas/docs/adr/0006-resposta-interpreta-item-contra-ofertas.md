@@ -1,0 +1,3 @@
+# Agente de Resposta interpreta o Item contra as Ofertas reunidas
+
+O Termo leva à Coleta o tamanho, sabor e embalagem que a pessoa disse. O Agente de Resposta escolhe Ofertas com o texto do Item no pedido — não pelo menor preço entre tipos que só prefix-casam. Rejeitado: só mudar o Termo (tamanho mora na Oferta, não no nome do Produto; prefixo com “2 litros” some a garrafa ou vira “Não achei”), matcher LLM Item→Produto no catálogo (ADR 0001), e preço unitário (ADR 0002). Se a interpretação falhar, cai no Termo (tipo sem tamanho; ADR 0004). Entre as Ofertas que atendem o Item, permanece o menor preço efetivo.

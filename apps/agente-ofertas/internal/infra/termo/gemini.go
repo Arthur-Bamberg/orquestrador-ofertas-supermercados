@@ -10,7 +10,9 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/agente-ofertas/internal/application"
 	"github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/apps/agente-ofertas/internal/domain"
+	store "github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store"
 )
 
 const (
@@ -18,10 +20,15 @@ const (
 	geminiDefaultModel = "gemini-3-flash-preview"
 	instrucaoTermo     = `Você extrai o Termo de busca de uma linha de lista de supermercado.
 Devolva só JSON: {"termo":"..."}.
-O termo tem o tipo vendável, cultivar ou processo se a pessoa disse (orgânica, italiana) e a marca.
-Não inclua verbo de compra, cumprimento, quantidade, unidade de medida, artigo, preposição nem pontuação.
-Não invente o que a pessoa não disse. Não use catálogo.
+O termo tem o tipo vendável, cultivar ou processo se a pessoa disse (orgânica, italiana), a marca, e tamanho, sabor ou embalagem se a pessoa disse (2 litros, com abas, uva).
+Fique só com mercearia: saia verbo de compra, cumprimento, artigo e pontuação.
+Preposição que só envolve sai (2kg de cenoura → 2kg cenoura). Preposição do tipo fica (creme de leite, molho de tomate).
+O texto da linha é o que a pessoa enviou — copie dele o que for mercearia; não invente. Não use catálogo.
 Se não restar nada de mercearia, {"termo":""}.`
+
+	instrucaoEscolha = `Você escolhe quais Ofertas atendem o Item.
+O Item é o texto que a pessoa enviou. Tamanho, sabor, marca e embalagem que ela disse restringem: a Oferta mais barata que falha isso sai. Relacionados saem (molho quando pediu tomate). Preposição no tipo não diferencia: creme de leite e creme leite são o mesmo tipo — se a Oferta é desse tipo, ela atende.
+Devolva só JSON: {"ids":["..."]}. Só ids da lista. Se nenhuma atender, {"ids":[]}.`
 )
 
 func instrucaoIntencao() string {
@@ -54,6 +61,45 @@ func (g Gemini) Termo(ctx context.Context, item string) (string, error) {
 		return "", err
 	}
 	return strings.Join(strings.Fields(strings.TrimSpace(out.Termo)), " "), nil
+}
+
+func (g Gemini) Escolher(ctx context.Context, item string, candidatos []application.Candidato) ([]store.OfertaID, error) {
+	linhas := make([]map[string]any, 0, len(candidatos))
+	for _, c := range candidatos {
+		linhas = append(linhas, map[string]any{
+			"id":          string(c.ID),
+			"produto":     c.Produto,
+			"marca":       c.Marca,
+			"mercado":     c.Mercado,
+			"valor":       c.Valor,
+			"quantidades": c.Quantidades,
+			"medida":      string(c.Medida),
+		})
+	}
+	ofertas, err := json.Marshal(linhas)
+	if err != nil {
+		return nil, err
+	}
+	user := "Item:\n" + item + "\n\nOfertas:\n" + string(ofertas)
+	raw, err := g.generateJSON(ctx, instrucaoEscolha, user)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil, err
+	}
+	ids := make([]store.OfertaID, 0, len(out.IDs))
+	for _, id := range out.IDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		ids = append(ids, store.OfertaID(id))
+	}
+	return ids, nil
 }
 
 func (g Gemini) Classificar(ctx context.Context, texto string) (domain.Classificacao, error) {

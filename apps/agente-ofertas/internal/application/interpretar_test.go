@@ -12,6 +12,28 @@ import (
 	store "github.com/Arthur-Bamberg/orquestrador-ofertas-supermercados/modules/ofertas-store"
 )
 
+func TestInterpretar_termoComTamanhoAindaCasaProduto(t *testing.T) {
+	c := &stubColeta{porTermo: map[string][]store.Oferta{
+		"coca cola 2 litros": {{
+			ID: "garrafa", ProdutoID: "garrafa", MercadoID: "carrefour",
+			Valor: 8.99, Quantidades: []float64{2000}, Medida: store.MedidaML,
+			DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+		}},
+	}}
+	cat := memCat{
+		produtos: []store.Produto{{ID: "garrafa", Nome: "Coca Cola", NomeNorm: "coca cola"}},
+		mercados: map[store.MercadoID]store.Mercado{"carrefour": {ID: "carrefour", Nome: "Carrefour"}},
+	}
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("Coca cola 2 litros"), cat, c, dia(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "*Coca cola 2 litros*\nCoca Cola\n- Carrefour — R$ 8,99 / 2000 ml"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestInterpretar_disparaColetaComTermoDeCadaItem(t *testing.T) {
 	c := &stubColeta{}
 	_, err := application.Interpretar(context.Background(), domain.ParseLista("leite, tomate"), catalogoLeite(), c, dia(), nil)
@@ -179,6 +201,68 @@ func TestInterpretar_descartaRelacionado(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "*tomate*\nTomate\n- Fort — R$ 5,49 / 1000 g"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestInterpretar_cremeDeLeiteCasaMesmoSeOTermoTirouAPreposicao(t *testing.T) {
+	interp := &stubTermo{porItem: map[string]string{"Creme de leite": "creme leite"}}
+	c := &stubColeta{porTermo: map[string][]store.Oferta{
+		"creme leite": {{
+			ID: "c1", ProdutoID: "cdl", MercadoID: "fort",
+			Valor: 3.49, Quantidades: []float64{200}, Medida: store.MedidaG,
+			DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+		}},
+	}}
+	cat := memCat{
+		produtos: []store.Produto{{ID: "cdl", Nome: "Creme de leite", NomeNorm: "creme de leite"}},
+		ofertas: []store.Oferta{{
+			ID: "e1", ProdutoID: "cdl", MercadoID: "stok", DocumentoID: "d1",
+			Valor: 3.99, Quantidades: []float64{200}, Medida: store.MedidaG,
+			DataInicio: "2026-09-01", DataExpiracao: "2026-09-10",
+		}},
+		mercados: map[store.MercadoID]store.Mercado{
+			"fort": {ID: "fort", Nome: "Fort"},
+			"stok": {ID: "stok", Nome: "Stok"},
+		},
+	}
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("Creme de leite"), cat, c, dia(), interp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "*Creme de leite*\nCreme de leite\n- Fort — R$ 3,49 / 200 g"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestInterpretar_encarteCasaCremeDeLeiteMesmoComTermoSemDe(t *testing.T) {
+	interp := &stubTermo{porItem: map[string]string{"Creme de leite": "creme leite"}}
+	cat := memCat{
+		produtos: []store.Produto{{ID: "cdl", Nome: "Creme de leite", NomeNorm: "creme de leite"}},
+		ofertas: []store.Oferta{
+			{
+				ID: "e1", ProdutoID: "cdl", MercadoID: "fort", DocumentoID: "d1",
+				Valor: 3.49, Quantidades: []float64{200}, Medida: store.MedidaG,
+				DataInicio: "2026-09-01", DataExpiracao: "2026-09-10",
+			},
+			{
+				ID: "e2", ProdutoID: "cdl", MercadoID: "stok", DocumentoID: "d1",
+				Valor: 3.99, Quantidades: []float64{200}, Medida: store.MedidaG,
+				DataInicio: "2026-09-01", DataExpiracao: "2026-09-10",
+			},
+		},
+		mercados: map[store.MercadoID]store.Mercado{
+			"fort": {ID: "fort", Nome: "Fort"},
+			"stok": {ID: "stok", Nome: "Stok"},
+		},
+	}
+	got, err := application.Interpretar(context.Background(), domain.ParseLista("Creme de leite"), cat, coletaVazia(), dia(), interp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "*Creme de leite*\nCreme de leite\n- Fort — R$ 3,49 / 200 g"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
@@ -639,6 +723,106 @@ func TestInterpretarLista_consultaSemTextoUsaDescricao(t *testing.T) {
 	}
 }
 
+func TestInterpretarLista_escolhaFicaComTamanhoPedidoNaoComMaisBarato(t *testing.T) {
+	coca := store.MarcaID("coca")
+	c := &stubColeta{porTermo: map[string][]store.Oferta{
+		"coca cola 2 litros": {
+			{
+				ID: "lata", ProdutoID: "lata", MarcaID: &coca, MercadoID: "carrefour",
+				Valor: 3.39, Quantidades: []float64{1}, Medida: store.MedidaUnidade,
+				DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+			},
+			{
+				ID: "garrafa", ProdutoID: "garrafa", MarcaID: &coca, MercadoID: "carrefour",
+				Valor: 8.99, Quantidades: []float64{2000}, Medida: store.MedidaML,
+				DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+			},
+		},
+	}}
+	escolha := &stubEscolha{ids: []store.OfertaID{"garrafa"}}
+	ag := application.New(application.Deps{
+		Cat: memCat{
+			produtos: []store.Produto{
+				{ID: "lata", Nome: "Coca Cola Sem Açúcar Lata 310 ml", NomeNorm: "coca cola sem açúcar lata 310 ml"},
+				{ID: "garrafa", Nome: "Coca Cola", NomeNorm: "coca cola"},
+			},
+			marcas:   []store.Marca{{ID: "coca", Nome: "Coca-Cola", NomeNorm: "coca-cola"}},
+			mercados: map[store.MercadoID]store.Mercado{"carrefour": {ID: "carrefour", Nome: "Carrefour"}},
+		},
+		Coleta:  c,
+		Escolha: escolha,
+		Hoje:    diaFn,
+	})
+	got, err := ag.InterpretarLista(context.Background(), "Coca cola 2 litros")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "*Coca cola 2 litros*\nCoca Cola\n- Carrefour — Coca-Cola — R$ 8,99 / 2000 ml"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if escolha.item != "Coca cola 2 litros" {
+		t.Fatalf("escolha sem o Item: %q", escolha.item)
+	}
+	if len(escolha.candidatos) != 2 {
+		t.Fatalf("candidatos=%d", len(escolha.candidatos))
+	}
+}
+
+func TestInterpretarLista_escolhaVaziaNaoCaiNoMaisBarato(t *testing.T) {
+	c := &stubColeta{porTermo: map[string][]store.Oferta{
+		"coca cola 2 litros": {{
+			ID: "lata", ProdutoID: "lata", MercadoID: "carrefour",
+			Valor: 3.39, Quantidades: []float64{1}, Medida: store.MedidaUnidade,
+			DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+		}},
+	}}
+	ag := application.New(application.Deps{
+		Cat: memCat{
+			produtos: []store.Produto{{ID: "lata", Nome: "Coca Cola Sem Açúcar Lata 310 ml", NomeNorm: "coca cola sem açúcar lata 310 ml"}},
+			mercados: map[store.MercadoID]store.Mercado{"carrefour": {ID: "carrefour", Nome: "Carrefour"}},
+		},
+		Coleta:  c,
+		Escolha: &stubEscolha{},
+		Hoje:    diaFn,
+	})
+	got, err := ag.InterpretarLista(context.Background(), "Coca cola 2 litros")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "*Coca cola 2 litros*\nNão achei." {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestInterpretarLista_escolhaCasaItemQueOPrefixoDoProdutoRejeita(t *testing.T) {
+	c := &stubColeta{porTermo: map[string][]store.Oferta{
+		"absorvente com abas": {{
+			ID: "a1", ProdutoID: "abs", MercadoID: "carrefour",
+			Valor: 12.9, Quantidades: []float64{8}, Medida: store.MedidaUnidade,
+			DataInicio: "2026-09-03", DataExpiracao: "2026-09-03",
+		}},
+	}}
+	ag := application.New(application.Deps{
+		Cat: memCat{
+			produtos: []store.Produto{{ID: "abs", Nome: "Absorvente íntimo com abas", NomeNorm: "absorvente íntimo com abas"}},
+			mercados: map[store.MercadoID]store.Mercado{"carrefour": {ID: "carrefour", Nome: "Carrefour"}},
+		},
+		Coleta:  c,
+		Termo:   &stubTermo{porItem: map[string]string{"Absorvente com abas": "absorvente com abas"}},
+		Escolha: &stubEscolha{ids: []store.OfertaID{"a1"}},
+		Hoje:    diaFn,
+	})
+	got, err := ag.InterpretarLista(context.Background(), "Absorvente com abas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "*Absorvente com abas*\nAbsorvente íntimo com abas\n- Carrefour — R$ 12,90 / 8 unidade"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestAtender_classificacaoFalhouSegueComoLista(t *testing.T) {
 	envio := &stubEnvio{}
 	ag := application.New(application.Deps{
@@ -654,6 +838,19 @@ func TestAtender_classificacaoFalhouSegueComoLista(t *testing.T) {
 	if len(envio.calls) != 1 || !strings.Contains(envio.calls[0].corpo, "Leite integral") {
 		t.Fatalf("%+v", envio.calls)
 	}
+}
+
+type stubEscolha struct {
+	item       string
+	candidatos []application.Candidato
+	ids        []store.OfertaID
+	err        error
+}
+
+func (s *stubEscolha) Escolher(_ context.Context, item string, candidatos []application.Candidato) ([]store.OfertaID, error) {
+	s.item = item
+	s.candidatos = append([]application.Candidato(nil), candidatos...)
+	return s.ids, s.err
 }
 
 type stubTermo struct {

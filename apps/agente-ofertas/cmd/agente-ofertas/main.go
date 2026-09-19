@@ -56,6 +56,7 @@ func main() {
 		g := termo.Gemini{Key: cfg.GeminiAPIKey, Model: cfg.GeminiModel}
 		deps.Termo = g
 		deps.Intencao = g
+		deps.Escolha = g
 	}
 	ag := application.New(deps)
 

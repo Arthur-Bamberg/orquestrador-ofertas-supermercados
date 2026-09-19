@@ -29,7 +29,10 @@ func TestParseLista_textoVazioNaoTemItens(t *testing.T) {
 func TestTermoDoItem_tiraInvólucroEMantemTipoDito(t *testing.T) {
 	casos := []struct{ item, want string }{
 		{"Comprar: cenoura", "cenoura"},
-		{"Quero 2kg de cenoura orgânica, por favor", "cenoura orgânica"},
+		{"Quero 2kg de cenoura orgânica, por favor", "2kg cenoura orgânica"},
+		{"Creme de leite", "creme de leite"},
+		{"molho de tomate", "molho de tomate"},
+		{"Coca cola 2 litros", "coca cola 2 litros"},
 		{"abobrinha", "abobrinha"},
 		{"leite Italac", "leite italac"},
 		{"Comprar:", ""},
@@ -39,5 +42,11 @@ func TestTermoDoItem_tiraInvólucroEMantemTipoDito(t *testing.T) {
 		if got := domain.TermoDoItem(c.item); got != c.want {
 			t.Fatalf("TermoDoItem(%q)=%q want %q", c.item, got, c.want)
 		}
+	}
+}
+
+func TestTipoDoTermo_tiraTamanhoEMantemTipo(t *testing.T) {
+	if got := domain.TipoDoTermo("coca cola 2 litros"); got != "coca cola" {
+		t.Fatalf("%q", got)
 	}
 }

@@ -40,9 +40,15 @@ var involucro = map[string]struct{}{
 	"oi": {}, "ola": {}, "olá": {},
 	"bom": {}, "dia": {}, "boa": {}, "tarde": {}, "noite": {},
 	"por": {}, "favor": {}, "obrigado": {}, "obrigada": {}, "pfv": {}, "pf": {},
-	"de": {}, "da": {}, "do": {}, "das": {}, "dos": {},
 	"um": {}, "uma": {}, "uns": {}, "umas": {},
 	"o": {}, "a": {}, "os": {}, "as": {},
+}
+
+var preposicao = map[string]struct{}{
+	"de": {}, "da": {}, "do": {}, "das": {}, "dos": {},
+}
+
+var medidaToken = map[string]struct{}{
 	"kg": {}, "g": {}, "ml": {}, "un": {}, "unidade": {}, "unidades": {},
 	"litro": {}, "litros": {}, "kilo": {}, "kilos": {}, "grama": {}, "gramas": {},
 	"l": {},
@@ -57,15 +63,71 @@ func TermoDoItem(texto string) string {
 			b.WriteByte(' ')
 		}
 	}
+	toks := strings.Fields(b.String())
 	var keep []string
-	for _, tok := range strings.Fields(b.String()) {
+	temTipo := false
+	for i, tok := range toks {
+		if _, prep := preposicao[tok]; prep {
+			if tipoNoItem(toks, i-1) && tipoNoItem(toks, i+1) {
+				keep = append(keep, tok)
+			}
+			continue
+		}
 		if _, skip := involucro[tok]; skip {
 			continue
 		}
-		if medidaOuNumero.MatchString(tok) {
+		if soTamanho(tok) {
+			keep = append(keep, tok)
+			continue
+		}
+		temTipo = true
+		keep = append(keep, tok)
+	}
+	if !temTipo {
+		return ""
+	}
+	return strings.Join(keep, " ")
+}
+
+func TipoDoTermo(termo string) string {
+	var keep []string
+	for _, tok := range strings.Fields(strings.ToLower(strings.TrimSpace(termo))) {
+		if soTamanho(tok) {
 			continue
 		}
 		keep = append(keep, tok)
 	}
 	return strings.Join(keep, " ")
+}
+
+func soTamanho(tok string) bool {
+	if _, ok := medidaToken[tok]; ok {
+		return true
+	}
+	return medidaOuNumero.MatchString(tok)
+}
+
+func tipoNoItem(toks []string, i int) bool {
+	if i < 0 || i >= len(toks) {
+		return false
+	}
+	t := toks[i]
+	if _, skip := involucro[t]; skip {
+		return false
+	}
+	if _, prep := preposicao[t]; prep {
+		return false
+	}
+	return !soTamanho(t)
+}
+
+func TokensSemPreposicao(s string) []string {
+	var out []string
+	for _, t := range strings.Fields(s) {
+		if _, skip := preposicao[t]; skip {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
 }

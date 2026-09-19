@@ -9,7 +9,7 @@ Dois papéis de Agente, **um** app (`agente-ofertas`). A Coleta de vitrine é o 
 | Papel | Quem chama | Faz | Não faz |
 |-------|------------|-----|---------|
 | **Agente da Lista** | Canal (Mensagem viva com Aceite no Contato remetente) ou assistente | Classifica a Intenção; se Lista, parte em Itens; obtém o Termo de cada Item; dispara **em paralelo** uma Coleta por Termo não vazio; lê Ofertas vigentes de encarte (Documento); espera todas as Coletas e o encarte | Não envia WhatsApp; não escolhe Produto |
-| **Agente de Resposta** | Agente da Lista, só depois de todas as consultas | Organiza a Resposta (Produto de menos extras no Termo, relacionados fora, mais barato; empate de preço lista) e chama o Canal (`POST /envios`) | Não busca; não persiste Oferta; não deriva o Termo; não consulta o catálogo por conta própria |
+| **Agente de Resposta** | Agente da Lista, só depois de todas as consultas | Organiza a Resposta (interpreta o Item contra as Ofertas reunidas; relacionados fora; Marca no Termo restringe; mais barato entre as que atendem; empate de preço lista) e chama o Canal (`POST /envios`) | Não busca; não persiste Oferta; não deriva o Termo; não consulta o catálogo por conta própria |
 
 Cadeia: Intenção; se Lista → Coletas + encarte → Resposta. Não há Agente de Filtragem.
 
@@ -69,9 +69,10 @@ Zero ou vários casamentos no encarte **não** cancelam a Coleta.
 
 Por Item:
 
-- Relacionados ficam de fora (molho quando pediu tomate). Quem decide é o Agente de Resposta, não substring no catálogo.
+- Relacionados ficam de fora (molho quando pediu tomate). Quem decide é o Agente de Resposta ao interpretar o Item, não substring no catálogo.
+- Tamanho, sabor, Marca e embalagem no texto do Item restringem; Oferta mais barata que falha isso sai.
 - Marca no Termo restringe a essa Marca; sem Oferta dela, não achou.
-- Um Produto por Item: o de menos tokens a mais no nome em relação ao Termo. Empate de extras → menor preço efetivo; empate desse preço lista esses Produtos. Em cada um, a Oferta de menor preço efetivo (Marca e tamanho na linha; empate de preço lista todas). Não preço unitário derivado, não todas as redes.
+- Um Produto por Item entre os que atendem: o de menos tokens a mais no nome em relação ao tipo do Termo. Empate de extras → menor preço efetivo; empate desse preço lista esses Produtos. Em cada um, a Oferta de menor preço efetivo (Marca e tamanho na linha; empate de preço lista todas). Não preço unitário derivado, não todas as redes.
 - No mesmo Produto e Mercado: vale a Oferta da **Coleta do dia** se essa Coleta trouxe esse Produto; encarte vigente cobre Mercado sem Coleta do dia (falhou, sem adapter) ou Produto que a Coleta não trouxe. Oferta que só existe por Coleta de outro dia não entra.
 
 Zero tipos depois disso: diz que não achou.
@@ -91,6 +92,6 @@ Zero tipos depois disso: diz que não achou.
 1. **Canal → Agente da Lista:** só se o Contato remetente tem Aceite; texto da Mensagem (e JID da Conversa para a saída voltar). O Agente da Lista classifica a Intenção. Sem Aceite o Canal não chama o Agente.
 2. **Agente da Lista → Coleta:** só se Intenção for Lista; um Termo por Item (vazio não chama); N chamadas em paralelo.
 3. **Coleta → Agente da Lista:** cartões/Ofertas persistidos daquela busca.
-4. **Agente da Lista → encarte:** Ofertas vigentes ligadas a Documento cujo Produto/Marca casa com o Termo.
-5. **Agente da Lista → Agente de Resposta:** conjunto reunido (consultado + encarte), só depois de todas as Coletas e do encarte da Lista.
+4. **Agente da Lista → encarte:** Ofertas vigentes ligadas a Documento cujo Produto/Marca casa com o tipo do Termo (sem o tamanho).
+5. **Agente da Lista → Agente de Resposta:** conjunto reunido (consultado + encarte) e o texto de cada Item, só depois de todas as Coletas e do encarte da Lista.
 6. **Agente de Resposta → Canal:** texto da Resposta + JID. Consulta e Recusa na direta também saem por `POST /envios`; em grupo não.
